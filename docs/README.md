@@ -14,6 +14,7 @@
 - `specs/primitives/00_INDEX.md` — capability primitives P01-P21
 
 ## Architecture
+- `architecture/roadmap_v0_spine.md` — milestone roadmap (M0–M7): spine first, governance second, reuse by evidence
 - `architecture/clean_sheet_architecture.md` — v1 audit, sprawl sources, target architecture
 - `architecture/module_map.md` — 7-module target (carrier, state, operators, search, proof, worlds, ml)
 - `architecture/v2_success_rubric.md` — 9 measurable claims with falsifiers
