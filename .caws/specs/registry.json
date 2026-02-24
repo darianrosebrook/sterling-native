@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "specs": {
+    "SPINE-001": {
+      "path": "SPINE-001.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2026-02-24T22:20:57.470Z",
+      "updated_at": "2026-02-24T22:20:57.471Z"
+    }
+  },
+  "lastUpdated": "2026-02-24T22:20:57.477Z"
+}

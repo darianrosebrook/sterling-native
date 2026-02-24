@@ -1,0 +1,127 @@
+id: SPINE-001
+type: feature
+title: "V2 Spine: Kernel contract surface, ByteState/Code32, ByteTrace, World Harness (M0-M3)"
+status: draft
+risk_tier: 2
+mode: development
+created_at: "2026-02-24T22:20:57.470Z"
+updated_at: "2026-02-24T22:20:57.471Z"
+blast_radius:
+  modules:
+    - kernel/carrier
+    - kernel/proof
+    - kernel/operators
+    - harness
+    - worlds
+    - schemas
+    - tests
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - kernel/
+    - harness/
+    - worlds/
+    - schemas/
+    - tests/lock/
+    - tests/integration/
+  out:
+    - docs/
+    - ml/
+    - reference/v1_impl/
+    - .caws/
+threats:
+  - "apply() smuggling semantics via untyped inputs (mitigated: op_args_bytes + op_args_descriptor)"
+  - "determinism violations from floats, wall-clock, or memory addresses in ByteState"
+  - "trace format drift without schema version bump"
+  - "world harness implementing proof plumbing (hashing, trace writing, replay)"
+invariants:
+  - "compile(payload_bytes, schema_descriptor, registry_snapshot, policy_snapshot) → ByteState is the only entry point"
+  - "apply() accepts op_args_bytes + op_args_descriptor, canonicalized like payloads — no arbitrary dicts"
+  - "ByteTrace header commits schema_id + schema_hash (schema-first)"
+  - "Exactly one place defines canonical hashing and serialization"
+  - "Kernel build graph has zero v1 dependencies"
+  - "Worlds may not implement hashing, trace writing, replay checks, or policy enforcement"
+  - "Determinism Envelope: little-endian, no floats in ByteState, pinned hash algorithm, no wall-clock/PID/address, explicit seeds"
+acceptance:
+  - id: S1-M0
+    given: "the kernel package boundary exists"
+    when: "the build graph is analyzed"
+    then: "no dependency on docs/reference/v1/ or v1 implementation code"
+  - id: S1-M1
+    given: "a minimal payload and schema descriptor"
+    when: "compile() is called on two different machines"
+    then: "produces identical ByteState bytes and digest (Determinism Envelope)"
+  - id: S1-M1-GOLDEN
+    given: "a known test payload"
+    when: "compile() is called"
+    then: "output matches golden byte fixture bit-for-bit"
+  - id: S1-M2
+    given: "a single-step episode (one operator application)"
+    when: "replay_verify() is called on the ByteTrace"
+    then: "verdict matches original execution exactly"
+  - id: S1-M2-DIV
+    given: "a trace with an injected divergence"
+    when: "replay_verify() is called"
+    then: "divergence localization points to the first differing step"
+  - id: S1-M3
+    given: "a world harness run with one minimal world"
+    when: "the harness completes"
+    then: "produces a self-contained artifact bundle (inputs/trace/verification/metrics)"
+  - id: S1-M3-DETERMINISM
+    given: "two consecutive harness runs with identical inputs"
+    when: "ByteTrace digests are compared"
+    then: "digests are identical"
+acceptance_criteria: []
+non_functional:
+  perf:
+    compile_p95_ms: 50
+    replay_verify_p95_ms: 100
+  security:
+    - "no v1 import paths reachable from kernel build graph"
+    - "hash domain separation strings are fixed and versioned"
+contracts:
+  - type: architecture
+    path: docs/ephemeral/roadmaps/roadmap_v0_spine.md
+    description: "Milestone roadmap M0-M3 deliverables, acceptance, non-goals, file targets"
+  - type: schema
+    path: schemas/bytetrace.v1.schema.json
+    description: "ByteTrace format definition (schema-first, not code-first)"
+  - type: schema
+    path: schemas/trace_bundle.v1.schema.json
+    description: "Trace bundle wrapping trace + manifests"
+  - type: schema
+    path: schemas/claim.v1.schema.json
+    description: "Minimal claim format (claim_id, statement, falsifier, required_artifacts, verifier_entrypoint, version)"
+milestones:
+  - id: M0
+    title: "Kernel contract surface and repo layout"
+    status: pending
+    deliverables:
+      - "kernel/ package boundary with compile(), apply(), replay_verify() API"
+      - "schemas/ directory with trace_bundle, policy_snapshot, schema_descriptor, registry_snapshot, bytetrace, claim schemas"
+      - "canonical lint CI check"
+  - id: M1
+    title: "ByteState/Code32 + canonical hashing"
+    status: pending
+    deliverables:
+      - "Code32 registry snapshot format + allocation rules"
+      - "ByteStateV1 layout + encode/decode"
+      - "Canonical hashing module (blake3) with domain-separated commits"
+      - "Lock tests: golden bytes, hash stability, endianness"
+  - id: M2
+    title: "ByteTrace writer + replay verifier"
+    status: pending
+    deliverables:
+      - "ByteTrace format + append-only writer (schema-first)"
+      - "Replay verifier (hashing, monotonicity, snapshot consistency)"
+      - "Minimal operator application primitive"
+      - "Single-step replay lock test"
+  - id: M3
+    title: "Unified World Harness hello world"
+    status: pending
+    deliverables:
+      - "World harness contract (encode_fixture, decode_state, operator_catalog_data, domain_verifier)"
+      - "One minimal world (Corridor/Rome/toy graph)"
+      - "Closed artifact bundle output (inputs/trace/verification/metrics)"
+      - "Determinism lock test"
