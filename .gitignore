@@ -172,3 +172,4 @@ data/certified_operators/provisional/*.json
 
 .caws/provenance/
 outputs/
+ephemeral/

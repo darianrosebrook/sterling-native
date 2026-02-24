@@ -1,0 +1,37 @@
+version: 1
+risk_tiers:
+  '1':
+    max_files: 25
+    max_loc: 1000
+    description: Critical changes requiring manual review
+  '2':
+    max_files: 50
+    max_loc: 2000
+    description: Standard features with automated gates
+  '3':
+    max_files: 100
+    max_loc: 5000
+    description: Low-risk changes with minimal oversight
+edit_rules:
+  policy_and_code_same_pr: false
+  min_approvers_for_budget_raise: 2
+  require_signed_commits: true
+gates:
+  budget_limit:
+    enabled: true
+    description: Enforce change budget limits
+  spec_completeness:
+    enabled: true
+    description: Require complete working specifications
+  contract_compliance:
+    enabled: true
+    description: Validate API contracts
+  coverage_threshold:
+    enabled: true
+    description: Maintain test coverage requirements
+  mutation_threshold:
+    enabled: true
+    description: Require mutation testing for T1/T2 changes
+  security_scan:
+    enabled: true
+    description: Run security vulnerability scans

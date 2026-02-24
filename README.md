@@ -32,6 +32,7 @@ This repository is a documentation-first scaffold: canonical contracts, policies
 - `docs/adr/` — architecture decision records
 - `docs/reference/v1/` — carried-over reference docs from v1 (non-authoritative)
 - `docs/templates/` — templates for transfer packs, benchmark manifests, claim catalogs
+- `docs/ephemeral` — temporal documents where the work is quickly outdated or stale (gitignored)
 - `benchmarks/` — benchmark harness conventions and run bundle layout
 
 ## Contributing
