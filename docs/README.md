@@ -13,12 +13,14 @@
 ## Specs (forward-looking v2 vocabulary)
 - `specs/primitives/00_INDEX.md` — capability primitives P01-P21
 
-## Architecture
-- `architecture/roadmap_v0_spine.md` — milestone roadmap (M0–M7): spine first, governance second, reuse by evidence
+## Architecture (durable)
 - `architecture/clean_sheet_architecture.md` — v1 audit, sprawl sources, target architecture
 - `architecture/module_map.md` — 7-module target (carrier, state, operators, search, proof, worlds, ml)
 - `architecture/v2_success_rubric.md` — 9 measurable claims with falsifiers
 - `architecture/v1_contract_promotion_queue.md` — disposition table for 29 quarantined v1 contracts
+
+## Ephemeral (temporal, non-canonical — becomes stale)
+- `ephemeral/roadmaps/roadmap_v0_spine.md` — milestone roadmap M0–M7 (spine first, governance second, reuse by evidence)
 
 ## Policy
 - `policy/benchmarking_policy.md`
@@ -33,6 +35,7 @@
 - `adr/0002-byte-trace-is-canonical.md`
 - `adr/0003-neural-advisory-only.md`
 - `adr/0004-operator-taxonomy-names.md`
+- `adr/0005-v1-is-oracle-not-dependency.md`
 
 ## Templates
 - `templates/transfer_pack_template.md`
