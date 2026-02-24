@@ -1,0 +1,557 @@
+{
+  "timestamp": "2026-02-20T15:35:20.151030",
+  "sterling_version": "dev-d8162c3b",
+  "metadata": {
+    "platform": "Darwin 24.6.0",
+    "python_version": "3.13.4",
+    "python_executable": "/Users/darianrosebrook/Desktop/Projects/sterling/.venv/bin/python",
+    "virtual_env": "/Users/darianrosebrook/Desktop/Projects/sterling/.venv",
+    "domains": [
+      "wordnet_tiered"
+    ],
+    "providers": [
+      "sterling"
+    ],
+    "tasks_per_domain": 3,
+    "wordnet_solver": "best_first",
+    "wordnet_tier_max_steps": null
+  },
+  "provenance": {
+    "model_file_hash": "sha256:135588c7f66646663e1b69dfa06c681df4a3fc75eecdfaead2e805e2cad27233",
+    "feature_mode": "structural12",
+    "feature_mode_label": "oracle-assisted",
+    "training_data_hash": "NOT_RECORDED",
+    "labeling_method_id": "unknown",
+    "labeling_budget": 0,
+    "candidate_sampling_k": 0,
+    "candidate_sampling_strategy": "unknown",
+    "sterling_model_identity": {
+      "requested_model": "structural12",
+      "resolved_model": "structural12",
+      "resolution_policy": "requested",
+      "model_file_hash": "sha256:135588c7f66646663e1b69dfa06c681df4a3fc75eecdfaead2e805e2cad27233",
+      "model_bytes_len": 15361,
+      "feature_mode": "structural12",
+      "feature_mode_label": "oracle-assisted",
+      "value_head_in_dim": 12,
+      "value_head_hidden_dim": 32
+    },
+    "sterling_model_identities": {
+      "structural12": {
+        "requested_model": "structural12",
+        "resolved_model": "structural12",
+        "resolution_policy": "requested",
+        "model_file_hash": "sha256:135588c7f66646663e1b69dfa06c681df4a3fc75eecdfaead2e805e2cad27233",
+        "model_bytes_len": 15361,
+        "feature_mode": "structural12",
+        "feature_mode_label": "oracle-assisted",
+        "value_head_in_dim": 12,
+        "value_head_hidden_dim": 32
+      }
+    },
+    "sterling_requested_models": [
+      "structural12"
+    ],
+    "platform": "Darwin 24.6.0",
+    "sterling_commit_hash": "dev-d8162c3b",
+    "run_timestamp": "2026-02-20T15:35:20.151030",
+    "seed": 42,
+    "policy_version": "1.2",
+    "policy_file_hash": "sha256:9a883c656ec1eed04dde111e0996f3012eb66324d6417486b908e51dcbed1695",
+    "dataset_hash": "NOT_RECORDED",
+    "fixture_bindings": {
+      "wordnet_tiered": {
+        "source_type": "file",
+        "source_file": "/Users/darianrosebrook/Desktop/Projects/sterling/benchmarks/wordnet_navigation_v2/tasks_pool_3000.json",
+        "num_tasks_requested": 3,
+        "num_tasks_returned": 3,
+        "binding_verdict": "BOUND",
+        "tiered": true,
+        "tier_ranges": {
+          "easy": {
+            "min": 1,
+            "max": 3
+          },
+          "medium": {
+            "min": 4,
+            "max": 6
+          },
+          "hard": {
+            "min": 7,
+            "max": 10
+          }
+        },
+        "dataset_artifact_hash": "sha256:d9cb6b46d00ccf6a2202a5183892449a9b6dbbcb066182eb5deda2d8f28d984c",
+        "extraction_pipeline_hash": "sha256:6d0967fbc55b07cb47f3af4a27bcead0f9ea44d3373daf9ce636057a8adf88ac",
+        "generator_contract_allowed": false,
+        "generator_contract_hash": "sha256:4ac6a4f18d6c34e67072c08e3ad2298b9e15696e4b4494f9140130323fafaafc"
+      }
+    },
+    "solver_contract_bundle_hash": null
+  },
+  "domain_results": {
+    "wordnet_tiered": {
+      "total_tasks": 3,
+      "successful_tasks": 2,
+      "success_rate": 0.6666666666666666,
+      "domain_metrics": {
+        "tier_ranges": {
+          "easy": {
+            "min": 1,
+            "max": 3
+          },
+          "medium": {
+            "min": 4,
+            "max": 6
+          },
+          "hard": {
+            "min": 7,
+            "max": 10
+          }
+        },
+        "budget_mode": "expected_len_budget_mult_legacy",
+        "reachability_oracle": "bfs_high_budget",
+        "reachability_oracle_budget_floor": 5000,
+        "easy_success_rate": 1.0,
+        "easy_count": 1,
+        "easy_avg_path_length": 1.0,
+        "easy_avg_expected_length": 1.0,
+        "easy_path_efficiency": 1.0,
+        "easy_avg_latency_ms": 185.9872341156006,
+        "medium_success_rate": 0.0,
+        "medium_count": 1,
+        "hard_success_rate": 1.0,
+        "hard_count": 1,
+        "hard_avg_path_length": 8.0,
+        "hard_avg_expected_length": 9.0,
+        "hard_path_efficiency": 1.125,
+        "hard_avg_latency_ms": 297.8858947753906,
+        "avg_path_length": 4.5,
+        "avg_expected_length": 5.0,
+        "oracle_reachable_count": 3,
+        "oracle_unreachable_count": 0,
+        "solve_rate_reachable": 0.6666666666666666,
+        "solve_rate_unreachable": null,
+        "reachable_solved_count": 2,
+        "reachable_unsolved_count": 1,
+        "unreachable_solved_count": 0,
+        "unreachable_unsolved_count": 0,
+        "outcome_hash": "sha256:2d648db96474b30e4ad11bb2a6bbc4cc8985d80121b882c7df470bb20cc9cc8a"
+      },
+      "provider": "sterling",
+      "model": "structural12",
+      "avg_latency_ms": 0.0,
+      "wall_time_seconds": 1.657639980316162,
+      "errors": []
+    }
+  },
+  "results": [
+    {
+      "domain": "wordnet_tiered",
+      "provider": "sterling",
+      "model": "structural12",
+      "model_identity": {
+        "requested_model": "structural12",
+        "resolved_model": "structural12",
+        "resolution_policy": "requested",
+        "model_file_hash": "sha256:135588c7f66646663e1b69dfa06c681df4a3fc75eecdfaead2e805e2cad27233",
+        "model_bytes_len": 15361,
+        "feature_mode": "structural12",
+        "feature_mode_label": "oracle-assisted",
+        "value_head_in_dim": 12,
+        "value_head_hidden_dim": 32
+      },
+      "total_tasks": 3,
+      "successful_tasks": 2,
+      "success_rate": 0.6666666666666666,
+      "avg_latency_ms": 0.0,
+      "total_tokens": 0,
+      "total_api_calls": 0,
+      "domain_metrics": {
+        "tier_ranges": {
+          "easy": {
+            "min": 1,
+            "max": 3
+          },
+          "medium": {
+            "min": 4,
+            "max": 6
+          },
+          "hard": {
+            "min": 7,
+            "max": 10
+          }
+        },
+        "budget_mode": "expected_len_budget_mult_legacy",
+        "reachability_oracle": "bfs_high_budget",
+        "reachability_oracle_budget_floor": 5000,
+        "easy_success_rate": 1.0,
+        "easy_count": 1,
+        "easy_avg_path_length": 1.0,
+        "easy_avg_expected_length": 1.0,
+        "easy_path_efficiency": 1.0,
+        "easy_avg_latency_ms": 185.9872341156006,
+        "medium_success_rate": 0.0,
+        "medium_count": 1,
+        "hard_success_rate": 1.0,
+        "hard_count": 1,
+        "hard_avg_path_length": 8.0,
+        "hard_avg_expected_length": 9.0,
+        "hard_path_efficiency": 1.125,
+        "hard_avg_latency_ms": 297.8858947753906,
+        "avg_path_length": 4.5,
+        "avg_expected_length": 5.0,
+        "oracle_reachable_count": 3,
+        "oracle_unreachable_count": 0,
+        "solve_rate_reachable": 0.6666666666666666,
+        "solve_rate_unreachable": null,
+        "reachable_solved_count": 2,
+        "reachable_unsolved_count": 1,
+        "unreachable_solved_count": 0,
+        "unreachable_unsolved_count": 0,
+        "outcome_hash": "sha256:2d648db96474b30e4ad11bb2a6bbc4cc8985d80121b882c7df470bb20cc9cc8a"
+      },
+      "task_outcomes": [
+        {
+          "task_id": "wn_pool_e679",
+          "fixture_id": "wn_pool_e679",
+          "fixture_content_hash": "sha256:b44fd5d3860ccdff4e37f74a203bc77eb841ac6a1dec75b0afb58dcdca91d6e3",
+          "success": true,
+          "cost": 2,
+          "cost_name": "nodes_expanded",
+          "cost_unit": "count",
+          "nodes_expanded": 2,
+          "path_length": 1,
+          "latency_ms": 185.9872341156006,
+          "failure_reason": "",
+          "extra": {
+            "tier": "easy",
+            "max_steps": 200,
+            "expected_path_len": 1,
+            "oracle_reachable": true,
+            "oracle_max_steps": 5000,
+            "oracle_nodes_expanded": 1
+          }
+        },
+        {
+          "task_id": "wn_pool_h337",
+          "fixture_id": "wn_pool_h337",
+          "fixture_content_hash": "sha256:7105fa95b7fcabd017ac1fe487181485b8c3a496128f4cacbab79b916304c643",
+          "success": true,
+          "cost": 1032,
+          "cost_name": "nodes_expanded",
+          "cost_unit": "count",
+          "nodes_expanded": 1032,
+          "path_length": 8,
+          "latency_ms": 297.8858947753906,
+          "failure_reason": "",
+          "extra": {
+            "tier": "hard",
+            "max_steps": 1170,
+            "expected_path_len": 9,
+            "oracle_reachable": true,
+            "oracle_max_steps": 18000,
+            "oracle_nodes_expanded": 9
+          }
+        },
+        {
+          "task_id": "wn_pool_m825",
+          "fixture_id": "wn_pool_m825",
+          "fixture_content_hash": "sha256:04d96175476cb7d49ed5b0fc35ea03be987793109acdb4bd6f36afe6b145897b",
+          "success": false,
+          "cost": 749,
+          "cost_name": "nodes_expanded",
+          "cost_unit": "count",
+          "nodes_expanded": 749,
+          "path_length": 0,
+          "latency_ms": 311.3391399383545,
+          "failure_reason": "budget_exhausted",
+          "extra": {
+            "tier": "medium",
+            "max_steps": 750,
+            "expected_path_len": 5,
+            "oracle_reachable": true,
+            "oracle_max_steps": 10000,
+            "oracle_nodes_expanded": 9
+          }
+        }
+      ],
+      "outcome_hash": "sha256:2d648db96474b30e4ad11bb2a6bbc4cc8985d80121b882c7df470bb20cc9cc8a",
+      "outcome_rows": {
+        "schema_id": "sterling.outcome_rows.v1",
+        "schema_version": "1.0",
+        "domain_id": "wordnet_tiered",
+        "outcome_hash": "sha256:2d648db96474b30e4ad11bb2a6bbc4cc8985d80121b882c7df470bb20cc9cc8a",
+        "rows": [
+          {
+            "task_id": "wn_pool_e679",
+            "fixture_id": "wn_pool_e679",
+            "fixture_content_hash": "sha256:b44fd5d3860ccdff4e37f74a203bc77eb841ac6a1dec75b0afb58dcdca91d6e3",
+            "success": true,
+            "failure_reason": "",
+            "cost": 2,
+            "cost_name": "nodes_expanded",
+            "cost_unit": "count",
+            "nodes_expanded": 2,
+            "path_length": 1,
+            "extra": {
+              "tier": "easy",
+              "max_steps": 200,
+              "expected_path_len": 1
+            }
+          },
+          {
+            "task_id": "wn_pool_h337",
+            "fixture_id": "wn_pool_h337",
+            "fixture_content_hash": "sha256:7105fa95b7fcabd017ac1fe487181485b8c3a496128f4cacbab79b916304c643",
+            "success": true,
+            "failure_reason": "",
+            "cost": 1032,
+            "cost_name": "nodes_expanded",
+            "cost_unit": "count",
+            "nodes_expanded": 1032,
+            "path_length": 8,
+            "extra": {
+              "tier": "hard",
+              "max_steps": 1170,
+              "expected_path_len": 9
+            }
+          },
+          {
+            "task_id": "wn_pool_m825",
+            "fixture_id": "wn_pool_m825",
+            "fixture_content_hash": "sha256:04d96175476cb7d49ed5b0fc35ea03be987793109acdb4bd6f36afe6b145897b",
+            "success": false,
+            "failure_reason": "budget_exhausted",
+            "cost": 749,
+            "cost_name": "nodes_expanded",
+            "cost_unit": "count",
+            "nodes_expanded": 749,
+            "path_length": 0,
+            "extra": {
+              "tier": "medium",
+              "max_steps": 750,
+              "expected_path_len": 5
+            }
+          }
+        ]
+      },
+      "metrics_bundle": {
+        "schema_id": "sterling.metrics_bundle.v1",
+        "schema_version": "1.0",
+        "metrics_schema_version": "1.0",
+        "domain_id": "wordnet_tiered",
+        "summary_metrics": {
+          "total_tasks": 3,
+          "successful_tasks": 2,
+          "success_rate": 0.6666666666666666,
+          "cost_avg": 594.3333333333334,
+          "cost_p50": 749.0,
+          "cost_p90": 1032.0,
+          "failure_reason_counts": {
+            "budget_exhausted": 1
+          }
+        },
+        "domain_extension": {
+          "nodes_expanded_avg": 594.3333333333334,
+          "nodes_expanded_p50": 749.0,
+          "nodes_expanded_p90": 1032.0,
+          "path_length_avg": 3.0,
+          "path_length_p50": 1.0,
+          "path_length_p90": 8.0
+        }
+      },
+      "wall_time_seconds": 1.657639980316162,
+      "errors": []
+    }
+  ],
+  "proofs": {
+    "suite_identity": "sha256:4fdc7c85cebbe4bc53ff8d7f18467b6209553f2cf097de68e53343035b6d5915",
+    "result_hash": "sha256:56c0e0219a518a7f2ae70bb4760e750354d651318a59e66473cda56cc5c6d4f2",
+    "fixture_manifest_hash": "sha256:7efc15db3228569561f5345d482ab5c05343f523b3b6998712b2044bbe2b6f0e",
+    "fixture_hashes": {
+      "wordnet_tiered": [
+        "sha256:b44fd5d3860ccdff4e37f74a203bc77eb841ac6a1dec75b0afb58dcdca91d6e3",
+        "sha256:04d96175476cb7d49ed5b0fc35ea03be987793109acdb4bd6f36afe6b145897b",
+        "sha256:7105fa95b7fcabd017ac1fe487181485b8c3a496128f4cacbab79b916304c643"
+      ]
+    },
+    "bound_inputs_bundle_hash": "",
+    "replay_verification_hash": "",
+    "ablation_results_hash": ""
+  },
+  "proofs_provided": [
+    "suite_identity",
+    "result_hash",
+    "fixture_manifest_hash",
+    "fixture_hashes"
+  ],
+  "proofs_provided_by_domain": {
+    "wordnet_tiered": [
+      "outcome_rows",
+      "metrics_bundle"
+    ]
+  },
+  "bound_inputs_bundle": null,
+  "replay_trace": null,
+  "suite_id_hash": "sha256:4fdc7c85cebbe4bc53ff8d7f18467b6209553f2cf097de68e53343035b6d5915",
+  "result_hash": "sha256:56c0e0219a518a7f2ae70bb4760e750354d651318a59e66473cda56cc5c6d4f2",
+  "provenance_debug": {
+    "sterling_model_identity_debug": {
+      "structural12": {
+        "model_file_path": "/Users/darianrosebrook/Desktop/Projects/sterling/models/light/wordnet_transition_scorer_s12_v2.pt",
+        "resolved_model_path_exists": true
+      }
+    }
+  },
+  "speed_metrics": {
+    "fastest_sec_per_task": 0.5525466601053873,
+    "slowest_sec_per_task": 0.5525466601053873,
+    "avg_sec_per_task": 0.5525466601053873,
+    "weighted_avg_sec_per_task": 0.5525466601053873,
+    "samples": 1
+  },
+  "policy_validation": {
+    "policy_path": "/Users/darianrosebrook/Desktop/Projects/sterling/configs/benchmark_domains_policy.yaml",
+    "policy_file_hash": "sha256:9a883c656ec1eed04dde111e0996f3012eb66324d6417486b908e51dcbed1695",
+    "run_grade": "diagnostic",
+    "provenance_complete": true,
+    "provenance_issues": [],
+    "blocking_issues": [],
+    "policy_deviations": [
+      {
+        "field": "negative_sampling_method",
+        "expected": "real_candidates",
+        "actual": "unknown",
+        "impact": "Training data may produce inflated accuracy"
+      }
+    ],
+    "world_coverage_gaps": [
+      {
+        "property_axis": "transition_dynamics",
+        "missing_value": "stochastic_transition",
+        "primitives_requiring": [
+          "P09"
+        ],
+        "claim_levels_affected": [
+          "unit_validity"
+        ]
+      },
+      {
+        "property_axis": "observability",
+        "missing_value": "partially_observable",
+        "primitives_requiring": [
+          "P11",
+          "P21"
+        ],
+        "claim_levels_affected": [
+          "unit_validity",
+          "systemic_effect"
+        ]
+      },
+      {
+        "property_axis": "adversariality",
+        "missing_value": "adversarial_inputs",
+        "primitives_requiring": [
+          "P20"
+        ],
+        "claim_levels_affected": [
+          "unit_validity"
+        ]
+      }
+    ],
+    "missing_required_surfaces_by_domain": {
+      "wordnet_tiered": [
+        "bytetrace_proof_surface"
+      ]
+    },
+    "certification_gate_passed": null,
+    "eligibility": [
+      {
+        "domain": "wordnet_tiered",
+        "claim_level": "structural_only",
+        "status": "INELIGIBLE",
+        "reason_codes": [
+          "min_tasks_3_lt_20",
+          "missing_proofs_bound_inputs_bundle_hash,replay_trace,replay_verification_hash"
+        ],
+        "evidence_refs": [
+          "suite:sha256:4",
+          "results:sha256:5"
+        ],
+        "passed_metric_targets": false
+      },
+      {
+        "domain": "wordnet_tiered",
+        "claim_level": "unit_validity",
+        "status": "INELIGIBLE",
+        "reason_codes": [
+          "min_tasks_3_lt_50",
+          "missing_proofs_bound_inputs_bundle_hash,replay_trace,replay_verification_hash"
+        ],
+        "evidence_refs": [
+          "suite:sha256:4",
+          "results:sha256:5"
+        ],
+        "passed_metric_targets": false
+      },
+      {
+        "domain": "wordnet_tiered",
+        "claim_level": "systemic_effect",
+        "status": "INELIGIBLE",
+        "reason_codes": [
+          "min_tasks_3_lt_100",
+          "missing_proofs_ablation_results_hash,bound_inputs_bundle_hash,replay_trace,replay_verification_hash",
+          "ablation_results_missing_or_unverified",
+          "cite_policy_requires_domain-agnostic"
+        ],
+        "evidence_refs": [
+          "suite:sha256:4",
+          "results:sha256:5"
+        ],
+        "passed_metric_targets": false
+      },
+      {
+        "domain": "wordnet_tiered",
+        "claim_level": "transfer_grade",
+        "status": "INELIGIBLE",
+        "reason_codes": [
+          "min_tasks_3_lt_200",
+          "missing_proofs_bound_inputs_bundle_hash,replay_trace,replay_verification_hash,transfer_matrix",
+          "feature_mode_oracle-assisted_not_domain-agnostic",
+          "min_target_domains_0_lt_2"
+        ],
+        "evidence_refs": [
+          "suite:sha256:4",
+          "results:sha256:5"
+        ],
+        "passed_metric_targets": false
+      }
+    ],
+    "eligible_claims": {
+      "structural_only": [],
+      "unit_validity": [],
+      "systemic_effect": [],
+      "transfer_grade": []
+    },
+    "claim_status_by_level": {
+      "structural_only": {
+        "wordnet_tiered": "INELIGIBLE"
+      },
+      "unit_validity": {
+        "wordnet_tiered": "INELIGIBLE"
+      },
+      "systemic_effect": {
+        "wordnet_tiered": "INELIGIBLE"
+      },
+      "transfer_grade": {
+        "wordnet_tiered": "INELIGIBLE"
+      }
+    }
+  },
+  "missing_required_surfaces_by_domain": {
+    "wordnet_tiered": [
+      "bytetrace_proof_surface"
+    ]
+  }
+}

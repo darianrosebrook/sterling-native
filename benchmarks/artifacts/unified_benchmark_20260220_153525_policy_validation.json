@@ -1,0 +1,138 @@
+{
+  "policy_path": "/Users/darianrosebrook/Desktop/Projects/sterling/configs/benchmark_domains_policy.yaml",
+  "policy_file_hash": "sha256:9a883c656ec1eed04dde111e0996f3012eb66324d6417486b908e51dcbed1695",
+  "run_grade": "diagnostic",
+  "provenance_complete": true,
+  "provenance_issues": [],
+  "blocking_issues": [],
+  "policy_deviations": [
+    {
+      "field": "negative_sampling_method",
+      "expected": "real_candidates",
+      "actual": "unknown",
+      "impact": "Training data may produce inflated accuracy"
+    }
+  ],
+  "world_coverage_gaps": [
+    {
+      "property_axis": "transition_dynamics",
+      "missing_value": "stochastic_transition",
+      "primitives_requiring": [
+        "P09"
+      ],
+      "claim_levels_affected": [
+        "unit_validity"
+      ]
+    },
+    {
+      "property_axis": "observability",
+      "missing_value": "partially_observable",
+      "primitives_requiring": [
+        "P11",
+        "P21"
+      ],
+      "claim_levels_affected": [
+        "unit_validity",
+        "systemic_effect"
+      ]
+    },
+    {
+      "property_axis": "adversariality",
+      "missing_value": "adversarial_inputs",
+      "primitives_requiring": [
+        "P20"
+      ],
+      "claim_levels_affected": [
+        "unit_validity"
+      ]
+    }
+  ],
+  "missing_required_surfaces_by_domain": {
+    "wordnet_tiered": [
+      "bytetrace_proof_surface"
+    ]
+  },
+  "certification_gate_passed": null,
+  "eligibility": [
+    {
+      "domain": "wordnet_tiered",
+      "claim_level": "structural_only",
+      "status": "INELIGIBLE",
+      "reason_codes": [
+        "min_tasks_3_lt_20",
+        "missing_proofs_bound_inputs_bundle_hash,replay_trace,replay_verification_hash"
+      ],
+      "evidence_refs": [
+        "suite:sha256:4",
+        "results:sha256:5"
+      ],
+      "passed_metric_targets": false
+    },
+    {
+      "domain": "wordnet_tiered",
+      "claim_level": "unit_validity",
+      "status": "INELIGIBLE",
+      "reason_codes": [
+        "min_tasks_3_lt_50",
+        "missing_proofs_bound_inputs_bundle_hash,replay_trace,replay_verification_hash"
+      ],
+      "evidence_refs": [
+        "suite:sha256:4",
+        "results:sha256:5"
+      ],
+      "passed_metric_targets": false
+    },
+    {
+      "domain": "wordnet_tiered",
+      "claim_level": "systemic_effect",
+      "status": "INELIGIBLE",
+      "reason_codes": [
+        "min_tasks_3_lt_100",
+        "missing_proofs_ablation_results_hash,bound_inputs_bundle_hash,replay_trace,replay_verification_hash",
+        "ablation_results_missing_or_unverified",
+        "cite_policy_requires_domain-agnostic"
+      ],
+      "evidence_refs": [
+        "suite:sha256:4",
+        "results:sha256:5"
+      ],
+      "passed_metric_targets": false
+    },
+    {
+      "domain": "wordnet_tiered",
+      "claim_level": "transfer_grade",
+      "status": "INELIGIBLE",
+      "reason_codes": [
+        "min_tasks_3_lt_200",
+        "missing_proofs_bound_inputs_bundle_hash,replay_trace,replay_verification_hash,transfer_matrix",
+        "feature_mode_oracle-assisted_not_domain-agnostic",
+        "min_target_domains_0_lt_2"
+      ],
+      "evidence_refs": [
+        "suite:sha256:4",
+        "results:sha256:5"
+      ],
+      "passed_metric_targets": false
+    }
+  ],
+  "eligible_claims": {
+    "structural_only": [],
+    "unit_validity": [],
+    "systemic_effect": [],
+    "transfer_grade": []
+  },
+  "claim_status_by_level": {
+    "structural_only": {
+      "wordnet_tiered": "INELIGIBLE"
+    },
+    "unit_validity": {
+      "wordnet_tiered": "INELIGIBLE"
+    },
+    "systemic_effect": {
+      "wordnet_tiered": "INELIGIBLE"
+    },
+    "transfer_grade": {
+      "wordnet_tiered": "INELIGIBLE"
+    }
+  }
+}
