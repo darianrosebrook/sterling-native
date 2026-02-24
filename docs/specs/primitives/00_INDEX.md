@@ -1,7 +1,9 @@
+---
+version: v0.4
+authority: canonical
+date: 2026-02-01
+---
 # Capability Primitive Implementation Specs Bundle
-
-Version: v0.4
-Date: 2026-02-01
 
 This bundle decomposes Sterling's reasoning work into domain-agnostic capability primitives. Each primitive has its own implementation spec and cert-grade gates.
 

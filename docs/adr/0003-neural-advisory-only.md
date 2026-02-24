@@ -1,7 +1,9 @@
+---
+status: "Accepted (Design target)"
+authority: adr
+date: 2026-02-23
+---
 # ADR 0003: Neural Components are Advisory Only (Enforced by API Shape)
-
-Status: Accepted (Design target)
-Date: 2026-02-23
 
 ## Decision
 

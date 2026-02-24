@@ -1,6 +1,8 @@
+---
+authority: canonical
+notice: "This is a canonical definition. Do not edit without a version bump or CANONICAL-CHANGE PR label."
+---
 # Core Constraints v1
-
-**This is a canonical definition. Do not edit without a version bump or CANONICAL-CHANGE PR label.**
 
 ---
 

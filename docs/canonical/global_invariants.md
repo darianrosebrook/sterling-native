@@ -1,3 +1,6 @@
+---
+authority: canonical
+---
 ## Global invariants (apply to every rig)
 
 These are not “features.” They are certifiability gates that every rig must satisfy.

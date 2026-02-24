@@ -1,7 +1,9 @@
+---
+status: "Draft (Sterling Native)"
+authority: policy
+scope: Transfer claims across worlds / truth regimes
+---
 # Domain Transfer Scenario Policy
-
-Status: Draft (Sterling Native)
-Scope: Transfer claims across worlds / truth regimes
 
 ## Purpose
 

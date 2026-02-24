@@ -1,7 +1,9 @@
+---
+status: Design target
+authority: architecture
+date: 2026-02-23
+---
 # Sterling v2 Success Rubric
-
-**Status**: Design target
-**Date**: 2026-02-23
 
 ---
 

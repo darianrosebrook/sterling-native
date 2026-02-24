@@ -1,7 +1,9 @@
+---
+status: "Accepted (Design target)"
+authority: adr
+date: 2026-02-23
+---
 # ADR 0001: Compilation Boundary as Architectural Spine
-
-Status: Accepted (Design target)
-Date: 2026-02-23
 
 ## Decision
 

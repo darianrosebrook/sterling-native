@@ -1,7 +1,9 @@
+---
+status: "Draft (Sterling Native)"
+authority: policy
+scope: "schemas, registries, epochs, and compatibility"
+---
 # Versioning and Epoch Policy
-
-Status: Draft (Sterling Native)
-Scope: schemas, registries, epochs, and compatibility
 
 ## Definitions
 

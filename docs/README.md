@@ -23,6 +23,7 @@
 - `ephemeral/roadmaps/roadmap_v0_spine.md` — milestone roadmap M0–M7 (spine first, governance second, reuse by evidence)
 
 ## Policy
+- `policy/doc_authority_policy.md` — **required `Authority:` front-matter field** (canonical | policy | adr | architecture | reference | ephemeral)
 - `policy/benchmarking_policy.md`
 - `policy/domain_transfer_policy.md`
 - `policy/governance_policy.md`

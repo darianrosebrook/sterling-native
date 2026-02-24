@@ -1,8 +1,10 @@
+---
+status: v2 canonical
+authority: canonical
+date: 2026-02-24
+supersedes: "v1 philosophy (archived at [docs/reference/v1/philosophy_full.md](../reference/v1/philosophy_full.md))"
+---
 # Sterling Native Design Philosophy
-
-**Status:** v2 canonical
-**Date:** 2026-02-24
-**Supersedes:** v1 philosophy (archived at [`docs/reference/v1/philosophy_full.md`](../reference/v1/philosophy_full.md))
 
 ---
 

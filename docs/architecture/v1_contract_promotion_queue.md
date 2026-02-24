@@ -1,6 +1,8 @@
+---
+authority: architecture
+purpose: "Controlled intake mechanism for the 29 quarantined v1 canonical contracts. Each contract is categorized by disposition and required edits before it can enter docs/canonical/."
+---
 # v1 Contract Promotion Queue
-
-**Purpose:** Controlled intake mechanism for the 29 quarantined v1 canonical contracts. Each contract is categorized by disposition and required edits before it can enter `docs/canonical/`.
 
 **Rule: Nothing in `docs/reference/v1/canonical/` is normative for Sterling Native.** A contract becomes canonical only after it passes promotion criteria, is rewritten in v2 vocabulary, and is moved into `docs/canonical/`. Until then, it is historical reference material. Citing a quarantined contract as authority is an error.
 

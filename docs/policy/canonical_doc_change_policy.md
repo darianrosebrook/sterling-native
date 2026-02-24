@@ -1,7 +1,9 @@
+---
+status: “Draft (Sterling Native)”
+authority: policy
+scope: “docs/canonical/* and other canonical surfaces”
+---
 # Canonical Document Change Policy
-
-Status: Draft (Sterling Native)
-Scope: docs/canonical/* and other “canonical” surfaces
 
 ## Goal
 

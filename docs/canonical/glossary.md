@@ -1,7 +1,9 @@
+---
+status: "v2 canonical — curated vocabulary for Sterling Native."
+authority: canonical
+scope: "Definitions enforced by contracts, invariants, and ADRs. For the comprehensive v1 glossary (historical), see docs/reference/v1/glossary_full.md."
+---
 # Sterling Native Glossary
-
-**Status:** v2 canonical — curated vocabulary for Sterling Native.
-**Scope:** Definitions enforced by contracts, invariants, and ADRs. For the comprehensive v1 glossary (historical), see [`docs/reference/v1/glossary_full.md`](../reference/v1/glossary_full.md).
 
 ---
 

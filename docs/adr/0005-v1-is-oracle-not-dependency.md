@@ -1,8 +1,10 @@
+---
+status: Accepted
+authority: adr
+date: 2026-02-24
+context: "Sterling Native is a clean-slate successor to Sterling v1. The question of how much v1 code to reuse must be answered with a policy, not a philosophical debate."
+---
 # ADR 0005: v1 Is a Test Oracle, Not a Dependency
-
-**Status:** Accepted
-**Date:** 2026-02-24
-**Context:** Sterling Native is a clean-slate successor to Sterling v1. The question of how much v1 code to reuse must be answered with a policy, not a philosophical debate.
 
 ---
 

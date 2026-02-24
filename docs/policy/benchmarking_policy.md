@@ -1,7 +1,9 @@
+---
+status: "Draft (Sterling Native)"
+authority: policy
+scope: All benchmarks and performance claims
+---
 # Benchmarking Policy
-
-Status: Draft (Sterling Native)
-Scope: All benchmarks and performance claims
 
 ## Purpose
 

@@ -1,12 +1,13 @@
+---
+version: "1.2"
+authority: canonical
+date: 2026-02-17
+author: "@darianrosebrook"
+status: "Implemented (V1 substrate complete)"
+changelog: "1.1 — Fix identity/status conflation, deterministic hashing, capacity policy, endianness, frame layout. 1.1a — Status update: V1 implementation complete across four domains (Rome, Mastermind, EscapeGame, WordNet). Core carrier modules, domain compilers, ByteTraceV1 format, content-addressed hashing, divergence localization, and golden conformance tests all operational. See §7 for updated research path status. 1.2 — Fix INITIAL_STATE_SENTINEL value, document payload hash domain prefix, add source file index."
+notice: "This is a canonical definition. Do not edit without a version bump or CANONICAL-CHANGE PR label."
+---
 # Code32 and ByteStateV1: Hardware-Native Semantic Representation
-
-**This is a canonical definition. Do not edit without a version bump or CANONICAL-CHANGE PR label.**
-
-**Version**: 1.2
-**Date**: 2026-02-17
-**Author**: @darianrosebrook
-**Status**: Implemented (V1 substrate complete)
-**Changelog**: 1.1 — Fix identity/status conflation, deterministic hashing, capacity policy, endianness, frame layout. 1.1a — Status update: V1 implementation complete across four domains (Rome, Mastermind, EscapeGame, WordNet). Core carrier modules, domain compilers, ByteTraceV1 format, content-addressed hashing, divergence localization, and golden conformance tests all operational. See §7 for updated research path status. 1.2 — Fix INITIAL_STATE_SENTINEL value, document payload hash domain prefix, add source file index.
 
 ---
 

@@ -1,7 +1,9 @@
+---
+status: "Draft (Sterling Native)"
+authority: policy
+scope: "Run modes, eligibility, and artifact semantics"
+---
 # Governance Policy
-
-Status: Draft (Sterling Native)
-Scope: Run modes, eligibility, and artifact semantics
 
 ## Two run modes
 

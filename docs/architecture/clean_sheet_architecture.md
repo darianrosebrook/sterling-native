@@ -1,8 +1,10 @@
+---
+date: 2026-02-23
+authority: architecture
+author: "@darianrosebrook"
+status: "Design Document (not a commitment — a compass)"
+---
 # Sterling v2: Clean-Sheet Architecture
-
-**Date**: 2026-02-23
-**Author**: @darianrosebrook
-**Status**: Design Document (not a commitment — a compass)
 
 ---
 

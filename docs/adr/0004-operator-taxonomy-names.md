@@ -1,7 +1,9 @@
+---
+status: Accepted
+authority: adr
+date: 2026-02-24
+---
 # ADR 0004: Operator Taxonomy Names (Seek/Memorize/Perceive/Knowledge/Control)
-
-Status: Accepted
-Date: 2026-02-24
 
 ## Decision
 

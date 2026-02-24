@@ -1,11 +1,12 @@
+---
+version: "1.0"
+authority: canonical
+date: 2026-02-15
+author: "@darianrosebrook"
+status: "Partially implemented (core compilation boundary operational; epoch transitions and dynamic domain handshake not yet wired)"
+notice: "This is a canonical definition. Do not edit without a version bump or CANONICAL-CHANGE PR label."
+---
 # ByteState Compilation Boundary
-
-**This is a canonical definition. Do not edit without a version bump or CANONICAL-CHANGE PR label.**
-
-**Version**: 1.0
-**Date**: 2026-02-15
-**Author**: @darianrosebrook
-**Status**: Partially implemented (core compilation boundary operational; epoch transitions and dynamic domain handshake not yet wired)
 
 ---
 

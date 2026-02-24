@@ -1,3 +1,6 @@
+---
+authority: architecture
+---
 # Module Map (Sterling Native)
 
 Short navigational map of the 7-module target architecture.
