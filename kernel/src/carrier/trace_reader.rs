@@ -626,6 +626,44 @@ mod tests {
     }
 
     #[test]
+    fn rejects_non_canonical_footer() {
+        let trace = make_trace();
+        let bytes = trace_to_bytes(&trace).unwrap();
+
+        // Find footer section.
+        let env_len = u16::from_le_bytes([bytes[0], bytes[1]]) as usize;
+        let header_offset = 2 + env_len + 4;
+        let header_len =
+            u16::from_le_bytes([bytes[header_offset], bytes[header_offset + 1]]) as usize;
+        let body_start = header_offset + 2 + header_len;
+        let stride = trace.header.frame_stride().unwrap();
+        let body_len = trace.header.step_count * stride;
+        let footer_offset = body_start + body_len;
+
+        // Read original footer and inject whitespace.
+        let footer_len_offset = footer_offset;
+        let orig_footer_len =
+            u16::from_le_bytes([bytes[footer_len_offset], bytes[footer_len_offset + 1]]) as usize;
+        let footer_start = footer_len_offset + 2;
+        let footer_json = &bytes[footer_start..footer_start + orig_footer_len];
+
+        let mut bad_footer = Vec::with_capacity(footer_json.len() + 1);
+        bad_footer.push(b'{');
+        bad_footer.push(b' '); // whitespace = non-canonical
+        bad_footer.extend_from_slice(&footer_json[1..]);
+
+        #[allow(clippy::cast_possible_truncation)]
+        let new_footer_len_u16 = bad_footer.len() as u16; // test value known < u16::MAX
+        let mut rebuilt = Vec::new();
+        rebuilt.extend_from_slice(&bytes[..footer_offset]);
+        rebuilt.extend_from_slice(&new_footer_len_u16.to_le_bytes());
+        rebuilt.extend_from_slice(&bad_footer);
+
+        let err = bytes_to_trace(&rebuilt).unwrap_err();
+        assert!(matches!(err, TraceParseError::NonCanonical { .. }));
+    }
+
+    #[test]
     fn rejects_null_witness_store_digest() {
         // Build valid bytes, then manually replace footer with one that has null.
         let trace = make_trace();

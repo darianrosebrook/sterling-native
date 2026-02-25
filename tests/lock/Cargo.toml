@@ -14,3 +14,7 @@ sterling-kernel = { path = "../../kernel" }
 [[bin]]
 name = "compile_fixture"
 path = "src/bin/compile_fixture.rs"
+
+[[bin]]
+name = "trace_fixture"
+path = "src/bin/trace_fixture.rs"

@@ -12,6 +12,10 @@ use std::path::Path;
 use std::process::Command;
 
 /// Resolve the path to the compiled `trace_fixture` binary.
+///
+/// NOTE: If CI expands to Windows, this needs `.exe` suffix handling
+/// (e.g., `path.set_extension("exe")` on `cfg!(target_os = "windows")`).
+/// Windows is not a current target.
 fn binary_path() -> String {
     let mut path = std::env::current_exe()
         .expect("can resolve test binary path")
@@ -131,6 +135,11 @@ fn crossproc_determinism_three_env_variants() {
 
 #[test]
 fn crossproc_output_matches_v1_oracle() {
+    // NOTE: This test compares full .bst1 wire bytes (including envelope).
+    // That means envelope serialization (field order, formatting) is part of
+    // the wire-compat contract. Changing envelope layout will break this test
+    // even though the payload hash surface is unaffected. This is intentional:
+    // M2 commits to full wire stability, not just payload stability.
     let root = workspace_root();
     let output = run_variant(&root, &[]);
 
