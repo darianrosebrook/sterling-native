@@ -48,43 +48,70 @@ impl OperatorCategory {
 /// Full-width operator mask over the identity plane.
 ///
 /// Each entry corresponds to a `(layer, slot)` position in the `ByteStateV1`.
-/// `None` means "don't care" (slot is not constrained / not written).
-/// `Some(code)` means "this slot must be / will be set to `code`".
+/// Inactive entries mean "don't care" (slot is not constrained / not written).
+/// Active entries mean "this slot must be / will be set to the stored `Code32`".
 ///
 /// Flat layout: index = `layer * slot_count + slot`.
+///
+/// Internal representation uses separate `values` and `active` arrays so that
+/// "constraint equals `PADDING`" is distinguishable from "no constraint," and
+/// the `active` bitvec can later be SIMD-scanned without touching the values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdentityMaskV1 {
     layer_count: usize,
     slot_count: usize,
-    entries: Vec<Option<Code32>>,
+    values: Vec<Code32>,
+    active: Vec<bool>,
 }
 
 impl IdentityMaskV1 {
-    /// Create an empty mask (all entries `None`).
+    /// Create an empty mask (all entries inactive, values default to `PADDING`).
     #[must_use]
     pub fn new(layer_count: usize, slot_count: usize) -> Self {
+        let len = layer_count * slot_count;
         Self {
             layer_count,
             slot_count,
-            entries: vec![None; layer_count * slot_count],
+            values: vec![Code32::PADDING; len],
+            active: vec![false; len],
         }
     }
 
-    /// Set a single entry. Panics if out of bounds.
+    /// Set a single entry as active. Panics if out of bounds.
     pub fn set(&mut self, layer: usize, slot: usize, code: Code32) {
-        self.entries[layer * self.slot_count + slot] = Some(code);
+        let idx = layer * self.slot_count + slot;
+        self.values[idx] = code;
+        self.active[idx] = true;
     }
 
-    /// Get an entry. Panics if out of bounds.
+    /// Clear a single entry (mark inactive). Panics if out of bounds.
+    pub fn clear(&mut self, layer: usize, slot: usize) {
+        let idx = layer * self.slot_count + slot;
+        self.values[idx] = Code32::PADDING;
+        self.active[idx] = false;
+    }
+
+    /// Get an entry. Returns `None` if inactive. Panics if out of bounds.
     #[must_use]
     pub fn get(&self, layer: usize, slot: usize) -> Option<Code32> {
-        self.entries[layer * self.slot_count + slot]
+        let idx = layer * self.slot_count + slot;
+        if self.active[idx] {
+            Some(self.values[idx])
+        } else {
+            None
+        }
     }
 
-    /// Number of non-`None` entries.
+    /// Whether a slot is active (constrained). Panics if out of bounds.
+    #[must_use]
+    pub fn is_active(&self, layer: usize, slot: usize) -> bool {
+        self.active[layer * self.slot_count + slot]
+    }
+
+    /// Number of active (constrained) entries.
     #[must_use]
     pub fn active_count(&self) -> usize {
-        self.entries.iter().filter(|e| e.is_some()).count()
+        self.active.iter().filter(|&&a| a).count()
     }
 
     /// Dimensions.
@@ -97,39 +124,63 @@ impl IdentityMaskV1 {
 /// Full-width operator mask over the status plane.
 ///
 /// Same layout as [`IdentityMaskV1`] but with `u8` (`SlotStatus` byte) values.
+/// Separate `values`/`active` arrays for the same reasons as `IdentityMaskV1`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatusMaskV1 {
     layer_count: usize,
     slot_count: usize,
-    entries: Vec<Option<u8>>,
+    values: Vec<u8>,
+    active: Vec<bool>,
 }
 
 impl StatusMaskV1 {
-    /// Create an empty mask (all entries `None`).
+    /// Create an empty mask (all entries inactive, values default to 0).
     #[must_use]
     pub fn new(layer_count: usize, slot_count: usize) -> Self {
+        let len = layer_count * slot_count;
         Self {
             layer_count,
             slot_count,
-            entries: vec![None; layer_count * slot_count],
+            values: vec![0; len],
+            active: vec![false; len],
         }
     }
 
-    /// Set a single entry. Panics if out of bounds.
+    /// Set a single entry as active. Panics if out of bounds.
     pub fn set(&mut self, layer: usize, slot: usize, status_byte: u8) {
-        self.entries[layer * self.slot_count + slot] = Some(status_byte);
+        let idx = layer * self.slot_count + slot;
+        self.values[idx] = status_byte;
+        self.active[idx] = true;
     }
 
-    /// Get an entry. Panics if out of bounds.
+    /// Clear a single entry (mark inactive). Panics if out of bounds.
+    pub fn clear(&mut self, layer: usize, slot: usize) {
+        let idx = layer * self.slot_count + slot;
+        self.values[idx] = 0;
+        self.active[idx] = false;
+    }
+
+    /// Get an entry. Returns `None` if inactive. Panics if out of bounds.
     #[must_use]
     pub fn get(&self, layer: usize, slot: usize) -> Option<u8> {
-        self.entries[layer * self.slot_count + slot]
+        let idx = layer * self.slot_count + slot;
+        if self.active[idx] {
+            Some(self.values[idx])
+        } else {
+            None
+        }
     }
 
-    /// Number of non-`None` entries.
+    /// Whether a slot is active (constrained). Panics if out of bounds.
+    #[must_use]
+    pub fn is_active(&self, layer: usize, slot: usize) -> bool {
+        self.active[layer * self.slot_count + slot]
+    }
+
+    /// Number of active (constrained) entries.
     #[must_use]
     pub fn active_count(&self) -> usize {
-        self.entries.iter().filter(|e| e.is_some()).count()
+        self.active.iter().filter(|&&a| a).count()
     }
 
     /// Dimensions.
@@ -187,5 +238,45 @@ mod tests {
     fn mask_dimensions_match_construction() {
         let mask = IdentityMaskV1::new(4, 32);
         assert_eq!(mask.dimensions(), (4, 32));
+    }
+
+    #[test]
+    fn identity_mask_padding_vs_inactive() {
+        let mut mask = IdentityMaskV1::new(2, 4);
+
+        // Inactive slot returns None.
+        assert_eq!(mask.get(0, 0), None);
+        assert!(!mask.is_active(0, 0));
+
+        // Set slot to PADDING — now it's active with value PADDING.
+        mask.set(0, 0, Code32::PADDING);
+        assert_eq!(mask.get(0, 0), Some(Code32::PADDING));
+        assert!(mask.is_active(0, 0));
+        assert_eq!(mask.active_count(), 1);
+
+        // Clear returns it to inactive.
+        mask.clear(0, 0);
+        assert_eq!(mask.get(0, 0), None);
+        assert!(!mask.is_active(0, 0));
+        assert_eq!(mask.active_count(), 0);
+    }
+
+    #[test]
+    fn status_mask_zero_vs_inactive() {
+        let mut mask = StatusMaskV1::new(2, 4);
+
+        // Inactive slot returns None.
+        assert_eq!(mask.get(0, 0), None);
+        assert!(!mask.is_active(0, 0));
+
+        // Set slot to 0 (Hole status) — now active.
+        mask.set(0, 0, 0);
+        assert_eq!(mask.get(0, 0), Some(0));
+        assert!(mask.is_active(0, 0));
+
+        // Clear returns it to inactive.
+        mask.clear(0, 0);
+        assert_eq!(mask.get(0, 0), None);
+        assert!(!mask.is_active(0, 0));
     }
 }
