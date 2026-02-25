@@ -161,6 +161,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sterling-harness"
+version = "0.0.1"
+dependencies = [
+ "hex",
+ "serde_json",
+ "sterling-kernel",
+]
+
+[[package]]
 name = "sterling-kernel"
 version = "0.0.1"
 dependencies = [

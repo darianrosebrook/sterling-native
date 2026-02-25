@@ -1,0 +1,389 @@
+//! Harness runner: orchestrates kernel APIs to produce an artifact bundle.
+//!
+//! The runner uses ONLY kernel APIs: `compile`, `apply`, `trace_to_bytes`,
+//! `replay_verify`, `payload_hash`, `step_chain`. It does not implement
+//! any proof logic itself.
+//!
+//! # Pipeline
+//!
+//! ```text
+//! encode_payload() → compile() → [apply() × N] → build trace
+//!   → trace_to_bytes() → replay_verify() → hash → build bundle
+//! ```
+
+use crate::bundle::{
+    build_bundle, ArtifactBundleV1, BundleBuildError, DOMAIN_CODEBOOK_HASH, DOMAIN_HARNESS_FIXTURE,
+};
+use crate::contract::{WorldHarnessError, WorldHarnessV1};
+
+use sterling_kernel::carrier::bytetrace::{
+    ByteTraceEnvelopeV1, ByteTraceFooterV1, ByteTraceFrameV1, ByteTraceHeaderV1, ByteTraceV1,
+    ReplayVerdict, TraceBundleV1,
+};
+use sterling_kernel::carrier::code32::Code32;
+use sterling_kernel::carrier::compile::compile;
+use sterling_kernel::carrier::trace_writer::trace_to_bytes;
+use sterling_kernel::operators::apply::apply;
+use sterling_kernel::proof::canon::canonical_json_bytes;
+use sterling_kernel::proof::hash::{canonical_hash, ContentHash};
+use sterling_kernel::proof::replay::replay_verify;
+use sterling_kernel::proof::trace_hash::{payload_hash, step_chain};
+
+/// Error during a harness run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunError {
+    /// World harness method failed.
+    WorldError(WorldHarnessError),
+    /// Kernel compilation failed.
+    CompilationFailed { detail: String },
+    /// Kernel `apply()` failed.
+    ApplyFailed { frame_index: usize, detail: String },
+    /// Trace serialization failed.
+    TraceWriteFailed { detail: String },
+    /// Replay verification structural error.
+    ReplayFailed { detail: String },
+    /// Replay returned Divergence verdict (runner bug or world bug).
+    ReplayDivergence { frame_index: usize, detail: String },
+    /// Bundle assembly failed.
+    BundleFailed(BundleBuildError),
+    /// Trace hashing failed.
+    HashFailed { detail: String },
+    /// Canonical JSON serialization failed.
+    CanonFailed { detail: String },
+}
+
+/// Run a world through the full harness pipeline.
+///
+/// Produces an [`ArtifactBundleV1`] containing:
+/// - `fixture.json` (normative) — canonical JSON fixture description
+/// - `compilation_manifest.json` (normative) — from `CompilationResultV1`
+/// - `trace.bst1` (observational) — full trace binary including envelope
+/// - `verification_report.json` (normative) — replay verdict + hashes
+///
+/// # Errors
+///
+/// Returns [`RunError`] at any step. Fail-closed: partial bundles are not
+/// produced.
+pub fn run(world: &dyn WorldHarnessV1) -> Result<ArtifactBundleV1, RunError> {
+    let world_id = world.world_id();
+
+    // Phase 1: compile + execute program.
+    let payload_bytes = world.encode_payload().map_err(RunError::WorldError)?;
+    let schema = world.schema_descriptor();
+    let registry = world.registry().map_err(RunError::WorldError)?;
+
+    let compilation =
+        compile(&payload_bytes, &schema, &registry).map_err(|e| RunError::CompilationFailed {
+            detail: format!("{e:?}"),
+        })?;
+
+    let frames = execute_program(world, &compilation.state)?;
+
+    // Phase 2: build trace.
+    let fixture_json = build_fixture_json(world, &payload_bytes)?;
+    let trace = assemble_trace(world, &schema, &compilation, &fixture_json, frames)?;
+
+    // Phase 3: verify + hash + bundle.
+    let trace_bytes = trace_to_bytes(&trace).map_err(|e| RunError::TraceWriteFailed {
+        detail: format!("{e:?}"),
+    })?;
+
+    verify_trace(&trace, &compilation, &payload_bytes)?;
+
+    let verification_report = build_verification_report_from_trace(world_id, &trace)?;
+
+    build_bundle(vec![
+        ("fixture.json".into(), fixture_json, true),
+        (
+            "compilation_manifest.json".into(),
+            compilation.compilation_manifest,
+            true,
+        ),
+        ("trace.bst1".into(), trace_bytes, false),
+        ("verification_report.json".into(), verification_report, true),
+    ])
+    .map_err(RunError::BundleFailed)
+}
+
+/// Execute the world's program, producing trace frames.
+fn execute_program(
+    world: &dyn WorldHarnessV1,
+    initial_state: &sterling_kernel::carrier::bytestate::ByteStateV1,
+) -> Result<Vec<ByteTraceFrameV1>, RunError> {
+    let dims = world.dimensions();
+    let program = world.program();
+
+    let frame_0 = ByteTraceFrameV1 {
+        op_code: Code32::INITIAL_STATE.to_le_bytes(),
+        op_args: vec![0; dims.arg_slot_count * 4],
+        result_identity: initial_state.identity_bytes(),
+        result_status: initial_state.status_bytes(),
+    };
+
+    let mut frames = vec![frame_0];
+    let mut current_state = initial_state.clone();
+
+    for (i, step) in program.iter().enumerate() {
+        let (new_state, record) =
+            apply(&current_state, step.op_code, &step.op_args).map_err(|e| {
+                RunError::ApplyFailed {
+                    frame_index: i + 1,
+                    detail: format!("{e:?}"),
+                }
+            })?;
+
+        frames.push(ByteTraceFrameV1 {
+            op_code: record.op_code,
+            op_args: record.op_args,
+            result_identity: record.result_identity,
+            result_status: record.result_status,
+        });
+
+        current_state = new_state;
+    }
+
+    Ok(frames)
+}
+
+/// Assemble a `ByteTraceV1` from frames and world metadata.
+fn assemble_trace(
+    world: &dyn WorldHarnessV1,
+    schema: &sterling_kernel::carrier::bytestate::SchemaDescriptor,
+    compilation: &sterling_kernel::carrier::compile::CompilationResultV1,
+    fixture_json: &[u8],
+    frames: Vec<ByteTraceFrameV1>,
+) -> Result<ByteTraceV1, RunError> {
+    let world_id = world.world_id();
+    let dims = world.dimensions();
+    let fixture_hash = canonical_hash(DOMAIN_HARNESS_FIXTURE, fixture_json);
+    let codebook_hash = build_codebook_hash(world)?;
+
+    let header = ByteTraceHeaderV1 {
+        schema_version: schema.version.clone(),
+        domain_id: schema.id.clone(),
+        registry_epoch_hash: compilation.registry_descriptor.hash.clone(),
+        codebook_hash: codebook_hash.as_str().to_string(),
+        fixture_hash: fixture_hash.as_str().to_string(),
+        step_count: frames.len(),
+        layer_count: dims.layer_count,
+        slot_count: dims.slot_count,
+        arg_slot_count: dims.arg_slot_count,
+    };
+
+    let footer = ByteTraceFooterV1 {
+        suite_identity: build_suite_identity(world_id).as_str().to_string(),
+        witness_store_digest: None,
+    };
+
+    let envelope = ByteTraceEnvelopeV1 {
+        timestamp: "1970-01-01T00:00:00Z".into(),
+        trace_id: format!("harness-{world_id}"),
+        runner_version: env!("CARGO_PKG_VERSION").to_string(),
+        wall_time_ms: 0,
+    };
+
+    Ok(ByteTraceV1 {
+        envelope,
+        header,
+        frames,
+        footer,
+    })
+}
+
+/// Replay-verify the trace. Returns error on divergence or structural failure.
+fn verify_trace(
+    trace: &ByteTraceV1,
+    compilation: &sterling_kernel::carrier::compile::CompilationResultV1,
+    payload_bytes: &[u8],
+) -> Result<(), RunError> {
+    let trace_bundle = TraceBundleV1 {
+        trace: trace.clone(),
+        compilation_manifest: compilation.compilation_manifest.clone(),
+        input_payload: payload_bytes.to_vec(),
+    };
+
+    let verdict = replay_verify(&trace_bundle).map_err(|e| RunError::ReplayFailed {
+        detail: format!("{e:?}"),
+    })?;
+
+    match &verdict {
+        ReplayVerdict::Match => Ok(()),
+        ReplayVerdict::Divergence {
+            frame_index,
+            detail,
+            ..
+        } => Err(RunError::ReplayDivergence {
+            frame_index: *frame_index,
+            detail: detail.clone(),
+        }),
+        ReplayVerdict::Invalid { detail } => Err(RunError::ReplayFailed {
+            detail: detail.clone(),
+        }),
+    }
+}
+
+/// Build verification report from a verified trace (hash + format).
+fn build_verification_report_from_trace(
+    world_id: &str,
+    trace: &ByteTraceV1,
+) -> Result<Vec<u8>, RunError> {
+    let p_hash = payload_hash(trace).map_err(|e| RunError::HashFailed {
+        detail: format!("{e:?}"),
+    })?;
+
+    let s_chain = step_chain(trace).map_err(|e| RunError::HashFailed {
+        detail: format!("{e:?}"),
+    })?;
+
+    build_verification_report(world_id, &p_hash, &s_chain)
+}
+
+/// Build the fixture JSON artifact (canonical JSON bytes).
+fn build_fixture_json(
+    world: &dyn WorldHarnessV1,
+    payload_bytes: &[u8],
+) -> Result<Vec<u8>, RunError> {
+    let dims = world.dimensions();
+    let program = world.program();
+
+    let program_steps: Vec<serde_json::Value> = program
+        .iter()
+        .map(|step| {
+            serde_json::json!({
+                "op_args_hex": hex::encode(&step.op_args),
+                "op_code_hex": hex::encode(step.op_code.to_le_bytes()),
+            })
+        })
+        .collect();
+
+    let fixture_value = serde_json::json!({
+        "dimensions": {
+            "arg_slot_count": dims.arg_slot_count,
+            "layer_count": dims.layer_count,
+            "slot_count": dims.slot_count,
+        },
+        "initial_payload_hex": hex::encode(payload_bytes),
+        "program": program_steps,
+        "schema_version": "fixture.v1",
+        "world_id": world.world_id(),
+    });
+
+    canonical_json_bytes(&fixture_value).map_err(|e| RunError::CanonFailed {
+        detail: format!("{e:?}"),
+    })
+}
+
+/// Build the codebook hash from the world's program operator signatures.
+///
+/// Codebook hash basis includes only stable signature fields:
+/// `op_code_hex` and `arg_slot_count`, sorted by `op_code_hex`.
+fn build_codebook_hash(world: &dyn WorldHarnessV1) -> Result<ContentHash, RunError> {
+    use std::collections::BTreeMap;
+
+    let dims = world.dimensions();
+    let program = world.program();
+
+    // Deduplicate operators by op_code_hex (BTreeMap gives sorted order).
+    let mut operators: BTreeMap<String, usize> = BTreeMap::new();
+    for step in &program {
+        let hex = hex::encode(step.op_code.to_le_bytes());
+        operators.entry(hex).or_insert(dims.arg_slot_count);
+    }
+
+    let operator_entries: Vec<serde_json::Value> = operators
+        .iter()
+        .map(|(hex, arg_count)| {
+            serde_json::json!({
+                "arg_slot_count": arg_count,
+                "op_code_hex": hex,
+            })
+        })
+        .collect();
+
+    let basis = serde_json::json!({
+        "operators": operator_entries,
+        "schema_version": "codebook_hash_basis.v1",
+    });
+
+    let bytes = canonical_json_bytes(&basis).map_err(|e| RunError::CanonFailed {
+        detail: format!("{e:?}"),
+    })?;
+
+    Ok(canonical_hash(DOMAIN_CODEBOOK_HASH, &bytes))
+}
+
+/// Build a deterministic suite identity from the world ID.
+fn build_suite_identity(world_id: &str) -> ContentHash {
+    canonical_hash(b"STERLING::SUITE_IDENTITY::V1\0", world_id.as_bytes())
+}
+
+/// Build the verification report JSON (canonical JSON bytes).
+///
+/// Called only after successful replay verification (verdict is always Match).
+fn build_verification_report(
+    world_id: &str,
+    p_hash: &ContentHash,
+    s_chain: &sterling_kernel::proof::trace_hash::StepChainResult,
+) -> Result<Vec<u8>, RunError> {
+    let report = serde_json::json!({
+        "payload_hash": p_hash.as_str(),
+        "planes_verified": ["identity", "status"],
+        "replay_verdict": "Match",
+        "schema_version": "verification_report.v1",
+        "step_chain_digest": s_chain.digest.as_str(),
+        "step_chain_length": s_chain.chain.len(),
+        "step_count": s_chain.chain.len(),
+        "world_id": world_id,
+    });
+
+    canonical_json_bytes(&report).map_err(|e| RunError::CanonFailed {
+        detail: format!("{e:?}"),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::worlds::rome_mini::RomeMini;
+
+    #[test]
+    fn rome_mini_produces_bundle() {
+        let bundle = run(&RomeMini).unwrap();
+        assert_eq!(bundle.artifacts.len(), 4);
+        assert!(bundle.artifacts.contains_key("fixture.json"));
+        assert!(bundle.artifacts.contains_key("compilation_manifest.json"));
+        assert!(bundle.artifacts.contains_key("trace.bst1"));
+        assert!(bundle.artifacts.contains_key("verification_report.json"));
+    }
+
+    #[test]
+    fn rome_mini_trace_bst1_is_observational() {
+        let bundle = run(&RomeMini).unwrap();
+        let trace = bundle.artifacts.get("trace.bst1").unwrap();
+        assert!(!trace.normative);
+    }
+
+    #[test]
+    fn rome_mini_normative_artifacts() {
+        let bundle = run(&RomeMini).unwrap();
+        for name in [
+            "fixture.json",
+            "compilation_manifest.json",
+            "verification_report.json",
+        ] {
+            let artifact = bundle.artifacts.get(name).unwrap();
+            assert!(artifact.normative, "{name} should be normative");
+        }
+    }
+
+    #[test]
+    fn rome_mini_verification_report_contains_planes_verified() {
+        let bundle = run(&RomeMini).unwrap();
+        let report = bundle.artifacts.get("verification_report.json").unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&report.content).unwrap();
+        let planes = json["planes_verified"].as_array().unwrap();
+        assert_eq!(planes.len(), 2);
+        assert_eq!(planes[0], "identity");
+        assert_eq!(planes[1], "status");
+    }
+}
