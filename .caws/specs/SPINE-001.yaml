@@ -50,14 +50,79 @@ acceptance:
     given: "the kernel package boundary exists"
     when: "the build graph is analyzed"
     then: "no dependency on docs/reference/v1/ or v1 implementation code"
-  - id: S1-M1
-    given: "a minimal payload and schema descriptor"
-    when: "compile() is called on two different machines"
-    then: "produces identical ByteState bytes and digest (Determinism Envelope)"
+  # --- M1 claim surface ---
+  - id: S1-M1-DETERMINISM-INPROC
+    given: "a Rome payload, schema descriptor, and registry snapshot"
+    when: "compile() is called N>=10 times in the same process"
+    then: "produces identical evidence bytes and identical digests every time"
+  - id: S1-M1-DETERMINISM-CROSSPROC
+    given: "a Rome compile test case"
+    when: "run as a subprocess under >=3 environment variants (different cwd, locale env, iteration surfaces)"
+    then: "produces the same golden bytes and digests as the in-process test"
+  - id: S1-M1-DETERMINISM-CROSSOS
+    given: "the golden fixture test suite"
+    when: "CI executes on Linux and macOS"
+    then: "both produce identical pass/fail results against the same committed golden fixtures"
   - id: S1-M1-GOLDEN
-    given: "a known test payload"
+    given: "a known Rome test payload"
     when: "compile() is called"
-    then: "output matches golden byte fixture bit-for-bit"
+    then: "evidence bytes (identity + status planes) and digests match committed golden fixtures bit-for-bit"
+  - id: S1-M1-HASH-V1-VECTORS
+    given: ">=3 fixed test vectors with known domain prefix + data"
+    when: "sha256(prefix || data) is computed"
+    then: "output matches known-good expected hex strings (produced offline by v1 oracle), including null-terminated prefix bytes"
+  - id: S1-M1-CANONJSON
+    given: "a Rome payload with varied key ordering and whitespace"
+    when: "canonical JSON bytes are produced for hashing"
+    then: "output is stable, matches a documented canonicalization rule (key ordering, separators, UTF-8)"
+  - id: S1-M1-FAILCLOSED
+    given: "invalid inputs (bad schema, bad registry, unknown Code32, shape mismatch, bad JSON)"
+    when: "compile() is called"
+    then: "no partial ByteState is emitted, no panic occurs, typed CompilationFailure is returned"
+  - id: S1-M1-TYPED-FAILURES
+    given: "each class of invalid input"
+    when: "compile() fails"
+    then: "the failure variant maps to a stable error family (SchemaMismatch, RegistryMismatch, UnknownConcept, ConstraintViolation)"
+  - id: S1-M1-ORDERING-INVARIANCE
+    given: "a valid Rome payload with reordered JSON keys"
+    when: "compile() is called"
+    then: "output bytes and digest are identical to the canonical-ordering case"
+  - id: S1-M1-REGISTRY-CANON
+    given: "a RegistrySnapshot"
+    when: "canonical bytes are produced"
+    then: "output is stable and independent of incidental metadata (file paths, timestamps, formatting)"
+  - id: S1-M1-REGISTRY-HASH-GOLDEN
+    given: "a known registry snapshot"
+    when: "sha256(DOMAIN_REGISTRY_SNAPSHOT || canonical_bytes) is computed"
+    then: "output matches a committed golden digest"
+  - id: S1-M1-REGISTRY-VALIDATION
+    given: "a payload referencing a Code32 not in the registry snapshot"
+    when: "compile() is called"
+    then: "fails closed with UnknownConcept, does not auto-allocate"
+  - id: S1-M1-BYTESTATE-ROUNDTRIP
+    given: "a ByteStateV1 produced by compile()"
+    when: "evidence_bytes() is decoded back to ByteStateV1"
+    then: "reconstructed state is bitwise-identical, with strict length checks (no truncation acceptance)"
+  - id: S1-M1-EQ-SEPARATION-LOCK
+    given: "two ByteStateV1 values differing only in status plane"
+    when: "identity_eq() and bitwise_eq() are called"
+    then: "identity_eq returns true, bitwise_eq returns false, evidence digests differ"
+  - id: S1-M1-NO-V1-DEPS
+    given: "the kernel crate with M1 modules"
+    when: "the build graph is analyzed"
+    then: "no dependency on v1 implementation code (extends S1-M0)"
+  - id: S1-M1-NO-PATH-IN-HASH
+    given: "any hashed surface or manifest produced by compile()"
+    when: "bytes are inspected"
+    then: "no absolute paths, cwd, username, hostname, or timestamps appear"
+  - id: S1-M1-ONE-CANONICALIZER
+    given: "the kernel crate source"
+    when: "canonical JSON implementations are enumerated"
+    then: "exactly one canonical JSON bytes function exists, and all hashing flows route through it"
+  - id: S1-M1-REPRO
+    given: "a clean checkout"
+    when: "cargo test --workspace is run"
+    then: "deterministic pass/fail with no manual setup steps; fixture files are self-describing"
   - id: S1-M2
     given: "a single-step episode (one operator application)"
     when: "replay_verify() is called on the ByteTrace"
@@ -98,19 +163,25 @@ contracts:
 milestones:
   - id: M0
     title: "Kernel contract surface and repo layout"
-    status: pending
+    status: complete
     deliverables:
       - "kernel/ package boundary with compile(), apply(), replay_verify() API"
       - "schemas/ directory with trace_bundle, policy_snapshot, schema_descriptor, registry_snapshot, bytetrace, claim schemas"
       - "canonical lint CI check"
   - id: M1
-    title: "ByteState/Code32 + canonical hashing"
+    title: "ByteState/Code32 + canonical hashing (proof portfolio)"
     status: pending
     deliverables:
-      - "Code32 registry snapshot format + allocation rules"
-      - "ByteStateV1 layout + encode/decode"
-      - "Canonical hashing module (sha256, V1-compatible) with domain-separated commits matching v1 prefixes"
-      - "Lock tests: golden bytes, hash stability, endianness"
+      - "sha2 canonical hashing (SHA-256, V1 domain prefixes, single canonicalizer)"
+      - "compile() for Rome payload shape (canonical JSON of initial planes)"
+      - "ByteStateV1 encode/decode with strict round-trip"
+      - "Golden fixtures from v1 oracle (evidence bytes + digests, hash vectors, registry digest)"
+      - "Determinism envelope: in-process, cross-process, cross-OS (Linux + macOS CI)"
+      - "Fail-closed mutation suite (typed failures, no partials, no panics)"
+      - "Canonical JSON stability (ordering invariance, single implementation)"
+      - "Registry validation (unknown Code32 fails closed, no auto-allocate)"
+      - "No-path-in-hash lock test, one-canonicalizer structural test"
+      - "M1 claim catalog (plans/spine/m1_claims.md)"
   - id: M2
     title: "ByteTrace writer + replay verifier"
     status: pending

@@ -21,23 +21,66 @@
 
 **Acceptance**: S1-M0 — no v1 dependency reachable from kernel build graph.
 
-### M1 — ByteState/Code32 + canonical hashing
+### M1 — ByteState/Code32 + canonical hashing (proof portfolio)
 
 **Status**: Next
 
-**Deliverables**:
+**Completion sentence**: "M1 is complete when the kernel can deterministically compile a Rome payload into ByteState bytes and produce V1-compatible SHA-256 digests that match committed golden fixtures across OSes, while failing closed with typed errors on a mutation suite — and all of this is reproducible without importing or running V1 inside the Native build graph."
+
+#### Claim surface (what M1 allows you to say)
+
+- **M1-CLAIM-001** (Compilation boundary determinism): `compile(payload_bytes, schema_descriptor, registry_snapshot)` is a pure function for the Rome payload shape; identical inputs produce identical `ByteStateV1` bytes.
+- **M1-CLAIM-002** (V1 hash parity): All content/state/registry hashing uses SHA-256 with the exact V1 domain-separation prefix bytes, producing `"sha256:<lowercase hex>"` outputs.
+- **M1-CLAIM-003** (No second-truth JSON trace): M1 does not introduce an alternate "JSON trace" representation that can diverge from the binary carrier; only descriptors/manifests may be JSON.
+- **M1-CLAIM-004** (Fail-closed compilation): Invalid payload/schema/registry inputs do not emit partial ByteState and do not panic; they return typed failures.
+
+These claims are written as a claim catalog at `plans/spine/m1_claims.md`.
+
+#### Deliverables
+
 - `sha2` dependency for canonical hashing (SHA-256, V1-compatible domain prefixes)
-- `canonical_hash()` implementation producing `"sha256:<hex>"` `ContentHash`
-- `ByteStateV1` encode/decode (identity_bytes, evidence_bytes)
-- `compile()` implementation for Rome domain (payload = canonical JSON of initial planes)
+- Single `canonical_hash()` implementation — all hashing flows route through it
+- Single canonical JSON bytes implementation — all serialization-for-hashing routes through it
+- `ByteStateV1` encode/decode with strict round-trip (no truncation acceptance)
+- `compile()` implementation for Rome payload shape
 - Golden byte fixtures generated from v1 offline, committed as test expectations
-- Lock tests: hash stability, golden bytes, cross-machine determinism
+- Fail-closed mutation suite with typed `CompilationFailure` variants
+- M1 claim catalog (`plans/spine/m1_claims.md`)
 
-**Acceptance**: S1-M1 — compile() on two machines produces identical bytes and digest. S1-M1-GOLDEN — output matches golden fixture bit-for-bit.
+#### Acceptance criteria (proof portfolio)
 
-**Fixture strategy**: v1 is the oracle for wire format bytes and sha256 hashes. Generate fixtures from v1 Python, commit the bytes, validate Native against committed fixtures. Never import v1 into Native build graph.
+| ID | Category | What it proves |
+|----|----------|---------------|
+| S1-M1-DETERMINISM-INPROC | Determinism | N>=10 calls in same process → identical bytes + digests |
+| S1-M1-DETERMINISM-CROSSPROC | Determinism | Subprocess under >=3 env variants → same golden bytes |
+| S1-M1-DETERMINISM-CROSSOS | Determinism | CI on Linux + macOS → identical results against golden fixtures |
+| S1-M1-GOLDEN | Golden fixtures | Evidence bytes + digests match committed fixtures bit-for-bit |
+| S1-M1-HASH-V1-VECTORS | V1 parity | >=3 sha256(prefix \|\| data) vectors match v1 oracle outputs |
+| S1-M1-CANONJSON | Canonicalization | Stable canonical JSON bytes, documented rule set |
+| S1-M1-FAILCLOSED | Fail-closed | Invalid inputs → no partial state, no panic, typed failure |
+| S1-M1-TYPED-FAILURES | Error taxonomy | Each invalid class → stable error family |
+| S1-M1-ORDERING-INVARIANCE | Anti-drift | Reordered JSON keys → identical output |
+| S1-M1-REGISTRY-CANON | Registry | Canonical bytes stable, no incidental metadata |
+| S1-M1-REGISTRY-HASH-GOLDEN | Registry | Registry digest matches committed golden |
+| S1-M1-REGISTRY-VALIDATION | Fail-closed | Unknown Code32 → UnknownConcept, no auto-allocate |
+| S1-M1-BYTESTATE-ROUNDTRIP | Encode/decode | evidence_bytes → ByteStateV1 round-trip, strict lengths |
+| S1-M1-EQ-SEPARATION-LOCK | Equality | Status-only change: identity_eq true, bitwise_eq false, digests differ |
+| S1-M1-NO-V1-DEPS | Isolation | Extends S1-M0 to cover M1 modules |
+| S1-M1-NO-PATH-IN-HASH | Determinism | No paths/cwd/username/hostname/timestamps in any hashed surface |
+| S1-M1-ONE-CANONICALIZER | Anti-drift | Exactly one canonical JSON implementation in kernel |
+| S1-M1-REPRO | Reviewer | `cargo test --workspace` is sufficient, no manual setup |
 
-**compile() strategy**: Rome payload is a canonical JSON representation of initial identity/status planes plus shape metadata. `compile()` parses, validates against registry, produces `ByteStateV1` deterministically. No invented semantics — keep it boring so golden fixtures are derivable from v1.
+#### Fixture admissibility rule
+
+A fixture is only admissible if it is (1) generated by an oracle outside the Native build graph, and (2) the Native code is *constrained by it* (i.e., it would fail if canonicalization/hashing drifted).
+
+#### compile() strategy
+
+Rome payload is a canonical JSON representation of initial identity/status planes plus shape metadata. `compile()` parses, validates against registry, produces `ByteStateV1` deterministically. No invented semantics — keep it boring so golden fixtures are derivable from v1.
+
+#### Fixture strategy
+
+v1 is the oracle for wire format bytes and sha256 hashes. Generate fixtures from v1 Python, commit the bytes, validate Native against committed fixtures. Never import v1 into Native build graph. v1 is **not** an oracle for compilation semantics (the payload→state boundary is new).
 
 ### M2 — ByteTrace writer + replay verifier
 
