@@ -131,18 +131,83 @@ state by re-applying each operator and comparing frame-by-frame:
 The step chain provides localization hints but is not required for
 correctness — frame-by-frame comparison is the primary verification.
 
-## Strictness rules
+## Strictness rules (fail-closed)
 
-- Reader rejects truncated input (body_len != step_count * stride)
+The `.bst1` reader and writer are fail-closed. Inputs that do not
+exactly match the wire contract are rejected; the system does not
+"repair" or normalize malformed wire bytes.
+
+### Canonical JSON enforcement (header and footer)
+
+- Header and footer bytes MUST already be in canonical JSON form on
+  the wire.
+- The reader verifies canonicality by re-serializing the parsed JSON
+  through `canonical_json_bytes` and byte-comparing to the raw bytes.
+  If they differ, parsing fails with `NonCanonical`.
+- Rationale: payload hash is defined over wire bytes. Accepting
+  non-canonical bytes while hashing canonicalized semantics creates
+  ambiguity ("same meaning, different bytes"). M2 rejects this
+  ambiguity at the boundary.
+
+### Frame 0 sentinel
+
+- Frame 0 MUST use `INITIAL_STATE` sentinel `op_code` and MUST have
+  zero-filled `op_args`.
+- Enforced by both writer (prevents emitting invalid traces) and
+  reader (prevents accepting them). Replay also validates, but the
+  wire boundary is the first line of defense.
+
+### Trailing bytes
+
+- Any bytes remaining after the footer section are rejected with
+  `TrailingBytes`. This prevents multiple byte strings from parsing
+  to the same struct, which would break content-addressing claims.
+
+### Checked arithmetic
+
+- All size computations in the writer (frame stride, body length,
+  total length) use checked arithmetic. Any overflow produces
+  `DimensionOverflow`.
+- Rationale: prevent silent wrap in release builds. Overflow is
+  treated as malformed dimensions, not a valid edge case.
+
+### Optional witness digest encoding
+
+- `witness_store_digest` is optional by omission only. Explicit
+  `null` is invalid and rejected with `InvalidFooter`.
+- Rationale: the spec says "omitted from canonical JSON when None."
+  Allowing both `null` and absence would create two representational
+  forms for the same semantic value.
+
+### Hash-chain integrity (fail-closed)
+
+- Step-chain computation MUST treat invalid hex digests as integrity
+  violations and return `DigestCorruption`. There is no fallback to
+  empty bytes.
+- Rationale: on an integrity surface, "decode failed but continue"
+  is always the wrong failure mode.
+
+### Baseline strictness (unchanged from initial spec)
+
+- Reader rejects truncated input (`body_len != step_count * stride`)
 - Reader rejects unknown magic bytes
-- Reader rejects frames with invalid SlotStatus discriminants
+- Reader rejects frames with invalid `SlotStatus` discriminants
 - Reader rejects header with non-positive dimensions
 - Writer rejects frames that don't match header dimensions
 - No partial traces: write is all-or-nothing (build, then serialize)
+
+## Stability contract
+
+- **Payload hash stability** excludes the envelope. Changing envelope
+  serialization does not affect the payload hash.
+- **Canonical fixture wire stability** includes the envelope. The v1
+  oracle parity test (`s1_m2_crossproc.rs`) compares full `.bst1`
+  bytes. Changing envelope serialization is a wire break at M2.
 
 ## What M2 does NOT include
 
 - Multi-world orchestration
 - Trace compression
 - Streaming writer (traces are small enough to buffer)
-- General operator catalog (M2 uses one toy operator)
+- General operator catalog (M2 uses one toy operator: `SET_SLOT`)
+- Windows target support

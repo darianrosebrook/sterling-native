@@ -99,18 +99,80 @@ Commit range: `2bf0b4a..6a1d05c` (8 commits). 103 tests, all passing.
 | Registry | `kernel/src/carrier/registry.rs` | Bijective mapping, canonical bytes, golden digest |
 | Compile | `kernel/src/carrier/compile.rs` | Rome payload → ByteState, fail-closed |
 
-### M2 — ByteTrace writer + replay verifier
+### M2 — ByteTrace writer + replay verifier (proof portfolio)
 
-**Status**: Planned
+**Status**: Complete
 
-**Deliverables**:
-- ByteTrace binary writer (append-only, schema-first header)
-- ByteTrace reader
-- `replay_verify()` implementation (hashing, monotonicity, snapshot consistency)
-- Minimal `apply()` — single operator application primitive
-- Single-step replay lock test
+**Completion sentence**: "M2 is complete when the kernel can write, read, hash, and replay-verify a ByteTrace that is byte-identical to the v1 oracle fixture, with fail-closed rejection of malformed wire bytes, cross-process determinism under environment variants, and divergence localization to the exact mutated frame — all without importing v1 into the build graph."
 
-**Acceptance**: S1-M2 — replay_verify() verdict matches original execution. S1-M2-DIV — injected divergence localizes to first differing step.
+#### Claim surface (what M2 allows you to say)
+
+- **M2-CLAIM-001** (Wire round-trip stability): Serializing the canonical trace to `.bst1`, parsing it, and re-serializing produces identical bytes.
+- **M2-CLAIM-002** (V1 oracle parity): Native's `.bst1` bytes and payload hash are byte-identical to the v1 Python oracle for the canonical fixture.
+- **M2-CLAIM-003** (Cross-process determinism): Trace write + hash + replay output is identical across environment variants (cwd, locale, noise env).
+- **M2-CLAIM-004** (Fail-closed strictness): Reader/writer reject non-canonical JSON, trailing bytes, bad frame-0 sentinel, null witness digest, and overflow dimensions.
+- **M2-CLAIM-005** (Divergence localization): Step-chain diverges at the exact mutated frame index.
+
+These claims are written as a claim catalog at `plans/spine/m2_claims.md`.
+
+#### Deliverables
+
+- `.bst1` writer/reader for `ByteTraceV1` (envelope + magic + canonical header + fixed-stride frames + canonical footer)
+- Payload hash: `sha256(DOMAIN_BYTETRACE || magic || header_json || body || footer_json)` — V1-compatible
+- Step hash chain: `chain_0 = sha256(DOMAIN_TRACE_STEP || frame_0)`, `chain_i = sha256(DOMAIN_TRACE_STEP_CHAIN || chain_{i-1} || frame_i)` — Native-originated
+- `apply()` with `SET_SLOT` operator (identity mutation + status promotion to Provisional)
+- `replay_verify()` — frame-by-frame comparison with divergence localization
+- Strictness hardening: canonical enforcement at read time (reject, don't normalize), checked arithmetic in writer, frame-0 sentinel in reader + writer, trailing bytes rejection, fail-closed hex decode, null witness rejection
+
+#### Acceptance criteria (proof portfolio)
+
+| ID | Category | What it proves |
+|----|----------|---------------|
+| S1-M2-GOLDEN | Golden fixtures | `.bst1` bytes + payload hash match v1 oracle bit-for-bit |
+| S1-M2-READER-STRICT | Fail-closed | Malformed input rejected with typed errors, no panics, no partial frames |
+| S1-M2-REPLAY-1STEP | Replay | Single-step replay verdict matches original execution |
+| S1-M2-DIV-LOCALIZE | Divergence | Injected mutation at step k → divergence localization points to step k |
+| S1-M2-DETERMINISM-INPROC | Determinism | N>=10 calls → identical `.bst1` bytes + digests |
+| S1-M2-DETERMINISM-CROSSPROC | Determinism | Subprocess under 4 env variants → same golden bytes + digests |
+| S1-M2-DETERMINISM-CROSSOS | Determinism | CI on Linux + macOS → identical results against golden fixtures |
+| S1-M2-NO-SECOND-TRUTH | Anti-drift | No JSON inside frames; JSON only in envelope/header/footer |
+| S1-M2-NO-PATH-IN-HASH | Determinism | No paths/cwd/username/hostname/timestamps in hashed sections |
+| S1-M2-PAYLOAD-HASH-V1 | V1 parity | `sha256(DOMAIN_BYTETRACE \|\| magic \|\| header \|\| body \|\| footer)` matches v1 |
+
+#### Non-goals (M2 scope boundary)
+
+- Windows `.exe` handling (not a current target)
+- Additional operators beyond `SET_SLOT` and sentinels
+- Performance tuning beyond correctness + determinism
+- Schema evolution beyond V1 wire definition
+- Trace compression or streaming writer
+
+#### M2 evidence index
+
+Commit range: `ea8a2d4..9279ad5` (8 commits). 173 tests, all passing.
+
+| Artifact | Path | Role |
+|----------|------|------|
+| V1 oracle fixture | `tests/fixtures/m2_golden_trace.bst1` | v1-generated `.bst1` bytes |
+| V1 oracle metadata | `tests/fixtures/m2_golden_trace.json` | Expected payload hash + hex dumps |
+| Fixture generator | `tests/fixtures/generate_m2_golden.py` | v1 Python script (not in build graph) |
+| Canonical trace (single source) | `tests/lock/src/m2_canonical_trace.rs` | Shared constructor for binary + tests |
+| Determinism tests | `tests/lock/tests/s1_m2_determinism.rs` | In-proc N=10, golden hash locks, independence |
+| Divergence tests | `tests/lock/tests/s1_m2_divergence.rs` | 4-step trace, mutation localization, step chain |
+| Cross-proc tests | `tests/lock/tests/s1_m2_crossproc.rs` | 4 env variants + v1 oracle parity + `.bst1` read |
+| Cross-proc binary | `tests/lock/src/bin/trace_fixture.rs` | Deterministic output: bst1_hex, hashes, verdict |
+| Trace writer | `kernel/src/carrier/trace_writer.rs` | Checked arithmetic, frame-0 validation |
+| Trace reader | `kernel/src/carrier/trace_reader.rs` | Canonical enforcement, strictness tests |
+| Trace hashing | `kernel/src/proof/trace_hash.rs` | Payload hash + step chain (fail-closed) |
+| Replay verifier | `kernel/src/proof/replay.rs` | Frame-by-frame comparison |
+| Apply operator | `kernel/src/operators/apply.rs` | `SET_SLOT` with precondition checks |
+| Trace format spec | `plans/spine/m2_trace_format.md` | Wire format + strictness rules |
+| Claim catalog | `plans/spine/m2_claims.md` | 5 falsifiable claims with falsifiers |
+
+#### Stability contract
+
+- **Payload hash stability** is defined by: `magic + canonical header bytes + body bytes + canonical footer bytes` (envelope excluded).
+- **Canonical fixture wire stability** additionally commits to full `.bst1` bytes including envelope. The v1 oracle parity test compares the complete byte stream. Changing envelope serialization (field order, formatting, added fields) is treated as a wire break at M2. This is intentional: M2 locks full wire stability, not just payload stability.
 
 ### M3 — Unified World Harness hello world
 

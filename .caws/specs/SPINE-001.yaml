@@ -220,18 +220,39 @@ milestones:
       - "M1 claim catalog (plans/spine/m1_claims.md)"
   - id: M2
     title: "ByteTrace writer + replay verifier (proof portfolio)"
-    status: pending
+    status: complete
+    completed_at: "2026-02-24"
     deliverables:
       - "ByteTrace binary writer (.bst1 format, V1-compatible wire layout)"
       - "ByteTrace binary reader with strict validation (fail-closed on malformed input)"
+      - "Canonical enforcement: reader rejects non-canonical header/footer bytes (reject, don't normalize)"
       - "Whole-trace payload hash: sha256(DOMAIN_BYTETRACE || magic || header || body || footer)"
       - "Step hash chain for divergence localization (DOMAIN_TRACE_STEP, DOMAIN_TRACE_STEP_CHAIN)"
-      - "Minimal apply() for one toy operator (identity mutation or similar)"
+      - "Minimal apply() with SET_SLOT operator (identity mutation + status promotion)"
       - "replay_verify() for single- and multi-step traces"
-      - "Golden trace fixture from v1 oracle (committed .bst1 bytes + digest)"
+      - "Golden trace fixture from v1 oracle (committed .bst1 bytes + payload hash match)"
       - "Divergence localization test (injected mutation → first differing step)"
-      - "Determinism envelope: in-process, cross-process, cross-OS"
+      - "Determinism envelope: in-process N=10, cross-process (4 env variants), cross-OS (CI)"
+      - "Strictness hardening: checked arithmetic, frame-0 sentinel in reader+writer, trailing bytes rejection, fail-closed hex decode, null witness rejection"
       - "M2 trace format spec (plans/spine/m2_trace_format.md)"
+      - "M2 claim catalog (plans/spine/m2_claims.md)"
+    evidence:
+      commits: "ea8a2d4..9279ad5 (8 commits)"
+      test_count: 173
+      tests:
+        - tests/lock/tests/s1_m2_determinism.rs
+        - tests/lock/tests/s1_m2_divergence.rs
+        - tests/lock/tests/s1_m2_crossproc.rs
+        - kernel/src/carrier/trace_reader.rs
+        - kernel/src/carrier/trace_writer.rs
+        - kernel/src/proof/trace_hash.rs
+        - kernel/src/proof/replay.rs
+        - kernel/src/operators/apply.rs
+      fixtures:
+        - tests/fixtures/m2_golden_trace.bst1
+        - tests/fixtures/m2_golden_trace.json
+        - tests/lock/src/m2_canonical_trace.rs
+      stability_contract: "Full .bst1 wire bytes (including envelope) are stable for the canonical fixture. Changing envelope serialization is a wire break."
   - id: M3
     title: "Unified World Harness hello world"
     status: pending
