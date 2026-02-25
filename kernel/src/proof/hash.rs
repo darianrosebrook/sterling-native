@@ -111,6 +111,18 @@ pub const DOMAIN_SCHEMA_BUNDLE: &[u8] = b"STERLING::BYTESTATE_SCHEMA_BUNDLE::V1\
 /// "payload commitment in compilation manifest" and "identity plane digest."
 pub const DOMAIN_COMPILATION_PAYLOAD: &[u8] = b"STERLING::COMPILATION_PAYLOAD::V1\0";
 
+/// Domain prefix for step hash chain: initial step commitment.
+///
+/// Native-originated (v1 has no step chain). Used for divergence localization.
+/// `chain_0 = sha256(DOMAIN_TRACE_STEP || frame_0_bytes)`
+pub const DOMAIN_TRACE_STEP: &[u8] = b"STERLING::TRACE_STEP::V1\0";
+
+/// Domain prefix for step hash chain: chained step commitment.
+///
+/// Native-originated (v1 has no step chain). Used for divergence localization.
+/// `chain_i = sha256(DOMAIN_TRACE_STEP_CHAIN || chain_{i-1} || frame_i_bytes)`
+pub const DOMAIN_TRACE_STEP_CHAIN: &[u8] = b"STERLING::TRACE_STEP_CHAIN::V1\0";
+
 /// Compute the canonical hash of a byte slice with domain separation.
 ///
 /// Algorithm: SHA-256 (V1-compatible).
@@ -169,6 +181,8 @@ mod tests {
         assert!(DOMAIN_REGISTRY_SNAPSHOT.ends_with(&[0]));
         assert!(DOMAIN_SCHEMA_BUNDLE.ends_with(&[0]));
         assert!(DOMAIN_COMPILATION_PAYLOAD.ends_with(&[0]));
+        assert!(DOMAIN_TRACE_STEP.ends_with(&[0]));
+        assert!(DOMAIN_TRACE_STEP_CHAIN.ends_with(&[0]));
     }
 
     #[test]
@@ -219,6 +233,32 @@ mod tests {
         assert_eq!(
             h.hex_digest(),
             "a32aab7658bb3b8ad8cdbad70ad071ef9a17a5a560ad91394dfead7e9249caa2"
+        );
+    }
+
+    // --- Step chain prefix vectors (Native-originated, NOT V1 parity) ---
+
+    #[test]
+    fn hash_vector_trace_step_prefix() {
+        let h = canonical_hash(DOMAIN_TRACE_STEP, b"frame-zero-bytes");
+        assert_eq!(
+            h.hex_digest(),
+            "54acf2f082f6bd06b3e382a669d6e150e4c48e86bcf648b0d9c7c86f4c7a7f73"
+        );
+    }
+
+    #[test]
+    fn hash_vector_trace_step_chain_prefix() {
+        // chain_0 digest bytes concatenated with frame-one-bytes
+        let chain_0 =
+            hex::decode("54acf2f082f6bd06b3e382a669d6e150e4c48e86bcf648b0d9c7c86f4c7a7f73")
+                .unwrap();
+        let mut input = chain_0;
+        input.extend_from_slice(b"frame-one-bytes");
+        let h = canonical_hash(DOMAIN_TRACE_STEP_CHAIN, &input);
+        assert_eq!(
+            h.hex_digest(),
+            "5d7b1967258c09f07b929c59ee96a7c36cc4b6be53b52acebb53c653e418d234"
         );
     }
 

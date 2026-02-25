@@ -42,20 +42,37 @@ pub fn replay_verify(_trace_bundle: &TraceBundleV1) -> ReplayResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::carrier::bytetrace::{ByteTraceHeaderV1, ByteTraceV1, TraceBundleV1};
+    use crate::carrier::bytetrace::{
+        ByteTraceEnvelopeV1, ByteTraceFooterV1, ByteTraceHeaderV1, ByteTraceV1, TraceBundleV1,
+    };
 
     #[test]
     #[should_panic(expected = "M2")]
     fn replay_verify_stub_panics() {
         let bundle = TraceBundleV1 {
             trace: ByteTraceV1 {
+                envelope: ByteTraceEnvelopeV1 {
+                    timestamp: "2026-01-01T00:00:00Z".into(),
+                    trace_id: "test-trace".into(),
+                    runner_version: "0.0.1".into(),
+                    wall_time_ms: 0,
+                },
                 header: ByteTraceHeaderV1 {
-                    schema_id: "test".into(),
-                    schema_hash: "sha256:000".into(),
-                    registry_epoch: "epoch-0".into(),
-                    registry_hash: "sha256:000".into(),
+                    schema_version: "1.0".into(),
+                    domain_id: "test".into(),
+                    registry_epoch_hash: "sha256:000".into(),
+                    codebook_hash: "sha256:000".into(),
+                    fixture_hash: "sha256:000".into(),
+                    step_count: 0,
+                    layer_count: 1,
+                    slot_count: 1,
+                    arg_slot_count: 0,
                 },
                 frames: vec![],
+                footer: ByteTraceFooterV1 {
+                    suite_identity: "sha256:000".into(),
+                    witness_store_digest: None,
+                },
             },
             compilation_manifest: vec![],
             input_payload: vec![],
