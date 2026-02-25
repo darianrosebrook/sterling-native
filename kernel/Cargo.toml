@@ -1,0 +1,11 @@
+[package]
+name = "sterling-kernel"
+edition.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# No external dependencies in M0.
+# sha2 will be added in M1 for canonical hashing.

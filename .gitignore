@@ -101,6 +101,9 @@ build/
 dist/
 *.map
 
+# Rust build artifacts
+target/
+
 # Test coverage reports
 coverage/
 *.lcov

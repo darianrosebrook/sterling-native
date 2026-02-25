@@ -25,6 +25,8 @@ scope:
     - schemas/
     - tests/lock/
     - tests/integration/
+    - plans/spine/
+    - .github/workflows/
   out:
     - docs/
     - ml/
@@ -36,13 +38,13 @@ threats:
   - "trace format drift without schema version bump"
   - "world harness implementing proof plumbing (hashing, trace writing, replay)"
 invariants:
-  - "compile(payload_bytes, schema_descriptor, registry_snapshot, policy_snapshot) → ByteState is the only entry point"
+  - "compile(payload_bytes, schema_descriptor, registry_snapshot) → ByteState is the only entry point (policy applies at apply/harness layer, not compilation)"
   - "apply() accepts op_args_bytes + op_args_descriptor, canonicalized like payloads — no arbitrary dicts"
   - "ByteTrace header commits schema_id + schema_hash (schema-first)"
   - "Exactly one place defines canonical hashing and serialization"
   - "Kernel build graph has zero v1 dependencies"
   - "Worlds may not implement hashing, trace writing, replay checks, or policy enforcement"
-  - "Determinism Envelope: little-endian, no floats in ByteState, pinned hash algorithm, no wall-clock/PID/address, explicit seeds"
+  - "Determinism Envelope: little-endian, no floats in ByteState, sha256 with V1 domain prefixes, no wall-clock/PID/address, explicit seeds"
 acceptance:
   - id: S1-M0
     given: "the kernel package boundary exists"
@@ -82,11 +84,11 @@ non_functional:
     - "hash domain separation strings are fixed and versioned"
 contracts:
   - type: architecture
-    path: docs/ephemeral/roadmaps/roadmap_v0_spine.md
+    path: plans/spine/roadmap_v0.md
     description: "Milestone roadmap M0-M3 deliverables, acceptance, non-goals, file targets"
   - type: schema
-    path: schemas/bytetrace.v1.schema.json
-    description: "ByteTrace format definition (schema-first, not code-first)"
+    path: schemas/bytetrace_descriptor.v1.schema.json
+    description: "ByteTrace descriptor metadata (content-addressed reference to binary artifact)"
   - type: schema
     path: schemas/trace_bundle.v1.schema.json
     description: "Trace bundle wrapping trace + manifests"
@@ -107,7 +109,7 @@ milestones:
     deliverables:
       - "Code32 registry snapshot format + allocation rules"
       - "ByteStateV1 layout + encode/decode"
-      - "Canonical hashing module (blake3) with domain-separated commits"
+      - "Canonical hashing module (sha256, V1-compatible) with domain-separated commits matching v1 prefixes"
       - "Lock tests: golden bytes, hash stability, endianness"
   - id: M2
     title: "ByteTrace writer + replay verifier"
