@@ -24,16 +24,44 @@ pub struct ContentHash {
 }
 
 impl ContentHash {
-    /// Parse from `"algorithm:hex"` format.
+    /// Parse from `"algorithm:hex_digest"` format.
     ///
-    /// Returns `None` if the format is invalid (missing colon,
-    /// empty algorithm, or empty digest).
+    /// Validation rules (enforced to prevent "almost-valid" artifacts):
+    /// - Exactly one `:` separator.
+    /// - Algorithm: non-empty, ASCII lowercase alphanumeric only (e.g., `sha256`, `blake3`).
+    /// - Digest: non-empty, lowercase hex only (`[0-9a-f]+`).
+    ///
+    /// Returns `None` if the format is invalid.
     #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         let colon = s.find(':')?;
-        if colon == 0 || colon == s.len() - 1 {
+
+        // Exactly one colon.
+        if s[colon + 1..].contains(':') {
             return None;
         }
+
+        let algorithm = &s[..colon];
+        let digest = &s[colon + 1..];
+
+        // Algorithm: non-empty, lowercase ASCII alphanumeric.
+        if algorithm.is_empty()
+            || !algorithm
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        {
+            return None;
+        }
+
+        // Digest: non-empty, lowercase hex.
+        if digest.is_empty()
+            || !digest
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        {
+            return None;
+        }
+
         Some(Self {
             full: s.to_string(),
             colon,
@@ -109,9 +137,21 @@ mod tests {
 
     #[test]
     fn content_hash_parse_rejects_bad_format() {
+        // Missing colon.
         assert!(ContentHash::parse("nocolon").is_none());
+        // Empty algorithm or digest.
         assert!(ContentHash::parse(":noalg").is_none());
         assert!(ContentHash::parse("nodigest:").is_none());
+        // Multiple colons.
+        assert!(ContentHash::parse("sha256:abc:def").is_none());
+        // Uppercase algorithm.
+        assert!(ContentHash::parse("SHA256:abcdef").is_none());
+        // Uppercase hex in digest.
+        assert!(ContentHash::parse("sha256:ABCDEF").is_none());
+        // Non-hex in digest.
+        assert!(ContentHash::parse("sha256:xyz123").is_none());
+        // Non-alphanumeric algorithm.
+        assert!(ContentHash::parse("sha-256:abcdef").is_none());
     }
 
     #[test]

@@ -15,17 +15,21 @@
 use crate::carrier::bytestate::{ByteStateV1, RegistrySnapshot, SchemaDescriptor};
 
 /// A successful compilation result.
+///
+/// Contains only what the kernel can produce from its pure inputs.
+/// Envelope-level concerns (`request_manifest_hash`, request metadata)
+/// belong at the harness/bundle layer — the kernel doesn't see envelopes.
 #[derive(Debug, Clone)]
 pub struct CompilationResultV1 {
     /// The compiled initial state.
     pub state: ByteStateV1,
-    /// Hash of the compilation request that produced this result.
-    pub request_manifest_hash: String,
     /// Schema used for compilation.
     pub schema_descriptor: SchemaDescriptor,
     /// Registry used for compilation.
     pub registry_descriptor: RegistrySnapshot,
-    /// Canonical JSON manifest recording every dependency hash.
+    /// Canonical JSON manifest recording the schema + registry + payload
+    /// dependency hashes. The harness layer can wrap this with envelope
+    /// metadata to produce a full request manifest hash.
     pub compilation_manifest: Vec<u8>,
 }
 
