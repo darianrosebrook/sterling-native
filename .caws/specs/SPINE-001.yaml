@@ -284,19 +284,21 @@ milestones:
       stability_contract: "Bundle digest is computed from normative artifacts only (digest_basis). Observational artifacts (trace.bst1) are listed in manifest with content hashes but excluded from digest. verify_bundle() mechanically enforces the trace/report binding by recomputing payload_hash and step_chain_digest from trace.bst1 and comparing to verification_report.json."
   - id: M4
     title: "Bundle Directory Format + Persistence + Fail-Closed Verification"
-    status: in_progress
+    status: complete
+    completed_at: "2026-02-25"
     deliverables:
       - "BundleDirectoryV1 format: fixed metadata files + manifest-declared artifact files"
-      - "write_bundle_dir(): deterministic directory write with atomic file ops"
-      - "read_bundle_dir(): fail-closed read (missing/extra/invalid → error)"
+      - "write_bundle_dir(): deterministic directory write with atomic file ops, DirNotEmpty guard"
+      - "read_bundle_dir(): fail-closed read with content-hash verification at boundary"
       - "verify_bundle_dir(): read + verify_bundle() integrity check"
       - "bundle_fixture cross-process binary (run → write → read → verify → print)"
       - "Fail-closed strictness tests (missing file, extra file, hash mismatch, noncanonical manifest)"
       - "Cross-process determinism (4 env variants)"
       - "No path leakage in normative surfaces"
+      - "M4 claim catalog (docs/ephemeral/sprints/spine/m4_claims.md)"
     evidence:
-      commits: "b31d1cb..75a21da"
-      test_count: 213
+      commits: "b31d1cb..17a4254"
+      test_count: 215
       tests:
         - tests/lock/tests/s1_m4_bundle_dir.rs
         - tests/lock/tests/s1_m4_crossproc.rs
