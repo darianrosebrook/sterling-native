@@ -5,3 +5,4 @@
 pub mod canon;
 pub mod hash;
 pub mod replay;
+pub mod trace_hash;
