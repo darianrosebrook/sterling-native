@@ -12,6 +12,9 @@ serde_json = "1"
 sterling-kernel = { path = "../../kernel" }
 sterling-harness = { path = "../../harness" }
 
+[dev-dependencies]
+tempfile = "3"
+
 [[bin]]
 name = "compile_fixture"
 path = "src/bin/compile_fixture.rs"
@@ -23,3 +26,7 @@ path = "src/bin/trace_fixture.rs"
 [[bin]]
 name = "harness_fixture"
 path = "src/bin/harness_fixture.rs"
+
+[[bin]]
+name = "bundle_fixture"
+path = "src/bin/bundle_fixture.rs"
