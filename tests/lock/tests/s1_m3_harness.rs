@@ -4,7 +4,9 @@
 //! `ArtifactBundleV1` with the expected artifacts, correct hashes,
 //! and normative/observational artifact classification.
 
-use sterling_harness::bundle::{DOMAIN_BUNDLE_ARTIFACT, DOMAIN_BUNDLE_DIGEST};
+use sterling_harness::bundle::{
+    verify_bundle, BundleVerifyError, DOMAIN_BUNDLE_ARTIFACT, DOMAIN_BUNDLE_DIGEST,
+};
 use sterling_harness::runner::run;
 use sterling_harness::worlds::rome_mini::RomeMini;
 use sterling_kernel::carrier::trace_reader::bytes_to_trace;
@@ -140,5 +142,71 @@ fn normative_observational_classification() {
     for name in observational {
         let artifact = bundle.artifacts.get(name).unwrap();
         assert!(!artifact.normative, "{name} should be observational");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// S1-M3: verify_bundle() integrity verification
+// ---------------------------------------------------------------------------
+
+#[test]
+fn verify_bundle_passes_clean_bundle() {
+    let bundle = run(&RomeMini).unwrap();
+    verify_bundle(&bundle).unwrap();
+}
+
+#[test]
+fn verify_bundle_detects_trace_report_payload_hash_mismatch() {
+    let mut bundle = run(&RomeMini).unwrap();
+
+    // Mutate trace.bst1 body bytes (not just envelope) so payload_hash changes.
+    let trace_artifact = bundle.artifacts.get("trace.bst1").unwrap();
+    let mut mutated_bytes = trace_artifact.content.clone();
+
+    // The envelope is at the start; body comes after magic+header.
+    // Flip a byte deep in the body to ensure payload changes.
+    let body_offset = mutated_bytes.len() - 10;
+    mutated_bytes[body_offset] ^= 0xFF;
+
+    // Recompute the trace artifact's content_hash to match the mutated bytes.
+    let new_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &mutated_bytes);
+
+    // Update the artifact in the bundle.
+    let trace_entry = bundle.artifacts.get_mut("trace.bst1").unwrap();
+    trace_entry.content = mutated_bytes;
+    trace_entry.content_hash = new_content_hash;
+
+    // Recompute the manifest to reflect the new content_hash for trace.bst1.
+    // (trace.bst1 is observational, so digest_basis stays the same.)
+    let manifest_artifacts: Vec<serde_json::Value> = bundle
+        .artifacts
+        .values()
+        .map(|a| {
+            serde_json::json!({
+                "content_hash": a.content_hash.as_str(),
+                "name": a.name,
+                "normative": a.normative,
+            })
+        })
+        .collect();
+
+    let manifest_value = serde_json::json!({
+        "artifacts": manifest_artifacts,
+        "schema_version": "bundle.v1",
+    });
+    bundle.manifest = canonical_json_bytes(&manifest_value).unwrap();
+
+    // Now verify_bundle should fail specifically on the trace↔report binding,
+    // not on content hash or manifest checks.
+    let err = verify_bundle(&bundle).unwrap_err();
+    match err {
+        BundleVerifyError::PayloadHashMismatch { .. }
+        | BundleVerifyError::StepChainMismatch { .. }
+        | BundleVerifyError::TraceParseError { .. } => {
+            // Expected: trace body mutation detected via report binding.
+        }
+        other => panic!(
+            "expected PayloadHashMismatch, StepChainMismatch, or TraceParseError, got {other:?}"
+        ),
     }
 }

@@ -192,7 +192,7 @@ Three boundary decisions made explicit in M3 to avoid costly backouts:
 
 - **M3-CLAIM-001** (Bundle determinism): `run(RomeMini)` is a pure function; N=10 in-process runs produce identical bundle digests, artifact bytes, and manifest bytes.
 - **M3-CLAIM-002** (Cross-process determinism): The `harness_fixture` binary under 4 environment variants (baseline, different cwd, different locale, spurious env vars) produces identical output.
-- **M3-CLAIM-003** (Normative/observational isolation): Mutating `trace.bst1` envelope bytes changes the manifest (which lists all content hashes) but leaves the bundle digest unchanged, because `digest_basis` includes normative artifacts only.
+- **M3-CLAIM-003** (Normative/observational isolation): Mutating `trace.bst1` envelope bytes changes the manifest (which lists all content hashes) but leaves the bundle digest unchanged, because `digest_basis` includes normative artifacts only. `verify_bundle()` mechanically enforces the trace/report binding by recomputing `payload_hash` and `step_chain_digest` from `trace.bst1` and comparing to `verification_report.json`.
 - **M3-CLAIM-004** (Replay scope declared): The verification report contains `planes_verified` listing exactly which planes were checked.
 
 These claims are written as a claim catalog at `plans/spine/m3_claims.md`.
@@ -207,6 +207,7 @@ These claims are written as a claim catalog at `plans/spine/m3_claims.md`.
 - 4 harness-originated domain prefixes: `DOMAIN_BUNDLE_ARTIFACT`, `DOMAIN_BUNDLE_DIGEST`, `DOMAIN_HARNESS_FIXTURE`, `DOMAIN_CODEBOOK_HASH` (single source of truth: `harness/src/bundle.rs`)
 - Deterministic envelope: fixed epoch timestamp, zero wall_time_ms, deterministic trace_id
 - `harness_fixture` cross-process binary
+- `verify_bundle()`: bundle verification algorithm that recomputes derived projections (manifest, digest_basis) from artifacts, verifies canonical JSON form, and checks trace/report payload commitments — pure integrity, no replay
 - M3 claim catalog (`plans/spine/m3_claims.md`)
 
 #### Acceptance criteria (proof portfolio)
@@ -224,6 +225,8 @@ These claims are written as a claim catalog at `plans/spine/m3_claims.md`.
 | S1-M3-DETERMINISM-INPROC | Determinism | N=10 runs → identical bundle digest, artifact bytes, manifest bytes, digest_basis bytes |
 | S1-M3-OBSERVATIONAL-ISOLATION | Isolation | Mutating `trace.bst1` envelope → bundle digest unchanged, manifest changed |
 | S1-M3-DETERMINISM-CROSSPROC | Determinism | `harness_fixture` under 4 env variants → identical output |
+| S1-M3-VERIFY-BUNDLE | Integrity | `verify_bundle()` passes on clean bundle (content hashes, derived projections, canonical form, digest) |
+| S1-M3-VERIFY-TRACE-BINDING | Integrity | `verify_bundle()` detects payload_hash mismatch when trace body mutated but report unchanged |
 
 #### Non-goals (M3 scope boundary)
 
@@ -236,15 +239,15 @@ These claims are written as a claim catalog at `plans/spine/m3_claims.md`.
 
 #### M3 evidence index
 
-Commit range: `9c734eb..aa36c89` (2 commits). 194 tests, all passing (133 kernel + 7 harness unit + 54 lock).
+Commit range: `9c734eb..aa36c89` + `verify_bundle` commit. 197 tests, all passing (133 kernel + 8 harness unit + 56 lock).
 
 | Artifact | Path | Role |
 |----------|------|------|
 | World contract | `harness/src/contract.rs` | `WorldHarnessV1` trait (data-only) |
-| Bundle types | `harness/src/bundle.rs` | `ArtifactBundleV1`, normative/observational split, domain constants |
+| Bundle types + verifier | `harness/src/bundle.rs` | `ArtifactBundleV1`, `verify_bundle()`, normative/observational split, domain constants |
 | Runner | `harness/src/runner.rs` | Pipeline orchestration (`run()` entry point) |
 | RomeMini world | `harness/src/worlds/rome_mini.rs` | Minimal world (1 layer, 2 slots, 1 operator) |
-| Harness tests | `tests/lock/tests/s1_m3_harness.rs` | 9 tests: bundle content, hashes, classification, canonical form |
+| Harness tests | `tests/lock/tests/s1_m3_harness.rs` | 11 tests: bundle content, hashes, classification, canonical form, `verify_bundle()` clean + trace/report binding |
 | Determinism tests | `tests/lock/tests/s1_m3_determinism.rs` | 4 tests: N=10 determinism, observational isolation |
 | Cross-proc tests | `tests/lock/tests/s1_m3_crossproc.rs` | 1 test: 4 env variants → identical output |
 | Cross-proc binary | `tests/lock/src/bin/harness_fixture.rs` | Deterministic output: bundle_digest, hashes, verdict, count |

@@ -23,11 +23,21 @@
 
 ## M3-CLAIM-003: Normative/observational isolation
 
-**Statement**: Mutating `trace.bst1` envelope bytes changes the `trace.bst1` content hash and therefore the manifest (which lists all artifacts with content hashes), but leaves the bundle digest unchanged. The bundle digest is computed from `digest_basis`, which includes only normative artifact hashes. `trace.bst1` is observational. The normative `verification_report.json` binds the trace's payload-level commitments (`payload_hash`, `step_chain_digest`), preventing a "swap trace while keeping report constant" attack.
+**Statement**: Mutating `trace.bst1` envelope bytes changes the `trace.bst1` content hash and therefore the manifest (which lists all artifacts with content hashes), but leaves the bundle digest unchanged. The bundle digest is computed from `digest_basis`, which includes only normative artifact hashes. `trace.bst1` is observational. The normative `verification_report.json` declares the trace's payload-level commitments (`payload_hash`, `step_chain_digest`). `verify_bundle()` mechanically enforces this binding by recomputing these values from `trace.bst1` and comparing to the report, enabling detection of trace/report inconsistency.
 
-**Falsifier**: Run `RomeMini`, mutate bytes in the `trace.bst1` envelope region, rebuild the bundle. If the bundle digest changes, the normative/observational separation is broken. If the manifest does NOT change, auditability is broken (the manifest should reflect the mutated content hash).
+**What `verify_bundle()` checks** (the bundle verification algorithm):
+1. Each artifact's `content_hash` matches recomputed `canonical_hash(DOMAIN_BUNDLE_ARTIFACT, content)`.
+2. `manifest` bytes match the canonical JSON projection recomputed from all artifacts (not just stored bytes).
+3. `digest_basis` bytes match the canonical JSON projection recomputed from normative artifacts only.
+4. `digest` matches `canonical_hash(DOMAIN_BUNDLE_DIGEST, digest_basis)`.
+5. `manifest`, `digest_basis`, and normative JSON artifacts are in canonical JSON form.
+6. If `trace.bst1` and `verification_report.json` both exist: `payload_hash` and `step_chain_digest` recomputed from `trace.bst1` match the values declared in the report.
 
-**Required artifacts**: `bundle_digest_ignores_observational_envelope_mutation` in `s1_m3_determinism.rs`, `normative_observational_classification` in `s1_m3_harness.rs`.
+**Falsifier** (envelope mutation): Run `RomeMini`, mutate bytes in the `trace.bst1` envelope region, rebuild the bundle. If the bundle digest changes, the normative/observational separation is broken. If the manifest does NOT change, auditability is broken.
+
+**Falsifier** (trace/report binding): Run `RomeMini`, mutate trace body bytes, recompute the trace artifact's content hash and update the manifest (keeping verification_report unchanged). Call `verify_bundle()`. If it does not return `PayloadHashMismatch` or `StepChainMismatch`, the binding is broken.
+
+**Required artifacts**: `bundle_digest_ignores_observational_envelope_mutation` in `s1_m3_determinism.rs`, `normative_observational_classification` in `s1_m3_harness.rs`, `verify_bundle_passes_clean_bundle` in `s1_m3_harness.rs`, `verify_bundle_detects_trace_report_payload_hash_mismatch` in `s1_m3_harness.rs`.
 
 ## M3-CLAIM-004: Replay scope declared
 
@@ -48,4 +58,4 @@ A claim is admissible only when:
 2. The harness crate does not import `sha2` — all hashing routes through kernel's `canonical_hash`.
 3. No manual steps are required beyond `cargo test --workspace`.
 4. Claims apply only to the `RomeMini` world and the implemented operator set (sentinels + `SET_SLOT`).
-5. The `verification_report.json` carries `payload_hash` and `step_chain_digest`, binding trace payload commitments normatively even though `trace.bst1` is observational.
+5. `verify_bundle()` mechanically enforces the normative/observational boundary by recomputing derived projections (manifest, digest_basis) from artifacts and verifying trace/report payload commitments. The binding is not automatic — it requires calling `verify_bundle()`.

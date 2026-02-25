@@ -268,14 +268,17 @@ milestones:
       - "harness_fixture cross-process binary"
       - "M3 claim catalog (plans/spine/m3_claims.md)"
     evidence:
-      commits: "9c734eb..aa36c89 (2 commits)"
-      test_count: 194
+      commits: "9c734eb..aa36c89 (2 commits, harness crate + lock tests) + verify_bundle commit"
+      test_count: 197
       tests:
         - tests/lock/tests/s1_m3_harness.rs
         - tests/lock/tests/s1_m3_determinism.rs
         - tests/lock/tests/s1_m3_crossproc.rs
+      implementation_artifacts:
         - harness/src/bundle.rs
         - harness/src/runner.rs
+        - harness/src/contract.rs
+        - harness/src/worlds/rome_mini.rs
       fixtures:
         - tests/lock/src/bin/harness_fixture.rs
-      stability_contract: "Bundle digest is computed from normative artifacts only (digest_basis). Observational artifacts (trace.bst1) are listed in manifest with content hashes but excluded from digest. verification_report.json binds trace payload commitments (payload_hash, step_chain_digest) normatively."
+      stability_contract: "Bundle digest is computed from normative artifacts only (digest_basis). Observational artifacts (trace.bst1) are listed in manifest with content hashes but excluded from digest. verify_bundle() mechanically enforces the trace/report binding by recomputing payload_hash and step_chain_digest from trace.bst1 and comparing to verification_report.json."
