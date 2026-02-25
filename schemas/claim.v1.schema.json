@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClaimV1",
+  "description": "A minimal falsifiable claim. Claims are the unit of provability in Sterling: each claim declares what it asserts, what would falsify it, and what artifacts are required to verify it.",
+  "type": "object",
+  "required": [
+    "claim_id",
+    "statement",
+    "falsifier",
+    "required_artifacts",
+    "verifier_entrypoint",
+    "version"
+  ],
+  "properties": {
+    "claim_id": {
+      "type": "string",
+      "description": "Unique identifier for this claim (e.g., 'S1-M0', 'S1-M1-GOLDEN')."
+    },
+    "statement": {
+      "type": "string",
+      "description": "Human-readable assertion this claim makes."
+    },
+    "falsifier": {
+      "type": "string",
+      "description": "Description of what would falsify this claim (what a counterexample looks like)."
+    },
+    "required_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Content hashes or paths of artifacts required to verify this claim."
+    },
+    "verifier_entrypoint": {
+      "type": "string",
+      "description": "Path or identifier of the verification function/test (e.g., 'tests/lock/s1_m0_no_v1_deps.rs::kernel_source_has_no_v1_references')."
+    },
+    "version": {
+      "type": "string",
+      "description": "Claim format version (e.g., '1.0')."
+    }
+  },
+  "additionalProperties": false
+}

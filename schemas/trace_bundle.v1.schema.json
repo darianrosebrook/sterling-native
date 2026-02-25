@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TraceBundleV1",
+  "description": "A self-contained bundle for replay verification. References a ByteTrace binary artifact, its compilation manifest, and the original input payload, all by content hash.",
+  "type": "object",
+  "required": [
+    "trace_descriptor",
+    "compilation_manifest_hash",
+    "input_payload_hash"
+  ],
+  "properties": {
+    "trace_descriptor": {
+      "$ref": "bytetrace_descriptor.v1.schema.json",
+      "description": "Descriptor of the ByteTrace binary artifact."
+    },
+    "compilation_manifest_hash": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+:[a-f0-9]+$",
+      "description": "Content hash of the canonical JSON compilation manifest."
+    },
+    "input_payload_hash": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+:[a-f0-9]+$",
+      "description": "Content hash of the original input payload bytes."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SchemaDescriptorV1",
+  "description": "Identifies a ByteState schema by id, version, and content hash.",
+  "type": "object",
+  "required": ["id", "version", "hash"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Schema identifier (e.g., 'rome_v1', 'wordnet_v1')."
+    },
+    "version": {
+      "type": "string",
+      "description": "Schema version string (e.g., '1.0')."
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+:[a-f0-9]+$",
+      "description": "Content hash of the schema definition (e.g., 'sha256:abcdef...')."
+    }
+  },
+  "additionalProperties": false
+}

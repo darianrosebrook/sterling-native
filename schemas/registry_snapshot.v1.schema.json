@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistrySnapshotV1",
+  "description": "Identifies a Code32 <-> ConceptID mapping epoch by epoch label and content hash.",
+  "type": "object",
+  "required": ["epoch", "hash"],
+  "properties": {
+    "epoch": {
+      "type": "string",
+      "description": "Registry epoch identifier (e.g., '2026-02-15-001')."
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+:[a-f0-9]+$",
+      "description": "Content hash of the registry snapshot (e.g., 'sha256:abcdef...')."
+    }
+  },
+  "additionalProperties": false
+}

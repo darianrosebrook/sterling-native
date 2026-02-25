@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ByteTraceDescriptorV1",
+  "description": "Metadata describing a ByteTraceV1 binary artifact. References the artifact by content hash rather than encoding the binary layout (the binary format is canonical; this descriptor is for manifests and bundle metadata).",
+  "type": "object",
+  "required": [
+    "payload_hash",
+    "payload_len",
+    "domain_id",
+    "schema_id",
+    "schema_hash",
+    "registry_epoch",
+    "registry_hash",
+    "bytes_per_step",
+    "step_count"
+  ],
+  "properties": {
+    "payload_hash": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+:[a-f0-9]+$",
+      "description": "Content hash of the ByteTrace payload (magic + header + body + footer). Domain prefix: STERLING::BYTETRACE::V1."
+    },
+    "payload_len": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Byte length of the full payload (excluding envelope)."
+    },
+    "domain_id": {
+      "type": "string",
+      "description": "Domain identifier (e.g., 'rome', 'wordnet')."
+    },
+    "schema_id": {
+      "type": "string",
+      "description": "ByteState schema identifier used for all frames."
+    },
+    "schema_hash": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+:[a-f0-9]+$",
+      "description": "Content hash of the schema definition."
+    },
+    "registry_epoch": {
+      "type": "string",
+      "description": "Code32 registry epoch used for all frames."
+    },
+    "registry_hash": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+:[a-f0-9]+$",
+      "description": "Content hash of the registry snapshot."
+    },
+    "bytes_per_step": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Fixed frame width in bytes (constant across all frames)."
+    },
+    "step_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of frames in the trace (including frame 0 / initial state)."
+    }
+  },
+  "additionalProperties": false
+}

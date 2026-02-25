@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PolicySnapshotV1",
+  "description": "Identifies a governance policy snapshot. Used at the apply/harness layer, not compilation.",
+  "type": "object",
+  "required": ["id", "version", "hash"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Policy identifier (e.g., 'dev', 'certified')."
+    },
+    "version": {
+      "type": "string",
+      "description": "Policy version string."
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+:[a-f0-9]+$",
+      "description": "Content hash of the policy definition."
+    }
+  },
+  "additionalProperties": false
+}
