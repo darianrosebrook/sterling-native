@@ -38,7 +38,7 @@ threats:
   - "trace format drift without schema version bump"
   - "world harness implementing proof plumbing (hashing, trace writing, replay)"
 invariants:
-  - "compile(payload_bytes, schema_descriptor, registry_snapshot) → ByteState is the only entry point (policy applies at apply/harness layer, not compilation)"
+  - "compile(payload_bytes, schema_descriptor, registry: RegistryV1) → CompilationResultV1 is the only entry point; compile takes the full registry mapping for membership validation and emits RegistrySnapshot as a descriptor in the result (policy applies at apply/harness layer, not compilation)"
   - "apply() accepts op_args_bytes + op_args_descriptor, canonicalized like payloads — no arbitrary dicts"
   - "ByteTrace header commits schema_id + schema_hash (schema-first)"
   - "Exactly one place defines canonical hashing and serialization"
@@ -170,7 +170,7 @@ milestones:
       - "canonical lint CI check"
   - id: M1
     title: "ByteState/Code32 + canonical hashing (proof portfolio)"
-    status: pending
+    status: complete
     deliverables:
       - "sha2 canonical hashing (SHA-256, V1 domain prefixes, single canonicalizer)"
       - "compile() for Rome payload shape (canonical JSON of initial planes)"

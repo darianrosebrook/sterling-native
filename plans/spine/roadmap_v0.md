@@ -23,7 +23,7 @@
 
 ### M1 — ByteState/Code32 + canonical hashing (proof portfolio)
 
-**Status**: Next
+**Status**: Complete
 
 **Completion sentence**: "M1 is complete when the kernel can deterministically compile a Rome payload into ByteState bytes and produce V1-compatible SHA-256 digests that match committed golden fixtures across OSes, while failing closed with typed errors on a mutation suite — and all of this is reproducible without importing or running V1 inside the Native build graph."
 
@@ -81,6 +81,23 @@ Rome payload is a canonical JSON representation of initial identity/status plane
 #### Fixture strategy
 
 v1 is the oracle for wire format bytes and sha256 hashes. Generate fixtures from v1 Python, commit the bytes, validate Native against committed fixtures. Never import v1 into Native build graph. v1 is **not** an oracle for compilation semantics (the payload→state boundary is new).
+
+#### M1 evidence index
+
+Commit range: `2bf0b4a..6a1d05c` (8 commits). 103 tests, all passing.
+
+| Artifact | Path | Role |
+|----------|------|------|
+| Golden fixture | `tests/fixtures/rome_2x4_golden.json` | V1 oracle bytes + digests |
+| Golden fixture tests | `tests/lock/tests/s1_m1_golden_fixtures.rs` | 8 tests constraining compile against oracle |
+| Determinism tests | `tests/lock/tests/s1_m1_determinism.rs` | In-proc N=10, ordering invariance, eq separation, one-canonicalizer, no-path-in-hash, no-v1-refs |
+| Cross-process tests | `tests/lock/tests/s1_m1_crossproc.rs` | Subprocess under 4 env variants + golden output match |
+| CI matrix | `.github/workflows/ci.yml` | `[ubuntu-latest, macos-latest]` for cross-OS |
+| Claim catalog | `plans/spine/m1_claims.md` | 4 falsifiable claims with falsifiers |
+| Canonical JSON | `kernel/src/proof/canon.rs` | Single canonicalizer (ASCII keys, sorted, compact) |
+| Canonical hashing | `kernel/src/proof/hash.rs` | SHA-256 with V1 domain prefixes + compilation payload prefix |
+| Registry | `kernel/src/carrier/registry.rs` | Bijective mapping, canonical bytes, golden digest |
+| Compile | `kernel/src/carrier/compile.rs` | Rome payload → ByteState, fail-closed |
 
 ### M2 — ByteTrace writer + replay verifier
 
