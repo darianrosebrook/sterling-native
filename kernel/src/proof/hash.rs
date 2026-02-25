@@ -4,10 +4,8 @@
 //! Algorithm: SHA-256 for all V1 artifacts. Blake3 reserved for future V2.
 //!
 //! **Exactly one place defines canonical hashing** (SPINE-001 invariant).
-//!
-//! # M0 scope
-//!
-//! Types and constants only. `sha2` implementation is M1 scope.
+
+use sha2::{Digest, Sha256};
 
 /// A content-addressed hash with algorithm identifier.
 ///
@@ -109,18 +107,20 @@ pub const DOMAIN_SCHEMA_BUNDLE: &[u8] = b"STERLING::BYTESTATE_SCHEMA_BUNDLE::V1\
 /// Compute the canonical hash of a byte slice with domain separation.
 ///
 /// Algorithm: SHA-256 (V1-compatible).
-/// Result format: `"sha256:<hex_digest>"`.
+/// Computes `sha256(domain_prefix || data)` and returns `"sha256:<hex_digest>"`.
 ///
-/// # Errors
-///
-/// This function does not fail; it always produces a valid hash.
-///
-/// # Panics
-///
-/// M0 stub. Will panic until M1 provides the `sha2` implementation.
+/// The domain prefix must include the null terminator (all `DOMAIN_*` constants
+/// in this module already do). This matches v1's hashing exactly.
 #[must_use]
-pub fn canonical_hash(_domain: &[u8], _data: &[u8]) -> ContentHash {
-    todo!("M1: implement sha256 canonical hashing with domain separation")
+pub fn canonical_hash(domain: &[u8], data: &[u8]) -> ContentHash {
+    let mut hasher = Sha256::new();
+    hasher.update(domain);
+    hasher.update(data);
+    let digest = hasher.finalize();
+    let hex = hex::encode(digest);
+    let full = format!("sha256:{hex}");
+    let colon = 6; // "sha256" is 6 bytes
+    ContentHash { full, colon }
 }
 
 #[cfg(test)]
@@ -170,5 +170,65 @@ mod tests {
         assert_eq!(DOMAIN_EVIDENCE_PLANE, b"STERLING::BYTESTATE_EVIDENCE::V1\0");
         // Cross-reference with v1: core/carrier/bytetrace.py line 36
         assert_eq!(DOMAIN_BYTETRACE, b"STERLING::BYTETRACE::V1\0");
+    }
+
+    // --- V1 parity test vectors (S1-M1-HASH-V1-VECTORS) ---
+    // Generated offline by Python: hashlib.sha256(prefix + data).hexdigest()
+    // These prove domain-separated SHA-256 matches v1 oracle output,
+    // including the null-terminated prefix bytes.
+
+    #[test]
+    fn hash_vector_identity_prefix_empty_data() {
+        let h = canonical_hash(DOMAIN_IDENTITY_PLANE, b"");
+        assert_eq!(h.algorithm(), "sha256");
+        assert_eq!(
+            h.hex_digest(),
+            "31bd6f65a99fde83bdf0daf1097ae7a125293da9560fc22fc6d04f1f1cce813c"
+        );
+    }
+
+    #[test]
+    fn hash_vector_evidence_prefix_hello() {
+        let h = canonical_hash(DOMAIN_EVIDENCE_PLANE, b"hello");
+        assert_eq!(
+            h.hex_digest(),
+            "a602de1de411d50e90ff92d29b09e310b853b530b5946b9ffacefa12ddea1b48"
+        );
+    }
+
+    #[test]
+    fn hash_vector_bytetrace_prefix_bytes() {
+        let h = canonical_hash(DOMAIN_BYTETRACE, &[0x00, 0x01, 0x02, 0x03]);
+        assert_eq!(
+            h.hex_digest(),
+            "44f05a34c7e7f00aa1e415f2ca50b5a7e9757eda94357c9064ec7fe9cee55cfc"
+        );
+    }
+
+    #[test]
+    fn hash_vector_registry_prefix_json() {
+        let h = canonical_hash(DOMAIN_REGISTRY_SNAPSHOT, br#"{"epoch":"test"}"#);
+        assert_eq!(
+            h.hex_digest(),
+            "a32aab7658bb3b8ad8cdbad70ad071ef9a17a5a560ad91394dfead7e9249caa2"
+        );
+    }
+
+    #[test]
+    fn canonical_hash_returns_valid_content_hash() {
+        let h = canonical_hash(DOMAIN_IDENTITY_PLANE, b"test");
+        // Must be parseable.
+        assert!(ContentHash::parse(h.as_str()).is_some());
+        assert_eq!(h.algorithm(), "sha256");
+        // SHA-256 digest is always 64 hex chars.
+        assert_eq!(h.hex_digest().len(), 64);
+    }
+
+    #[test]
+    fn canonical_hash_deterministic() {
+        let first = canonical_hash(DOMAIN_EVIDENCE_PLANE, b"determinism");
+        for _ in 0..10 {
+            assert_eq!(canonical_hash(DOMAIN_EVIDENCE_PLANE, b"determinism"), first);
+        }
     }
 }
