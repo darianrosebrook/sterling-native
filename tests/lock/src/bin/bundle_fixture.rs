@@ -24,7 +24,7 @@ fn main() {
     let bundle = run(&RomeMini).expect("harness run failed");
 
     // Write to temp directory.
-    let dir = std::env::temp_dir().join("sterling_bundle_fixture");
+    let dir = std::env::temp_dir().join(format!("sterling_bundle_fixture_{}", std::process::id()));
     // Clean up any previous run.
     let _ = std::fs::remove_dir_all(&dir);
     write_bundle_dir(&bundle, &dir).expect("write_bundle_dir failed");

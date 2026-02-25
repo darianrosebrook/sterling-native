@@ -122,7 +122,7 @@ fn fail_closed_extra_file() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn fail_closed_content_hash_mismatch_on_verify() {
+fn fail_closed_content_hash_mismatch_at_read_boundary() {
     let bundle = run(&RomeMini).unwrap();
     let dir = tempfile::tempdir().unwrap();
     write_bundle_dir(&bundle, dir.path()).unwrap();
@@ -131,18 +131,19 @@ fn fail_closed_content_hash_mismatch_on_verify() {
     let fixture_path = dir.path().join("fixture.json");
     std::fs::write(&fixture_path, b"{\"tampered\":true}").unwrap();
 
-    // read_bundle_dir succeeds (it trusts manifest content_hash values at read
-    // time), but verify_bundle_dir catches the mismatch.
+    // read_bundle_dir now enforces content hash at the read boundary.
+    // Tampering is rejected before verify_bundle() is ever called.
     let err = verify_bundle_dir(dir.path()).unwrap_err();
     match err {
-        BundleDirVerifyError::VerifyError(ref ve) => {
+        BundleDirVerifyError::ReadError(ref re) => {
             assert!(
-                format!("{ve:?}").contains("ContentHashMismatch")
-                    || format!("{ve:?}").contains("ManifestMismatch"),
-                "expected ContentHashMismatch or ManifestMismatch, got {ve:?}"
+                format!("{re:?}").contains("ContentHashMismatch"),
+                "expected ContentHashMismatch, got {re:?}"
             );
         }
-        BundleDirVerifyError::ReadError(re) => panic!("expected VerifyError, got ReadError({re})"),
+        BundleDirVerifyError::VerifyError(ve) => {
+            panic!("expected ReadError(ContentHashMismatch), got VerifyError({ve:?})")
+        }
     }
 }
 

@@ -26,7 +26,9 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use crate::bundle::{verify_bundle, ArtifactBundleV1, BundleArtifact, BundleVerifyError};
+use crate::bundle::{
+    verify_bundle, ArtifactBundleV1, BundleArtifact, BundleVerifyError, DOMAIN_BUNDLE_ARTIFACT,
+};
 use sterling_kernel::proof::hash::{canonical_hash, ContentHash};
 
 use crate::bundle::DOMAIN_BUNDLE_DIGEST;
@@ -44,6 +46,8 @@ const METADATA_FILENAMES: &[&str] = &[MANIFEST_FILENAME, DIGEST_BASIS_FILENAME, 
 pub enum BundleDirWriteError {
     /// I/O error during write.
     Io { detail: String },
+    /// Target directory exists and is not empty.
+    DirNotEmpty { path: String },
     /// Canonical JSON serialization failed.
     CanonError { detail: String },
 }
@@ -52,6 +56,7 @@ impl std::fmt::Display for BundleDirWriteError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Io { detail } => write!(f, "I/O error: {detail}"),
+            Self::DirNotEmpty { path } => write!(f, "directory not empty: {path}"),
             Self::CanonError { detail } => write!(f, "canonical JSON error: {detail}"),
         }
     }
@@ -74,6 +79,12 @@ pub enum BundleDirReadError {
     ManifestVersionMismatch { found: String },
     /// An artifact entry in the manifest is missing a required field.
     ManifestEntryInvalid { detail: String },
+    /// An artifact's file bytes do not match its declared `content_hash`.
+    ContentHashMismatch {
+        name: String,
+        declared: String,
+        computed: String,
+    },
     /// `bundle_digest.txt` content doesn't match the recomputed digest.
     DigestMismatch { stored: String, recomputed: String },
     /// Canonical JSON error during reconstruction.
@@ -97,6 +108,16 @@ impl std::fmt::Display for BundleDirReadError {
             }
             Self::ManifestEntryInvalid { detail } => {
                 write!(f, "manifest entry invalid: {detail}")
+            }
+            Self::ContentHashMismatch {
+                name,
+                declared,
+                computed,
+            } => {
+                write!(
+                    f,
+                    "content hash mismatch for {name}: declared={declared}, computed={computed}"
+                )
             }
             Self::DigestMismatch { stored, recomputed } => {
                 write!(
@@ -129,15 +150,38 @@ impl std::fmt::Display for BundleDirVerifyError {
 
 /// Write an `ArtifactBundleV1` to a directory in `BundleDirectoryV1` format.
 ///
-/// Creates the directory if it does not exist. Writes each artifact file,
-/// plus the three metadata files (`bundle_manifest.json`, `bundle_digest_basis.json`,
-/// `bundle_digest.txt`).
+/// Creates the directory if it does not exist. If the directory already exists
+/// and contains any files, returns [`BundleDirWriteError::DirNotEmpty`]
+/// (fail-closed: no implicit overwrite of existing content).
+///
+/// Writes each artifact file plus the three metadata files
+/// (`bundle_manifest.json`, `bundle_digest_basis.json`, `bundle_digest.txt`).
 ///
 /// # Errors
 ///
-/// Returns [`BundleDirWriteError`] on I/O failure or canonical JSON error.
+/// Returns [`BundleDirWriteError`] on non-empty directory, I/O failure,
+/// or canonical JSON error.
 pub fn write_bundle_dir(bundle: &ArtifactBundleV1, dir: &Path) -> Result<(), BundleDirWriteError> {
-    // Create directory.
+    // Fail-closed: reject non-empty existing directories.
+    if dir.exists() {
+        let has_files = std::fs::read_dir(dir)
+            .map_err(|e| BundleDirWriteError::Io {
+                detail: format!("read_dir check: {e}"),
+            })?
+            .any(|entry| {
+                entry
+                    .ok()
+                    .and_then(|e| e.file_name().to_str().map(String::from))
+                    .is_some_and(|name| !name.starts_with(".tmp_"))
+            });
+        if has_files {
+            return Err(BundleDirWriteError::DirNotEmpty {
+                path: dir.display().to_string(),
+            });
+        }
+    }
+
+    // Create directory (no-op if already exists and empty).
     std::fs::create_dir_all(dir).map_err(|e| BundleDirWriteError::Io {
         detail: format!("create_dir_all: {e}"),
     })?;
@@ -161,6 +205,7 @@ pub fn write_bundle_dir(bundle: &ArtifactBundleV1, dir: &Path) -> Result<(), Bun
 /// Fail-closed:
 /// - Missing declared artifact files → error
 /// - Extra undeclared files → error
+/// - Artifact content hash mismatch (file bytes vs manifest-declared hash) → error
 /// - Manifest must be valid canonical JSON with `schema_version: "bundle.v1"`
 ///
 /// The stored `bundle_digest.txt` is verified against the recomputed digest.
@@ -228,6 +273,16 @@ pub fn read_bundle_dir(dir: &Path) -> Result<ArtifactBundleV1, BundleDirReadErro
                 detail: format!("invalid content_hash format for {name}: {content_hash_str}"),
             }
         })?;
+
+        // Verify content hash at the read boundary (fail-closed).
+        let computed = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &content);
+        if computed.as_str() != content_hash.as_str() {
+            return Err(BundleDirReadError::ContentHashMismatch {
+                name: name.clone(),
+                declared: content_hash.as_str().to_string(),
+                computed: computed.as_str().to_string(),
+            });
+        }
 
         declared_filenames.insert(name.clone());
 
@@ -432,6 +487,35 @@ mod tests {
 
         let err = read_bundle_dir(dir.path()).unwrap_err();
         assert!(matches!(err, BundleDirReadError::MissingArtifact { .. }));
+    }
+
+    #[test]
+    fn write_fails_on_nonempty_directory() {
+        let bundle = test_bundle();
+        let dir = tempfile::tempdir().unwrap();
+
+        // Write successfully first time.
+        write_bundle_dir(&bundle, dir.path()).unwrap();
+
+        // Second write to same directory should fail.
+        let err = write_bundle_dir(&bundle, dir.path()).unwrap_err();
+        assert!(matches!(err, BundleDirWriteError::DirNotEmpty { .. }));
+    }
+
+    #[test]
+    fn read_fails_on_tampered_artifact_content() {
+        let bundle = test_bundle();
+        let dir = tempfile::tempdir().unwrap();
+        write_bundle_dir(&bundle, dir.path()).unwrap();
+
+        // Tamper with an artifact file without updating the manifest.
+        std::fs::write(dir.path().join("a.json"), b"{\"tampered\":true}").unwrap();
+
+        let err = read_bundle_dir(dir.path()).unwrap_err();
+        assert!(
+            matches!(err, BundleDirReadError::ContentHashMismatch { ref name, .. } if name == "a.json"),
+            "expected ContentHashMismatch for a.json, got {err}"
+        );
     }
 
     #[test]
