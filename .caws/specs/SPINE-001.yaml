@@ -123,14 +123,47 @@ acceptance:
     given: "a clean checkout"
     when: "cargo test --workspace is run"
     then: "deterministic pass/fail with no manual setup steps; fixture files are self-describing"
-  - id: S1-M2
+  # --- M2 claim surface ---
+  - id: S1-M2-GOLDEN
+    given: "a known 1-step trace fixture"
+    when: "the trace is serialized to .bst1 bytes"
+    then: "payload bytes and trace digest match committed golden fixture bit-for-bit"
+  - id: S1-M2-READER-STRICT
+    given: "malformed .bst1 input (bad magic, truncated body, wrong stride, invalid status bytes)"
+    when: "the reader parses the input"
+    then: "rejects deterministically with typed errors, no panics, no partial frames"
+  - id: S1-M2-REPLAY-1STEP
     given: "a single-step episode (one operator application)"
     when: "replay_verify() is called on the ByteTrace"
     then: "verdict matches original execution exactly"
-  - id: S1-M2-DIV
-    given: "a trace with an injected divergence"
+  - id: S1-M2-DIV-LOCALIZE
+    given: "a 2+ step trace with an injected divergence in step k"
     when: "replay_verify() is called"
-    then: "divergence localization points to the first differing step"
+    then: "divergence localization points to step k with expected-vs-actual context"
+  - id: S1-M2-DETERMINISM-INPROC
+    given: "a trace write + digest computation"
+    when: "repeated N>=10 times in the same process"
+    then: "produces identical .bst1 bytes and identical trace digests every time"
+  - id: S1-M2-DETERMINISM-CROSSPROC
+    given: "a trace write test case"
+    when: "run as a subprocess under >=3 environment variants"
+    then: "produces the same golden bytes and digests"
+  - id: S1-M2-DETERMINISM-CROSSOS
+    given: "the M2 golden fixture test suite"
+    when: "CI executes on Linux and macOS"
+    then: "both produce identical pass/fail results"
+  - id: S1-M2-NO-SECOND-TRUTH
+    given: "the kernel crate source"
+    when: "trace frame encoding is inspected"
+    then: "no JSON inside frames; JSON only in envelope/header/footer descriptors"
+  - id: S1-M2-NO-PATH-IN-HASH
+    given: "any hashed surface or footer produced by the trace writer"
+    when: "bytes are inspected"
+    then: "no absolute paths, cwd, username, hostname, or timestamps appear in hashed sections"
+  - id: S1-M2-PAYLOAD-HASH-V1
+    given: "a trace written by Native"
+    when: "payload hash is computed"
+    then: "sha256(DOMAIN_BYTETRACE || magic || header_json || body || footer_json) matches v1 computation"
   - id: S1-M3
     given: "a world harness run with one minimal world"
     when: "the harness completes"
@@ -151,6 +184,9 @@ contracts:
   - type: architecture
     path: plans/spine/roadmap_v0.md
     description: "Milestone roadmap M0-M3 deliverables, acceptance, non-goals, file targets"
+  - type: architecture
+    path: plans/spine/m2_trace_format.md
+    description: "ByteTrace V1 binary format specification, commitment scheme, replay protocol"
   - type: schema
     path: schemas/bytetrace_descriptor.v1.schema.json
     description: "ByteTrace descriptor metadata (content-addressed reference to binary artifact)"
@@ -183,13 +219,19 @@ milestones:
       - "No-path-in-hash lock test, one-canonicalizer structural test"
       - "M1 claim catalog (plans/spine/m1_claims.md)"
   - id: M2
-    title: "ByteTrace writer + replay verifier"
+    title: "ByteTrace writer + replay verifier (proof portfolio)"
     status: pending
     deliverables:
-      - "ByteTrace format + append-only writer (schema-first)"
-      - "Replay verifier (hashing, monotonicity, snapshot consistency)"
-      - "Minimal operator application primitive"
-      - "Single-step replay lock test"
+      - "ByteTrace binary writer (.bst1 format, V1-compatible wire layout)"
+      - "ByteTrace binary reader with strict validation (fail-closed on malformed input)"
+      - "Whole-trace payload hash: sha256(DOMAIN_BYTETRACE || magic || header || body || footer)"
+      - "Step hash chain for divergence localization (DOMAIN_TRACE_STEP, DOMAIN_TRACE_STEP_CHAIN)"
+      - "Minimal apply() for one toy operator (identity mutation or similar)"
+      - "replay_verify() for single- and multi-step traces"
+      - "Golden trace fixture from v1 oracle (committed .bst1 bytes + digest)"
+      - "Divergence localization test (injected mutation → first differing step)"
+      - "Determinism envelope: in-process, cross-process, cross-OS"
+      - "M2 trace format spec (plans/spine/m2_trace_format.md)"
   - id: M3
     title: "Unified World Harness hello world"
     status: pending
