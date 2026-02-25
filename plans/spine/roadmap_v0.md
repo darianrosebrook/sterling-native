@@ -176,15 +176,83 @@ Commit range: `ea8a2d4..9279ad5` (8 commits). 173 tests, all passing.
 
 ### M3 — Unified World Harness hello world
 
-**Status**: Planned
+**Status**: Complete
 
-**Deliverables**:
-- World harness contract: `encode_fixture`, `decode_state`, `operator_catalog_data`, `domain_verifier`
-- One minimal world (Rome or equivalent toy graph)
-- Closed artifact bundle output (inputs/trace/verification/metrics)
-- Determinism lock test
+**Completion sentence**: "M3 is complete when the harness crate can orchestrate kernel APIs through a world trait to produce a self-contained in-memory artifact bundle with normative/observational separation, deterministic bundle digests insensitive to observational envelope mutation, explicit replay scope declaration, and cross-process determinism under environment variants — all without importing `sha2` or implementing proof logic outside the kernel."
 
-**Acceptance**: S1-M3 — harness produces self-contained artifact bundle. S1-M3-DETERMINISM — consecutive runs with identical inputs produce identical ByteTrace digests.
+#### Design pivots (from review feedback)
+
+Three boundary decisions made explicit in M3 to avoid costly backouts:
+
+1. **Normative vs observational artifacts in the bundle manifest.** Each artifact carries a `normative: bool` flag. Bundle digest is computed over normative artifact hashes only (via `digest_basis`). `trace.bst1` is observational because it contains the envelope. Its payload-level commitments (`payload_hash`, `step_chain_digest`) are captured in the normative `verification_report.json`, which binds the trace contents without making envelope bytes normative.
+2. **Explicit replay verification scope.** The verification report declares `planes_verified: ["identity", "status"]`. Adding `"evidence"` to `planes_verified` is a claim expansion and must be accompanied by a new lock test + claim catalog bump.
+3. **No `sha2` dependency in harness.** All hashing routes through kernel's `canonical_hash(domain, data)` with harness-defined domain prefixes. Prevents a second hashing path.
+
+#### Claim surface (what M3 allows you to say)
+
+- **M3-CLAIM-001** (Bundle determinism): `run(RomeMini)` is a pure function; N=10 in-process runs produce identical bundle digests, artifact bytes, and manifest bytes.
+- **M3-CLAIM-002** (Cross-process determinism): The `harness_fixture` binary under 4 environment variants (baseline, different cwd, different locale, spurious env vars) produces identical output.
+- **M3-CLAIM-003** (Normative/observational isolation): Mutating `trace.bst1` envelope bytes changes the manifest (which lists all content hashes) but leaves the bundle digest unchanged, because `digest_basis` includes normative artifacts only.
+- **M3-CLAIM-004** (Replay scope declared): The verification report contains `planes_verified` listing exactly which planes were checked.
+
+These claims are written as a claim catalog at `plans/spine/m3_claims.md`.
+
+#### Deliverables
+
+- `harness/` crate as workspace member (depends on `sterling-kernel`, `serde_json`, `hex` — no `sha2`)
+- `WorldHarnessV1` trait: data-only contract (`world_id`, `dimensions`, `encode_payload`, `schema_descriptor`, `registry`, `program`); worlds may not implement hashing, trace writing, replay, or policy
+- `ArtifactBundleV1` with normative/observational split: `manifest` (full listing), `digest_basis` (normative projection), `digest` (hash of digest basis)
+- `run(world)` pipeline: `encode_payload → compile → [apply × N] → build trace → trace_to_bytes → replay_verify → payload_hash + step_chain → build bundle`
+- `RomeMini` world: 1 layer, 2 slots, 3 arg slots, single `SET_SLOT` operation
+- 4 harness-originated domain prefixes: `DOMAIN_BUNDLE_ARTIFACT`, `DOMAIN_BUNDLE_DIGEST`, `DOMAIN_HARNESS_FIXTURE`, `DOMAIN_CODEBOOK_HASH` (single source of truth: `harness/src/bundle.rs`)
+- Deterministic envelope: fixed epoch timestamp, zero wall_time_ms, deterministic trace_id
+- `harness_fixture` cross-process binary
+- M3 claim catalog (`plans/spine/m3_claims.md`)
+
+#### Acceptance criteria (proof portfolio)
+
+| ID | Category | What it proves |
+|----|----------|---------------|
+| S1-M3-BUNDLE | Bundle | `run(RomeMini)` returns Ok with 4 artifacts, valid hashes, correct normative/observational flags |
+| S1-M3-TRACE-PARSES | Integration | `trace.bst1` artifact parseable by kernel reader |
+| S1-M3-REPLAY-MATCH | Integration | Verification report contains `replay_verdict: "Match"` |
+| S1-M3-MANIFEST-HASHES | Integrity | Each artifact's `content_hash` matches recomputed hash |
+| S1-M3-DIGEST-BASIS | Integrity | `bundle.digest` equals recomputed hash over `digest_basis` |
+| S1-M3-FIXTURE-CANONICAL | Canonicalization | `fixture.json` is already canonical JSON (re-canonicalize → identical bytes) |
+| S1-M3-PLANES-VERIFIED | Scope | Report lists `planes_verified: ["identity", "status"]` |
+| S1-M3-NORMATIVE-CLASS | Classification | `fixture.json`, `compilation_manifest.json`, `verification_report.json` normative; `trace.bst1` observational |
+| S1-M3-DETERMINISM-INPROC | Determinism | N=10 runs → identical bundle digest, artifact bytes, manifest bytes, digest_basis bytes |
+| S1-M3-OBSERVATIONAL-ISOLATION | Isolation | Mutating `trace.bst1` envelope → bundle digest unchanged, manifest changed |
+| S1-M3-DETERMINISM-CROSSPROC | Determinism | `harness_fixture` under 4 env variants → identical output |
+
+#### Non-goals (M3 scope boundary)
+
+- Disk persistence (bundle is in-memory only)
+- Policy enforcement (future milestone)
+- State decoding or human-readable summaries (future V2 trait)
+- Additional operators beyond `SET_SLOT`
+- Multi-world orchestration
+- Streaming trace writer
+
+#### M3 evidence index
+
+Commit range: `9c734eb..aa36c89` (2 commits). 194 tests, all passing (133 kernel + 7 harness unit + 54 lock).
+
+| Artifact | Path | Role |
+|----------|------|------|
+| World contract | `harness/src/contract.rs` | `WorldHarnessV1` trait (data-only) |
+| Bundle types | `harness/src/bundle.rs` | `ArtifactBundleV1`, normative/observational split, domain constants |
+| Runner | `harness/src/runner.rs` | Pipeline orchestration (`run()` entry point) |
+| RomeMini world | `harness/src/worlds/rome_mini.rs` | Minimal world (1 layer, 2 slots, 1 operator) |
+| Harness tests | `tests/lock/tests/s1_m3_harness.rs` | 9 tests: bundle content, hashes, classification, canonical form |
+| Determinism tests | `tests/lock/tests/s1_m3_determinism.rs` | 4 tests: N=10 determinism, observational isolation |
+| Cross-proc tests | `tests/lock/tests/s1_m3_crossproc.rs` | 1 test: 4 env variants → identical output |
+| Cross-proc binary | `tests/lock/src/bin/harness_fixture.rs` | Deterministic output: bundle_digest, hashes, verdict, count |
+| Claim catalog | `plans/spine/m3_claims.md` | 4 falsifiable claims with falsifiers |
+
+#### Domain-prefix ownership
+
+Kernel-owned domains (defined in `kernel/src/proof/hash.rs`) are the only domains used for kernel claim surfaces (compilation, payload hash, step chain, registry). Harness-owned domains (defined in `harness/src/bundle.rs`) use `STERLING::BUNDLE_*` or `STERLING::HARNESS_*` prefixes. No other crate defines domain prefixes. This is the "one canonicalizer" rule applied to domain separation.
 
 ## Non-goals
 

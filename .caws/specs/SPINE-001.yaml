@@ -255,9 +255,27 @@ milestones:
       stability_contract: "Full .bst1 wire bytes (including envelope) are stable for the canonical fixture. Changing envelope serialization is a wire break."
   - id: M3
     title: "Unified World Harness hello world"
-    status: pending
+    status: complete
+    completed_at: "2026-02-24"
     deliverables:
-      - "World harness contract (encode_fixture, decode_state, operator_catalog_data, domain_verifier)"
-      - "One minimal world (Corridor/Rome/toy graph)"
-      - "Closed artifact bundle output (inputs/trace/verification/metrics)"
-      - "Determinism lock test"
+      - "harness/ crate as workspace member (depends on sterling-kernel, serde_json, hex — no sha2)"
+      - "WorldHarnessV1 trait: data-only contract (world_id, dimensions, encode_payload, schema_descriptor, registry, program)"
+      - "ArtifactBundleV1 with normative/observational artifact separation"
+      - "run(world) pipeline: encode → compile → apply × N → trace → verify → bundle"
+      - "RomeMini world (1 layer, 2 slots, 3 arg slots, one SET_SLOT operation)"
+      - "Harness-originated domain prefixes (BUNDLE_ARTIFACT, BUNDLE_DIGEST, HARNESS_FIXTURE, CODEBOOK_HASH)"
+      - "Deterministic envelope (fixed epoch, zero wall_time_ms)"
+      - "harness_fixture cross-process binary"
+      - "M3 claim catalog (plans/spine/m3_claims.md)"
+    evidence:
+      commits: "9c734eb..aa36c89 (2 commits)"
+      test_count: 194
+      tests:
+        - tests/lock/tests/s1_m3_harness.rs
+        - tests/lock/tests/s1_m3_determinism.rs
+        - tests/lock/tests/s1_m3_crossproc.rs
+        - harness/src/bundle.rs
+        - harness/src/runner.rs
+      fixtures:
+        - tests/lock/src/bin/harness_fixture.rs
+      stability_contract: "Bundle digest is computed from normative artifacts only (digest_basis). Observational artifacts (trace.bst1) are listed in manifest with content hashes but excluded from digest. verification_report.json binds trace payload commitments (payload_hash, step_chain_digest) normatively."
