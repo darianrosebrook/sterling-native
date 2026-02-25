@@ -602,20 +602,28 @@ milestones:
 
   - id: M5
     title: "PolicySnapshotV1: Auditable harness policy + deterministic enforcement"
-    status: planned
+    status: complete
+    completed_at: "2026-02-25"
     deliverables:
       - "New normative artifact: policy_snapshot.json (canonical JSON, included in digest_basis)"
       - "Runner derives PolicySnapshotV1 deterministically from world metadata (worlds do not declare policy)"
       - "Runner enforces policy fail-closed: operator allowlist + max_steps + max_trace_bytes"
       - "verification_report.json includes policy_digest; verifier checks binding"
+      - "run_with_policy() entrypoint for custom PolicyConfig (budget/allowlist overrides)"
       - "Lock tests for policy inclusion, canonical enforcement, tamper detection, budget overflow, allowlist violation"
-      - "Cross-process determinism for policy-bearing bundles"
+      - "Cross-process determinism for policy-bearing bundles (policy_fixture binary)"
     evidence:
-      commits: ""
-      test_count: 0
-      tests: []
-      implementation_artifacts: []
-      fixtures: []
+      commits: "00e1e03..12b2546"
+      test_count: 240
+      tests:
+        - tests/lock/tests/s1_m5_policy.rs
+        - tests/lock/tests/s1_m5_crossproc.rs
+      implementation_artifacts:
+        - harness/src/policy.rs
+        - harness/src/runner.rs
+        - harness/src/bundle.rs
+      fixtures:
+        - tests/lock/src/bin/policy_fixture.rs
       claims:
         - id: M5-CLAIM-001
           statement: "Every bundle includes a normative policy_snapshot.json that is digest-committed via digest_basis."
