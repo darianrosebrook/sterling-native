@@ -89,24 +89,40 @@ def grep_for_id(acceptance_id: str, search_paths: list[str]) -> list[str]:
         return []
 
 
+class AmbiguousFile(Exception):
+    """Raised when a bare filename resolves to multiple files."""
+
+    def __init__(self, filename: str, candidates: list[Path]):
+        self.filename = filename
+        self.candidates = candidates
+
+
 def resolve_file(filename: str) -> Path | None:
     """Resolve a bare or prefixed filename to a workspace path.
 
     Handles both bare names like "compile.rs" (searched under RESOLVE_ROOTS)
     and prefixed paths like "harness/src/bundle.rs".
+
+    Raises AmbiguousFile if a bare filename matches more than one file.
+    Use a prefixed path in the spec to disambiguate.
     """
     # Try as a direct relative path first.
     direct = Path(filename)
     if direct.exists():
         return direct
 
-    # Search under known roots.
+    # Search under known roots — collect all matches.
     basename = Path(filename).name
+    hits: list[Path] = []
     for root in RESOLVE_ROOTS:
-        # Walk the root looking for the basename.
         for candidate in root.rglob(basename):
             if candidate.is_file():
-                return candidate
+                hits.append(candidate)
+
+    if len(hits) == 1:
+        return hits[0]
+    if len(hits) > 1:
+        raise AmbiguousFile(filename, hits)
     return None
 
 
@@ -147,7 +163,16 @@ def lint_test_pointers() -> list[str]:
     pointers = extract_test_pointers(SPEC_PATH)
     broken = []
     for filename, fn_name, line_no in pointers:
-        resolved = resolve_file(filename)
+        try:
+            resolved = resolve_file(filename)
+        except AmbiguousFile as e:
+            candidates = ", ".join(str(c) for c in e.candidates)
+            broken.append(
+                f"  line {line_no}: {filename}::{fn_name} — ambiguous: "
+                f"resolves to {len(e.candidates)} files ({candidates}). "
+                f"Use a prefixed path in the spec to disambiguate."
+            )
+            continue
         if resolved is None:
             broken.append(
                 f"  line {line_no}: {filename}::{fn_name} — file not found"
