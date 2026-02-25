@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "457e653626a0862b",
+  "aggregate_hash": "937c84ce1ffb23fb",
   "entry_count": 105,
   "entries": [
     {
@@ -180,7 +180,7 @@
       "authority": "canonical",
       "status": "Implemented (V1 substrate complete)",
       "scope": null,
-      "content_hash": "fcbfb39a9191eb16",
+      "content_hash": "377377c7c1980aef",
       "links": [
         {
           "text": "light_vs_full.md",

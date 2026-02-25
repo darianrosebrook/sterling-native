@@ -1,10 +1,10 @@
 ---
-version: "1.2"
+version: "1.3"
 authority: canonical
-date: 2026-02-17
+date: 2026-02-24
 author: "@darianrosebrook"
 status: "Implemented (V1 substrate complete)"
-changelog: "1.1 — Fix identity/status conflation, deterministic hashing, capacity policy, endianness, frame layout. 1.1a — Status update: V1 implementation complete across four domains (Rome, Mastermind, EscapeGame, WordNet). Core carrier modules, domain compilers, ByteTraceV1 format, content-addressed hashing, divergence localization, and golden conformance tests all operational. See §7 for updated research path status. 1.2 — Fix INITIAL_STATE_SENTINEL value, document payload hash domain prefix, add source file index."
+changelog: "1.1 — Fix identity/status conflation, deterministic hashing, capacity policy, endianness, frame layout. 1.1a — Status update: V1 implementation complete across four domains (Rome, Mastermind, EscapeGame, WordNet). Core carrier modules, domain compilers, ByteTraceV1 format, content-addressed hashing, divergence localization, and golden conformance tests all operational. See §7 for updated research path status. 1.2 — Fix INITIAL_STATE_SENTINEL value, document payload hash domain prefix, add source file index. 1.3 — Fix sentinel to_uint32() values to match little-endian byte ordering (0x00010000 not 0x00000001)."
 notice: "This is a canonical definition. Do not edit without a version bump or CANONICAL-CHANGE PR label."
 ---
 # Code32 and ByteStateV1: Hardware-Native Semantic Representation
@@ -92,8 +92,8 @@ Future consideration: if kind splitting proves insufficient, a `Code48` or `Code
 | Constant | Value | `to_uint32()` | Purpose |
 |----------|-------|---------------|---------|
 | `PADDING_SENTINEL` | `Code32(0, 0, 0)` | `0x00000000` | Identity-plane filler for empty/unused slots |
-| `INITIAL_STATE_SENTINEL` | `Code32(0, 0, 1)` | `0x00000001` | Operator code for frame 0 (no operator applied) |
-| `TERMINAL_SENTINEL` | `Code32(0, 0, 2)` | `0x00000002` | Marks terminal/goal states |
+| `INITIAL_STATE_SENTINEL` | `Code32(0, 0, 1)` | `0x00010000` | Operator code for frame 0 (no operator applied) |
+| `TERMINAL_SENTINEL` | `Code32(0, 0, 2)` | `0x00020000` | Marks terminal/goal states |
 
 ### 2.3 Relationship to Existing IDRegistry
 
@@ -349,7 +349,7 @@ bytes_per_step = 4 + (arg_slot_count × 4) + (layer_count × slot_count × 4) + 
 Frame 0 (the initial state) is a special case: no operator, just the input state:
 
 ```
-[operator_code:  4 bytes, set to INITIAL_STATE_SENTINEL (0x00000001)]
+[operator_code:  4 bytes, set to INITIAL_STATE_SENTINEL (0x00010000)]
 [operator_args:  arg_slot_count × 4 bytes, all zero-padded]
 [result_identity: initial state identity plane]
 [result_status:   initial state status plane]
