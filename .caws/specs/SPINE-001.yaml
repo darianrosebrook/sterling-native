@@ -1,11 +1,11 @@
 id: SPINE-001
 type: feature
-title: "V2 Spine: Kernel contract surface, ByteState/Code32, ByteTrace, World Harness, Bundle Persistence (M0-M4)"
+title: "V2 Spine: Kernel contract surface, ByteState/Code32, ByteTrace, World Harness, Bundle Persistence, Policy Snapshot (M0-M5)"
 status: draft
 risk_tier: 2
 mode: development
 created_at: "2026-02-24T22:20:57.470Z"
-updated_at: "2026-02-24T22:20:57.471Z"
+updated_at: "2026-02-25T22:00:00.000Z"
 blast_radius:
   modules:
     - kernel/carrier
@@ -37,6 +37,7 @@ threats:
   - "determinism violations from floats, wall-clock, or memory addresses in ByteState"
   - "trace format drift without schema version bump"
   - "world harness implementing proof plumbing (hashing, trace writing, replay)"
+  - "policy enforcement drift: harness policy not matching what the bundle claims"
 invariants:
   - "compile(payload_bytes, schema_descriptor, registry: RegistryV1) → CompilationResultV1 is the only entry point; compile takes the full registry mapping for membership validation and emits RegistrySnapshot as a descriptor in the result (policy applies at apply/harness layer, not compilation)"
   - "apply() accepts op_args_bytes + op_args_descriptor, canonicalized like payloads — no arbitrary dicts"
@@ -45,6 +46,7 @@ invariants:
   - "Kernel build graph has zero v1 dependencies"
   - "Worlds may not implement hashing, trace writing, replay checks, or policy enforcement"
   - "Determinism Envelope: little-endian, no floats in ByteState, sha256 with V1 domain prefixes, no wall-clock/PID/address, explicit seeds"
+  - "Policy is a harness concern; kernel supplies canonicalization + hashing primitives only"
 acceptance:
   - id: S1-M0
     given: "the kernel package boundary exists"
@@ -164,6 +166,7 @@ acceptance:
     given: "a trace written by Native"
     when: "payload hash is computed"
     then: "sha256(DOMAIN_BYTETRACE || magic || header_json || body || footer_json) matches v1 computation"
+  # --- M3 claim surface ---
   - id: S1-M3
     given: "a world harness run with one minimal world"
     when: "the harness completes"
@@ -172,6 +175,35 @@ acceptance:
     given: "two consecutive harness runs with identical inputs"
     when: "ByteTrace digests are compared"
     then: "digests are identical"
+  # --- M5 claim surface ---
+  - id: S1-M5-POLICY-IN-BUNDLE
+    given: "a RomeMini harness run"
+    when: "run() completes and the bundle is inspected"
+    then: "bundle contains policy_snapshot.json marked normative; verify_bundle() passes"
+  - id: S1-M5-POLICY-CANONICAL
+    given: "a persisted bundle with pretty-printed policy_snapshot.json"
+    when: "verify_bundle_dir() is called"
+    then: "fails with ArtifactNotCanonical for policy_snapshot.json"
+  - id: S1-M5-POLICY-DIGEST-IN-REPORT
+    given: "a RomeMini bundle's verification_report.json"
+    when: "policy_digest field is compared to canonical_hash(DOMAIN_BUNDLE_ARTIFACT, policy_snapshot_bytes)"
+    then: "values match; verify_bundle() checks this binding"
+  - id: S1-M5-BUDGET-STEP-OVERFLOW
+    given: "a policy with max_steps below the program's frame count"
+    when: "run() is called"
+    then: "fails closed with typed PolicyViolation error, no partial bundle"
+  - id: S1-M5-ALLOWLIST-VIOLATION
+    given: "a program containing an op_code not in the policy's allowed_ops"
+    when: "run() is called"
+    then: "fails closed with typed PolicyViolation error, no partial bundle"
+  - id: S1-M5-DETERMINISM-INPROC
+    given: "a RomeMini harness run producing policy_snapshot.json"
+    when: "run() is called N>=10 times in the same process"
+    then: "policy_snapshot bytes and bundle digest are identical every time"
+  - id: S1-M5-DETERMINISM-CROSSPROC
+    given: "the policy_fixture binary"
+    when: "spawned under 4 environment variants (cwd, locale, noise, baseline)"
+    then: "all output lines are identical across variants"
 acceptance_criteria: []
 non_functional:
   perf:
@@ -183,7 +215,7 @@ non_functional:
 contracts:
   - type: architecture
     path: plans/spine/roadmap_v0.md
-    description: "Milestone roadmap M0-M3 deliverables, acceptance, non-goals, file targets"
+    description: "Milestone roadmap M0-M4 deliverables, acceptance, non-goals, file targets"
   - type: architecture
     path: plans/spine/m2_trace_format.md
     description: "ByteTrace V1 binary format specification, commitment scheme, replay protocol"
@@ -204,6 +236,7 @@ milestones:
       - "kernel/ package boundary with compile(), apply(), replay_verify() API"
       - "schemas/ directory with trace_bundle, policy_snapshot, schema_descriptor, registry_snapshot, bytetrace, claim schemas"
       - "canonical lint CI check"
+
   - id: M1
     title: "ByteState/Code32 + canonical hashing (proof portfolio)"
     status: complete
@@ -217,7 +250,82 @@ milestones:
       - "Canonical JSON stability (ordering invariance, single implementation)"
       - "Registry validation (unknown Code32 fails closed, no auto-allocate)"
       - "No-path-in-hash lock test, one-canonicalizer structural test"
-      - "M1 claim catalog (plans/spine/m1_claims.md)"
+    evidence:
+      test_count: 103
+      tests:
+        - tests/lock/tests/s1_m1_determinism.rs
+        - tests/lock/tests/s1_m1_golden_fixtures.rs
+        - tests/lock/tests/s1_m1_crossproc.rs
+        - kernel/src/carrier/compile.rs
+        - kernel/src/proof/hash.rs
+        - kernel/src/proof/canon.rs
+      fixtures:
+        - tests/fixtures/rome_2x4_golden.json
+        - tests/lock/src/bin/compile_fixture.rs
+      claims:
+        - id: M1-CLAIM-001
+          statement: "compile() is a pure function for the Rome payload shape; identical inputs produce identical ByteStateV1 bytes."
+          scope: "Locked for Rome payload via RomeMini dimensions."
+          falsifier: "Run compile() with identical inputs in two environments. If evidence bytes or digests differ, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M1-DETERMINISM-INPROC
+              - S1-M1-DETERMINISM-CROSSPROC
+              - S1-M1-DETERMINISM-CROSSOS
+            tests:
+              - "s1_m1_determinism.rs::determinism_inproc_n10"
+              - "s1_m1_crossproc.rs::crossproc_determinism_three_env_variants"
+              - "compile.rs::compile_deterministic_n10"
+            files:
+              - "kernel/src/carrier/compile.rs"
+        - id: M1-CLAIM-002
+          statement: "All hashing uses SHA-256 with exact V1 domain-separation prefix bytes (null-terminated), producing outputs matching v1 oracle."
+          scope: "Covers 5 V1-originated prefixes. DOMAIN_COMPILATION_PAYLOAD is Native-originated (no v1 counterpart)."
+          falsifier: "Compute sha256(prefix || data) for same inputs in v1 Python and Native Rust. If any V1-originated prefix digest differs, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M1-HASH-V1-VECTORS
+            tests:
+              - "hash.rs::hash_vector_identity_prefix_empty_data"
+              - "hash.rs::hash_vector_evidence_prefix_hello"
+              - "hash.rs::hash_vector_bytetrace_prefix_bytes"
+              - "hash.rs::hash_vector_registry_prefix_json"
+              - "hash.rs::domain_prefixes_match_v1"
+              - "s1_m1_golden_fixtures.rs::golden_identity_digest"
+              - "s1_m1_golden_fixtures.rs::golden_evidence_digest"
+              - "s1_m1_golden_fixtures.rs::golden_registry_digest"
+            files:
+              - "kernel/src/proof/hash.rs"
+              - "tests/fixtures/rome_2x4_golden.json"
+        - id: M1-CLAIM-003
+          statement: "M1 does not introduce an alternate JSON trace representation that can diverge from the binary carrier."
+          scope: "Descriptors and compilation manifests are permitted JSON; frame/state content is not."
+          falsifier: "Search the kernel crate for JSON encoding ByteState identity/status plane data or trace frame content. If found, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M1-ONE-CANONICALIZER
+            tests:
+              - "s1_m1_determinism.rs::one_canonical_json_implementation"
+            files:
+              - "kernel/src/proof/canon.rs"
+        - id: M1-CLAIM-004
+          statement: "Invalid payload/schema/registry inputs do not emit partial ByteState and do not panic; they return typed CompilationFailure variants."
+          scope: "Covers schema mismatch, registry mismatch, unknown Code32, constraint violation, malformed JSON."
+          falsifier: "For each invalid input class, call compile(). If any call panics, returns Ok, or produces partial state, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M1-FAILCLOSED
+              - S1-M1-TYPED-FAILURES
+            tests:
+              - "compile.rs::compile_rejects_invalid_json"
+              - "compile.rs::compile_rejects_non_object_payload"
+              - "compile.rs::compile_rejects_missing_dimensions"
+              - "compile.rs::compile_rejects_identity_length_mismatch"
+              - "compile.rs::compile_rejects_unknown_code32"
+              - "compile.rs::compile_rejects_empty_schema_id"
+            files:
+              - "kernel/src/carrier/compile.rs"
+
   - id: M2
     title: "ByteTrace writer + replay verifier (proof portfolio)"
     status: complete
@@ -235,7 +343,6 @@ milestones:
       - "Determinism envelope: in-process N=10, cross-process (4 env variants), cross-OS (CI)"
       - "Strictness hardening: checked arithmetic, frame-0 sentinel in reader+writer, trailing bytes rejection, fail-closed hex decode, null witness rejection"
       - "M2 trace format spec (plans/spine/m2_trace_format.md)"
-      - "M2 claim catalog (plans/spine/m2_claims.md)"
     evidence:
       commits: "ea8a2d4..9279ad5 (8 commits)"
       test_count: 173
@@ -253,6 +360,77 @@ milestones:
         - tests/fixtures/m2_golden_trace.json
         - tests/lock/src/m2_canonical_trace.rs
       stability_contract: "Full .bst1 wire bytes (including envelope) are stable for the canonical fixture. Changing envelope serialization is a wire break."
+      claims:
+        - id: M2-CLAIM-001
+          statement: "Serializing the canonical trace to .bst1, parsing it, and re-serializing produces identical bytes."
+          scope: "Locked for canonical fixture (1 layer, 2 slots, 3 arg slots, INITIAL_STATE + SET_SLOT)."
+          falsifier: "Write canonical trace to .bst1, read back, write again. If any byte differs, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M2-DETERMINISM-INPROC
+              - S1-M2-DETERMINISM-CROSSPROC
+            tests:
+              - "s1_m2_determinism.rs::bst1_round_trip_deterministic_n10"
+              - "s1_m2_crossproc.rs::crossproc_determinism_four_env_variants"
+            files:
+              - "kernel/src/carrier/trace_writer.rs"
+              - "kernel/src/carrier/trace_reader.rs"
+        - id: M2-CLAIM-002
+          statement: "Native .bst1 bytes and payload hash are byte-identical to v1 Python oracle for the canonical fixture."
+          scope: "Covers full .bst1 wire bytes including envelope. Step-chain digests are Native-originated (no v1 counterpart)."
+          falsifier: "Compare m2_golden_trace.bst1 (v1 Python) to trace_fixture output. If any byte or payload hash differs, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M2-GOLDEN
+              - S1-M2-PAYLOAD-HASH-V1
+            tests:
+              - "s1_m2_determinism.rs::v1_bst1_file_parseable_by_native_reader"
+              - "s1_m2_crossproc.rs::crossproc_output_matches_v1_oracle"
+            files:
+              - "tests/fixtures/m2_golden_trace.bst1"
+              - "tests/fixtures/m2_golden_trace.json"
+        - id: M2-CLAIM-003
+          statement: "Trace write, payload hash, step chain, and replay produce identical output across process environments."
+          scope: "4 env variants: baseline, different cwd, locale, noise."
+          falsifier: "Spawn trace_fixture under >=3 env variants. If any output line differs, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M2-DETERMINISM-CROSSPROC
+            tests:
+              - "s1_m2_crossproc.rs::crossproc_determinism_four_env_variants"
+            files:
+              - "tests/lock/src/bin/trace_fixture.rs"
+        - id: M2-CLAIM-004
+          statement: "Reader and writer reject malformed wire bytes with typed errors; no repair, normalization, or accept-then-canonicalize."
+          scope: "Covers non-canonical JSON, trailing bytes, bad sentinel, non-zero initial args, null witness, overflow."
+          falsifier: "For each malformed case, call reader/writer. If any returns Ok, panics, or produces partial output, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M2-READER-STRICT
+            tests:
+              - "trace_reader.rs::rejects_non_canonical_header"
+              - "trace_reader.rs::rejects_non_canonical_footer"
+              - "trace_reader.rs::rejects_trailing_bytes"
+              - "trace_reader.rs::rejects_bad_initial_frame_sentinel"
+              - "trace_reader.rs::rejects_nonzero_initial_frame_args"
+              - "trace_reader.rs::rejects_null_witness_store_digest"
+            files:
+              - "kernel/src/carrier/trace_reader.rs"
+              - "kernel/src/carrier/trace_writer.rs"
+        - id: M2-CLAIM-005
+          statement: "When a trace frame is mutated, the step-chain diverges at the exact mutated frame index; preceding chain values are unchanged."
+          scope: "Covers step-chain hash structure. Replay verification separately localizes via operator re-application."
+          falsifier: "Mutate frame k in a multi-step trace. If step chain first diverges at any index other than k, or preceding values change, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M2-DIV-LOCALIZE
+            tests:
+              - "s1_m2_divergence.rs::step_chain_localizes_mutation_to_exact_frame"
+              - "s1_m2_divergence.rs::step_chain_diverges_at_mutated_frame"
+            files:
+              - "kernel/src/proof/trace_hash.rs"
+              - "kernel/src/proof/replay.rs"
+
   - id: M3
     title: "Unified World Harness hello world"
     status: complete
@@ -261,12 +439,11 @@ milestones:
       - "harness/ crate as workspace member (depends on sterling-kernel, serde_json, hex — no sha2)"
       - "WorldHarnessV1 trait: data-only contract (world_id, dimensions, encode_payload, schema_descriptor, registry, program)"
       - "ArtifactBundleV1 with normative/observational artifact separation"
-      - "run(world) pipeline: encode → compile → apply × N → trace → verify → bundle"
+      - "run(world) pipeline: encode → compile → apply x N → trace → verify → bundle"
       - "RomeMini world (1 layer, 2 slots, 3 arg slots, one SET_SLOT operation)"
       - "Harness-originated domain prefixes (BUNDLE_ARTIFACT, BUNDLE_DIGEST, HARNESS_FIXTURE, CODEBOOK_HASH)"
       - "Deterministic envelope (fixed epoch, zero wall_time_ms)"
       - "harness_fixture cross-process binary"
-      - "M3 claim catalog (plans/spine/m3_claims.md)"
     evidence:
       commits: "9c734eb..631aed8"
       test_count: 197
@@ -282,6 +459,58 @@ milestones:
       fixtures:
         - tests/lock/src/bin/harness_fixture.rs
       stability_contract: "Bundle digest is computed from normative artifacts only (digest_basis). Observational artifacts (trace.bst1) are listed in manifest with content hashes but excluded from digest. verify_bundle() mechanically enforces the trace/report binding by recomputing payload_hash and step_chain_digest from trace.bst1 and comparing to verification_report.json."
+      claims:
+        - id: M3-CLAIM-001
+          statement: "run(RomeMini) is a pure function; N=10 consecutive runs produce identical bundle digests, artifact bytes, manifest, and digest_basis."
+          scope: "Locked for RomeMini only."
+          falsifier: "Call run(&RomeMini) 10 times. If any run produces different digest, artifact bytes, manifest, or digest_basis, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M3
+              - S1-M3-DETERMINISM
+            tests:
+              - "s1_m3_determinism.rs::bundle_digest_deterministic_n10"
+              - "s1_m3_determinism.rs::all_artifact_bytes_deterministic_n10"
+              - "s1_m3_determinism.rs::manifest_bytes_deterministic_n10"
+            files:
+              - "harness/src/runner.rs"
+              - "harness/src/bundle.rs"
+        - id: M3-CLAIM-002
+          statement: "harness_fixture binary produces identical output under 4 environment variants."
+          scope: "Variants: baseline, different cwd, locale, noise env vars."
+          falsifier: "Spawn harness_fixture under 4 variants. If any output line differs, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M3-DETERMINISM
+            tests:
+              - "s1_m3_crossproc.rs::crossproc_determinism_four_env_variants"
+            files:
+              - "tests/lock/src/bin/harness_fixture.rs"
+        - id: M3-CLAIM-003
+          statement: "Mutating trace.bst1 body bytes is detected by verify_bundle() via payload_hash or step_chain_digest mismatch against verification_report.json."
+          scope: "trace.bst1 is observational; its payload commitments are bound via normative verification_report.json."
+          falsifier: "Mutate trace body bytes (preserving parseability), update manifest content hash, call verify_bundle(). If it does not return PayloadHashMismatch or StepChainMismatch, the binding is broken."
+          pointers:
+            acceptance_ids:
+              - S1-M3
+            tests:
+              - "s1_m3_harness.rs::verify_bundle_detects_trace_report_payload_hash_mismatch"
+              - "s1_m3_harness.rs::verify_bundle_passes_clean_bundle"
+              - "s1_m3_determinism.rs::bundle_digest_ignores_observational_envelope_mutation"
+            files:
+              - "harness/src/bundle.rs"
+        - id: M3-CLAIM-004
+          statement: "Verification report contains planes_verified: [identity, status], declaring exactly which planes were checked."
+          scope: "Adding evidence to planes_verified is a claim expansion requiring new lock test."
+          falsifier: "Parse verification_report.json from run(RomeMini). If planes_verified is absent or contains unexpected planes, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M3
+            tests:
+              - "s1_m3_harness.rs::verification_report_declares_planes_verified"
+            files:
+              - "harness/src/runner.rs"
+
   - id: M4
     title: "Bundle Directory Format + Persistence + Fail-Closed Verification"
     status: complete
@@ -295,7 +524,6 @@ milestones:
       - "Fail-closed strictness tests (missing file, extra file, hash mismatch, noncanonical manifest)"
       - "Cross-process determinism (4 env variants)"
       - "No path leakage in normative surfaces"
-      - "M4 claim catalog (docs/ephemeral/sprints/spine/m4_claims.md)"
     evidence:
       commits: "b31d1cb..17a4254"
       test_count: 215
@@ -307,3 +535,143 @@ milestones:
       fixtures:
         - tests/lock/src/bin/bundle_fixture.rs
       stability_contract: "BundleDirectoryV1 directory format is stable: fixed metadata filenames (bundle_manifest.json, bundle_digest_basis.json, bundle_digest.txt) plus artifact files declared in manifest. Extra files rejected. Directory path never appears in any hashed surface."
+      claims:
+        - id: M4-CLAIM-001
+          statement: "Writing an ArtifactBundleV1 to BundleDirectoryV1 and reading it back yields an equivalent bundle."
+          scope: "Locked for RomeMini bundles produced by run()."
+          falsifier: "Run RomeMini, write with write_bundle_dir(), read with read_bundle_dir(). If any artifact content, content hash, manifest, digest basis, or bundle digest differs, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M3
+            tests:
+              - "s1_m4_bundle_dir.rs::roundtrip_produces_equivalent_bundle"
+              - "s1_m4_bundle_dir.rs::loaded_bundle_passes_verify_bundle"
+            files:
+              - "harness/src/bundle_dir.rs"
+        - id: M4-CLAIM-002
+          statement: "read_bundle_dir() rejects missing files, extra files, and tampered bytes at the read boundary. write_bundle_dir() rejects non-empty directories."
+          scope: "Covers 6 rejection categories: missing metadata, missing artifact, extra file, content hash mismatch, digest mismatch, invalid manifest."
+          falsifier: "Construct each malformed directory and call read_bundle_dir(). If any returns Ok, the claim is false."
+          pointers:
+            acceptance_ids: []
+            tests:
+              - "s1_m4_bundle_dir.rs::fail_closed_missing_artifact_file"
+              - "s1_m4_bundle_dir.rs::fail_closed_missing_manifest"
+              - "s1_m4_bundle_dir.rs::fail_closed_extra_file"
+              - "s1_m4_bundle_dir.rs::fail_closed_content_hash_mismatch_at_read_boundary"
+              - "bundle_dir.rs::write_fails_on_nonempty_directory"
+              - "bundle_dir.rs::read_fails_on_tampered_artifact_content"
+              - "bundle_dir.rs::read_fails_on_missing_manifest"
+              - "bundle_dir.rs::read_fails_on_extra_file"
+              - "bundle_dir.rs::read_fails_on_missing_artifact"
+              - "bundle_dir.rs::read_fails_on_tampered_digest"
+            files:
+              - "harness/src/bundle_dir.rs"
+        - id: M4-CLAIM-003
+          statement: "verify_bundle_dir() composes read_bundle_dir() (content hashes at boundary) with verify_bundle() (derived projections, canonical form, trace/report binding)."
+          scope: "Trace body mutation with updated manifest content hash must fail via trace/report binding, not content hash."
+          falsifier: "Write clean bundle, mutate trace.bst1 body (preserving parseability), update manifest content hash, call verify_bundle_dir(). If it succeeds, the binding is broken."
+          pointers:
+            acceptance_ids: []
+            tests:
+              - "s1_m4_bundle_dir.rs::verify_bundle_dir_passes_clean_directory"
+              - "s1_m4_bundle_dir.rs::fail_closed_noncanonical_manifest"
+            files:
+              - "harness/src/bundle_dir.rs"
+              - "harness/src/bundle.rs"
+        - id: M4-CLAIM-004
+          statement: "bundle_fixture binary produces identical output under 4 environment variants."
+          scope: "Variants: baseline, different cwd, locale, noise env vars."
+          falsifier: "Spawn bundle_fixture under 4 variants. If any output line differs, the claim is false."
+          pointers:
+            acceptance_ids: []
+            tests:
+              - "s1_m4_crossproc.rs::crossproc_determinism_four_env_variants"
+            files:
+              - "tests/lock/src/bin/bundle_fixture.rs"
+        - id: M4-CLAIM-005
+          statement: "No absolute path fragments appear in bundle_manifest.json, bundle_digest_basis.json, or any normative artifact after write/read round-trip."
+          scope: "Scanned fragments: /Users/, /home/, the directory path itself."
+          falsifier: "Write RomeMini bundle to temp dir, read back, scan all normative surfaces. If any path fragment found, the claim is false."
+          pointers:
+            acceptance_ids: []
+            tests:
+              - "s1_m4_bundle_dir.rs::no_path_leakage_in_normative_surfaces"
+            files:
+              - "harness/src/bundle_dir.rs"
+
+  - id: M5
+    title: "PolicySnapshotV1: Auditable harness policy + deterministic enforcement"
+    status: planned
+    deliverables:
+      - "New normative artifact: policy_snapshot.json (canonical JSON, included in digest_basis)"
+      - "Runner derives PolicySnapshotV1 deterministically from world metadata (worlds do not declare policy)"
+      - "Runner enforces policy fail-closed: operator allowlist + max_steps + max_trace_bytes"
+      - "verification_report.json includes policy_digest; verifier checks binding"
+      - "Lock tests for policy inclusion, canonical enforcement, tamper detection, budget overflow, allowlist violation"
+      - "Cross-process determinism for policy-bearing bundles"
+    evidence:
+      commits: ""
+      test_count: 0
+      tests: []
+      implementation_artifacts: []
+      fixtures: []
+      claims:
+        - id: M5-CLAIM-001
+          statement: "Every bundle includes a normative policy_snapshot.json that is digest-committed via digest_basis."
+          scope: "Locked for RomeMini; intended general for all worlds."
+          falsifier: "Produce a bundle missing policy_snapshot.json or with it not marked normative / not in digest_basis, and still passing verify_bundle_dir()."
+          pointers:
+            acceptance_ids:
+              - S1-M5-POLICY-IN-BUNDLE
+            tests:
+              - "s1_m5_policy.rs::policy_snapshot_is_normative_and_verifies"
+            files:
+              - "harness/src/policy.rs"
+              - "harness/src/bundle.rs"
+              - "harness/src/runner.rs"
+        - id: M5-CLAIM-002
+          statement: "Policy violations fail closed deterministically (no partial-success artifacts)."
+          scope: "Covers max_steps and op allowlist at minimum."
+          falsifier: "Set max_steps below required frames or include a forbidden op; if run() returns Ok or emits a bundle, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M5-BUDGET-STEP-OVERFLOW
+              - S1-M5-ALLOWLIST-VIOLATION
+            tests:
+              - "s1_m5_policy.rs::fails_on_step_budget_overflow"
+              - "s1_m5_policy.rs::fails_on_allowlist_violation"
+            files:
+              - "harness/src/runner.rs"
+              - "harness/src/policy.rs"
+        - id: M5-CLAIM-003
+          statement: "PolicySnapshotV1 is canonical JSON and tamper-detected at the earliest boundary."
+          scope: "Canonical enforcement via existing verify_bundle() normative-JSON checks; tamper detection via read-boundary content hashing."
+          falsifier: "Pretty-print policy_snapshot.json or mutate its bytes in a persisted bundle; if read_bundle_dir()/verify_bundle_dir() succeeds, the claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M5-POLICY-CANONICAL
+            tests:
+              - "s1_m5_policy.rs::rejects_noncanonical_policy_snapshot"
+            files:
+              - "harness/src/bundle_dir.rs"
+              - "harness/src/bundle.rs"
+        - id: M5-CLAIM-004
+          statement: "Cross-process environment variance does not change policy_snapshot bytes or the resulting bundle digest."
+          scope: "Locked via cross-proc fixture under 4 env variants."
+          falsifier: "Run policy_fixture under variant cwd/locale/noise; if output differs, claim is false."
+          pointers:
+            acceptance_ids:
+              - S1-M5-DETERMINISM-CROSSPROC
+            tests:
+              - "s1_m5_crossproc.rs::crossproc_determinism_four_env_variants"
+            files:
+              - "tests/lock/src/bin/policy_fixture.rs"
+              - "tests/lock/tests/s1_m5_crossproc.rs"
+      stability_contract: >-
+        PolicySnapshotV1 is a harness-level, normative, canonical-JSON artifact.
+        It is included in digest_basis and therefore commits the bundle digest to the
+        policy under which the bundle was produced. Worlds do not implement policy;
+        the runner derives and enforces policy deterministically. Violations fail closed.
+        max_steps counts total trace frames (including frame 0 sentinel).
+        policy_digest in verification_report equals the policy artifact's content_hash.
