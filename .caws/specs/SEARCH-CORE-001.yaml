@@ -1,0 +1,139 @@
+id: SEARCH-CORE-001
+type: feature
+title: "Search Core: Frontier, SearchNodeV1, SearchGraphV1, ValueScorer, best-first search with deterministic audit trail (M1)"
+status: draft
+risk_tier: 2
+mode: development
+created_at: "2026-02-25T23:00:00.000Z"
+updated_at: "2026-02-25T23:00:00.000Z"
+blast_radius:
+  modules:
+    - search
+    - harness/runner
+    - harness/bundle
+    - tests
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - search/*
+    - harness/
+    - tests/lock/
+    - .github/workflows/
+    - tools/
+  out:
+    - kernel/
+    - docs/
+    - ml/
+    - reference/v1_impl/
+    - .caws/
+threats:
+  - "Search crate accidentally depending on harness (breaks one-way dependency invariant)"
+  - "HashMap iteration order in frontier or visited set breaking determinism"
+  - "Float scores leaking into Cert-mode ordering"
+  - "Silent pruning or rejection without graph recording (hidden router)"
+  - "World enumerate_candidates using stale or split-brain registry"
+  - "Dead-end tagging claiming semantic impossibility when expansion was budget-limited"
+invariants:
+  - "INV-SC-01: Given identical (root_state, policy, scorer), search produces identical SearchGraphV1 bytes"
+  - "INV-SC-02: Worlds MUST enumerate only candidates whose op_code exists in the runner-supplied RegistryV1; illegal candidates terminate with WorldContractViolation"
+  - "INV-SC-03: Every frontier pop and every candidate decision is recorded as ExpandEventV1 + CandidateRecordV1; no silent pruning"
+  - "INV-SC-04: Every candidate score carries deterministic provenance (ScoreSourceV1); learned bias is recorded, not hidden"
+  - "INV-SC-05: state_fingerprint is computed from the policy-declared dedup key (DedupKeyV1) and recorded in metadata"
+  - "INV-SC-06: Frontier selection order matches recorded expansion_order in the graph; no hidden decision pathway"
+  - "INV-SC-07: Dead-end is tagged Exhaustive only if expansion completed without caps; BudgetLimited otherwise"
+  - "INV-SC-08: Candidate enumeration uses the runner-supplied RegistryV1 snapshot only; no split-brain registry reads"
+  - "INV-SC-09: node_summaries emitted in strict node_id ascending order"
+  - "INV-SC-10: DedupKeyV1::FullState and PruneVisitedPolicyV1::ReleaseVisited are hard errors in M1"
+  - "sterling_search depends on sterling_kernel only; it does NOT depend on sterling_harness"
+  - "Neural/learned scoring is advisory only: cannot create actions, bypass legality, or suppress candidates"
+acceptance:
+  # --- M1: Search Core ---
+  - id: SC1-M1-SEARCH-DETERMINISM-INPROC
+    given: "a RomeMiniSearch world and UniformScorer"
+    when: "search() is called N>=10 times in the same process"
+    then: "produces identical SearchGraphV1 canonical JSON bytes every time"
+  - id: SC1-M1-SEARCH-DETERMINISM-CROSSPROC
+    given: "the search_fixture binary"
+    when: "spawned under 4 environment variants (cwd, locale, noise, baseline)"
+    then: "all output lines are identical across variants"
+  - id: SC1-M1-GRAPH-IN-BUNDLE
+    given: "a run_search(RomeMiniSearch) call"
+    when: "the bundle is inspected"
+    then: "bundle contains search_graph.json marked normative; verify_bundle() passes"
+  - id: SC1-M1-GRAPH-METADATA-BINDING
+    given: "a search_graph.json from run_search()"
+    when: "metadata fields are inspected"
+    then: "world_id, schema_descriptor, registry_digest, policy_snapshot_digest, search_policy_digest, and root_state_fingerprint match corresponding bundle artifacts"
+  - id: SC1-M1-GRAPH-COMPLETENESS
+    given: "a search run with N expansions"
+    when: "SearchGraphV1 is inspected"
+    then: "every frontier pop appears as ExpandEventV1; every generated candidate appears as CandidateRecordV1 with outcome"
+  - id: SC1-M1-LOOP-DETECTION
+    given: "a world whose candidate actions create a cycle"
+    when: "search() is called"
+    then: "terminates without infinite expansion; duplicate states recorded as DuplicateSuppressed in graph"
+  - id: SC1-M1-DEAD-END-SEMANTICS
+    given: "a world with states that have no valid successors"
+    when: "search() expands such a node"
+    then: "node tagged DeadEndReasonV1::Exhaustive; cap-limited exhaustion tagged BudgetLimited"
+  - id: SC1-M1-BUDGET-EXPANSION-OVERFLOW
+    given: "a search policy with max_expansions=1 and >1 reachable state"
+    when: "search() is called"
+    then: "termination_reason is ExpansionBudgetExceeded; graph is complete up to cutoff"
+  - id: SC1-M1-CANDIDATE-LEGALITY
+    given: "a world that enumerates a candidate with op_code not in the registry"
+    when: "search() processes that candidate"
+    then: "recorded as CandidateOutcomeV1::IllegalOperator; run terminates with WorldContractViolation"
+  - id: SC1-M1-SCORE-PROVENANCE
+    given: "a search run with both UniformScorer and a custom non-uniform scorer"
+    when: "SearchGraphV1 CandidateRecordV1 entries are inspected"
+    then: "all carry ScoreSourceV1; non-uniform scorer changes deterministic candidate order vs uniform"
+  - id: SC1-M1-FRONTIER-PRUNING
+    given: "a search policy with max_frontier_size < total reachable states"
+    when: "frontier exceeds max"
+    then: "pruned to max by total key; pruned node_ids and prune_visited_policy recorded in notes"
+  - id: SC1-M1-GOAL-PATH-RECONSTRUCTION
+    given: "a search run that reaches a goal"
+    when: "the goal node path is reconstructed via parent_id pointers"
+    then: "path from root to goal is complete and all steps correspond to Applied edges in the graph"
+  - id: SC1-M1-GOV-LINT-MULTISPEC
+    given: "the lint_acceptance_ids.py tool"
+    when: "run on the workspace"
+    then: "scans all .caws/specs/*.yaml and validates references for both SPINE-001 and SEARCH-CORE-001"
+  - id: SC1-M1-RESERVED-POLICY-HARDERROR
+    given: "a SearchPolicyV1 selecting DedupKeyV1::FullState or PruneVisitedPolicyV1::ReleaseVisited"
+    when: "search() is called"
+    then: "fails deterministically with explicit SearchError, no silent fallback"
+acceptance_criteria: []
+non_functional:
+  perf:
+    search_1000_nodes_p95_ms: 500
+  security:
+    - "search crate has zero harness dependencies"
+    - "no HashMap iteration in ordering-sensitive paths"
+contracts:
+  - type: architecture
+    path: .claude/plans/snappy-booping-mccarthy.md
+    description: "SEARCH-CORE-001 implementation plan with type definitions, invariants, and execution order"
+milestones:
+  - id: M1
+    title: "Search Core: frontier, graph, scorer, best-first loop"
+    status: planned
+    deliverables:
+      - "sterling_search crate (depends on sterling_kernel only)"
+      - "SearchNodeV1, CandidateActionV1 core types with deterministic ordering"
+      - "CandidateScoreV1 + ScoreSourceV1 provenance types"
+      - "ValueScorer trait + UniformScorer default"
+      - "SearchWorldV1 trait (extends WorldHarnessV1)"
+      - "BestFirstFrontier with BTreeSet-based visited set and dead-end tracking"
+      - "search() entry point with budget enforcement and termination reasons"
+      - "SearchGraphV1 expansion-event log with canonical JSON serialization"
+      - "SearchPolicyV1 with DedupKeyV1 and PruneVisitedPolicyV1"
+      - "Reserved policy options (FullState, ReleaseVisited) fail as hard errors"
+      - "RomeMiniSearch test world with deterministic candidate enumeration"
+      - "run_search() harness integration with search_graph.json bundle artifact"
+      - "Verification extended with search graph digest + metadata binding"
+      - "Lock tests: determinism (in-proc N=10), cross-proc (4 variants), graph completeness"
+      - "Edge-case tests: loop detection, dead-end semantics, budget overflow, legality, pruning, provenance"
+      - "Multi-spec acceptance lint (tools/lint_acceptance_ids.py)"

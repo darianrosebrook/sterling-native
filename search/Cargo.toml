@@ -1,0 +1,12 @@
+[package]
+name = "sterling-search"
+edition.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sterling-kernel = { path = "../kernel" }
+serde_json = "1"
+hex = "0.4"
