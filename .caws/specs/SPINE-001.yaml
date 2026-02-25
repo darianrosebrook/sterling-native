@@ -268,7 +268,7 @@ milestones:
       - "harness_fixture cross-process binary"
       - "M3 claim catalog (plans/spine/m3_claims.md)"
     evidence:
-      commits: "9c734eb..aa36c89 (2 commits, harness crate + lock tests) + verify_bundle commit"
+      commits: "9c734eb..631aed8"
       test_count: 197
       tests:
         - tests/lock/tests/s1_m3_harness.rs
