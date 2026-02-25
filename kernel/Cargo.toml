@@ -7,5 +7,4 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-# No external dependencies in M0.
-# sha2 will be added in M1 for canonical hashing.
+serde_json = "1"
