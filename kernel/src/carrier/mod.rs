@@ -7,3 +7,4 @@ pub mod bytetrace;
 pub mod code32;
 pub mod compile;
 pub mod registry;
+pub mod trace_writer;
