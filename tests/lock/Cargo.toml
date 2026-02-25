@@ -30,3 +30,7 @@ path = "src/bin/harness_fixture.rs"
 [[bin]]
 name = "bundle_fixture"
 path = "src/bin/bundle_fixture.rs"
+
+[[bin]]
+name = "policy_fixture"
+path = "src/bin/policy_fixture.rs"
