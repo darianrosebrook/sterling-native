@@ -158,6 +158,10 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    // ACCEPTANCE: S1-M1-CANONJSON
+    // Covered by: sorted_keys, nested_sorted_keys, compact_no_whitespace,
+    //             ordering_invariance, whitespace_invariance
+
     #[test]
     fn sorted_keys() {
         let v = json!({"z": 1, "a": 2, "m": 3});

@@ -515,6 +515,8 @@ milestones:
     title: "Bundle Directory Format + Persistence + Fail-Closed Verification"
     status: complete
     completed_at: "2026-02-25"
+    # M4 acceptance criteria are fully expressed as inline claims with test
+    # pointers. No separate acceptance IDs — claims are the acceptance surface.
     deliverables:
       - "BundleDirectoryV1 format: fixed metadata files + manifest-declared artifact files"
       - "write_bundle_dir(): deterministic directory write with atomic file ops, DirNotEmpty guard"

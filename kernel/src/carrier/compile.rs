@@ -459,7 +459,7 @@ mod tests {
         }
     }
 
-    // --- Fail-closed tests (S1-M1-FAILCLOSED) ---
+    // --- Fail-closed tests (S1-M1-FAILCLOSED, S1-M1-TYPED-FAILURES) ---
 
     #[test]
     fn compile_rejects_invalid_json() {
@@ -533,6 +533,7 @@ mod tests {
         ));
     }
 
+    // ACCEPTANCE: S1-M1-REGISTRY-VALIDATION
     #[test]
     fn compile_rejects_unknown_code32() {
         let registry = rome_registry();

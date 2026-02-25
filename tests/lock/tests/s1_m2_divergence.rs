@@ -192,6 +192,7 @@ fn step_chain_diverges_at_mutated_frame() {
     assert_ne!(chain_clean.chain[3], chain_mutated.chain[3]);
 }
 
+// ACCEPTANCE: S1-M2-DIV-LOCALIZE
 #[test]
 fn step_chain_localizes_mutation_to_exact_frame() {
     let bundle = build_four_step_trace();

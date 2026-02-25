@@ -76,7 +76,7 @@ fn determinism_inproc_n10() {
     }
 }
 
-// --- S1-M1-NO-PATH-IN-HASH ---
+// --- S1-M1-NO-PATH-IN-HASH, S1-M2-NO-PATH-IN-HASH ---
 
 #[test]
 fn no_paths_in_hashed_surfaces() {

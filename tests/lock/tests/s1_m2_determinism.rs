@@ -12,7 +12,10 @@ use sterling_kernel::proof::replay::replay_verify;
 use sterling_kernel::proof::trace_hash::{payload_hash, step_chain};
 
 // ---------------------------------------------------------------------------
-// Determinism N=10 tests
+// ACCEPTANCE: S1-M2-DETERMINISM-INPROC
+// Covered by: trace_write_deterministic_n10, trace_write_read_round_trip_deterministic_n10,
+//             payload_hash_deterministic_n10, step_chain_deterministic_n10,
+//             replay_deterministic_n10
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -94,7 +97,8 @@ fn golden_wire_format_frame_stride() {
 }
 
 // ---------------------------------------------------------------------------
-// Golden fixture: hash locks
+// ACCEPTANCE: S1-M2-PAYLOAD-HASH-V1
+// Covered by: golden_payload_hash, golden_step_chain_digest
 // ---------------------------------------------------------------------------
 
 #[test]

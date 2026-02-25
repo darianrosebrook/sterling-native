@@ -157,6 +157,7 @@ fn golden_evidence_digest() {
     );
 }
 
+// ACCEPTANCE: S1-M1-REGISTRY-CANON
 #[test]
 fn golden_registry_digest() {
     let fixture = load_golden_fixture();

@@ -191,6 +191,7 @@ mod tests {
         }
     }
 
+    // ACCEPTANCE: S1-M2-REPLAY-1STEP
     #[test]
     fn replay_match_single_step() {
         let bundle = build_single_step_trace();

@@ -42,6 +42,7 @@ jobs:
       - name: Format check
         run: cargo fmt --all -- --check
 
+      # ACCEPTANCE: S1-M1-REPRO, S1-M2-DETERMINISM-CROSSOS
       - name: Test
         run: cargo test --workspace
 
@@ -53,3 +54,6 @@ jobs:
 
       - name: Doc lint check
         run: python3 tools/lint_docs.py --all
+
+      - name: Acceptance ID anchoring check
+        run: python3 tools/lint_acceptance_ids.py

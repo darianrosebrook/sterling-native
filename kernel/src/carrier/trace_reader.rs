@@ -424,6 +424,13 @@ mod tests {
     use crate::carrier::code32::Code32;
     use crate::carrier::trace_writer::trace_to_bytes;
 
+    // ACCEPTANCE: S1-M2-READER-STRICT
+    // Covered by: rejects_empty_input, rejects_bad_magic, rejects_truncated_body,
+    //             rejects_invalid_slot_status, rejects_truncated_footer,
+    //             rejects_trailing_bytes, rejects_non_canonical_header,
+    //             rejects_non_canonical_footer, rejects_null_witness_store_digest,
+    //             rejects_bad_initial_frame_sentinel, rejects_nonzero_initial_frame_args
+
     fn test_envelope() -> ByteTraceEnvelopeV1 {
         ByteTraceEnvelopeV1 {
             timestamp: "2026-01-01T00:00:00Z".into(),

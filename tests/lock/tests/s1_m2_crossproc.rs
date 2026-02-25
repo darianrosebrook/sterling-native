@@ -73,7 +73,9 @@ fn run_variant(work_dir: &str, env_overrides: &[(&str, &str)]) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Cross-process determinism
+// ACCEPTANCE: S1-M2-DETERMINISM-CROSSOS
+// Proof lives in CI matrix (ubuntu-latest, macos-latest); this test covers
+// the cross-process axis. Cross-OS is verified when CI runs this on both OSes.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -130,7 +132,8 @@ fn crossproc_determinism_three_env_variants() {
 }
 
 // ---------------------------------------------------------------------------
-// V1 oracle parity
+// ACCEPTANCE: S1-M2-GOLDEN
+// Covered by: crossproc_output_matches_v1_oracle, v1_bst1_file_parseable_by_native_reader
 // ---------------------------------------------------------------------------
 
 #[test]

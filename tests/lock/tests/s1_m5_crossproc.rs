@@ -59,6 +59,7 @@ fn run_variant(work_dir: &str, env_overrides: &[(&str, &str)]) -> String {
     String::from_utf8(output.stdout).expect("stdout is valid UTF-8")
 }
 
+// ACCEPTANCE: S1-M5-DETERMINISM-CROSSPROC
 #[test]
 fn crossproc_determinism_four_env_variants() {
     let root = workspace_root();
