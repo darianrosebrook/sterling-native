@@ -165,6 +165,51 @@ impl ByteStateV1 {
         buf
     }
 
+    /// Reconstruct a `ByteStateV1` from evidence bytes (identity ++ status).
+    ///
+    /// Strict: rejects truncated or oversized input. Returns `None` if the
+    /// byte length does not match `layer_count * slot_count * 5` (4 identity + 1 status
+    /// per slot), or if any status byte is not a valid `SlotStatus` discriminant.
+    #[must_use]
+    pub fn from_evidence_bytes(
+        layer_count: usize,
+        slot_count: usize,
+        evidence: &[u8],
+    ) -> Option<Self> {
+        let total = layer_count * slot_count;
+        let expected_len = total * 4 + total;
+        if evidence.len() != expected_len {
+            return None;
+        }
+
+        let id_bytes = &evidence[..total * 4];
+        let st_bytes = &evidence[total * 4..];
+
+        let mut identity = Vec::with_capacity(total);
+        for i in 0..total {
+            let offset = i * 4;
+            let bytes = [
+                id_bytes[offset],
+                id_bytes[offset + 1],
+                id_bytes[offset + 2],
+                id_bytes[offset + 3],
+            ];
+            identity.push(Code32::from_le_bytes(bytes));
+        }
+
+        let mut status = Vec::with_capacity(total);
+        for &b in st_bytes {
+            status.push(SlotStatus::from_byte(b)?);
+        }
+
+        Some(Self {
+            layer_count,
+            slot_count,
+            identity,
+            status,
+        })
+    }
+
     /// Identity-only equality: true if both states have identical identity planes.
     ///
     /// Use this for search/dedup. Status differences are intentionally ignored.
@@ -291,5 +336,63 @@ mod tests {
         assert_eq!(evidence.len(), 5);
         assert_eq!(&evidence[..4], &[0x0A, 0x0B, 0x0D, 0x0C]); // LE u16
         assert_eq!(evidence[4], 255); // Certified
+    }
+
+    // --- S1-M1-BYTESTATE-ROUNDTRIP ---
+
+    #[test]
+    fn from_evidence_bytes_round_trip() {
+        let mut original = ByteStateV1::new(2, 4);
+        original.set_identity(0, 0, Code32::new(1, 2, 3));
+        original.set_identity(1, 3, Code32::new(10, 20, 300));
+        original.set_status(0, 0, SlotStatus::Certified);
+        original.set_status(1, 3, SlotStatus::Provisional);
+
+        let evidence = original.evidence_bytes();
+        let reconstructed = ByteStateV1::from_evidence_bytes(2, 4, &evidence).unwrap();
+
+        assert!(original.bitwise_eq(&reconstructed));
+    }
+
+    #[test]
+    fn from_evidence_bytes_rejects_truncated() {
+        assert!(ByteStateV1::from_evidence_bytes(2, 4, &[0u8; 39]).is_none());
+    }
+
+    #[test]
+    fn from_evidence_bytes_rejects_oversized() {
+        assert!(ByteStateV1::from_evidence_bytes(2, 4, &[0u8; 41]).is_none());
+    }
+
+    #[test]
+    fn from_evidence_bytes_rejects_invalid_status() {
+        let mut evidence = vec![0u8; 40]; // 2*4*4 + 2*4 = 40
+        evidence[32] = 42; // Invalid SlotStatus
+        assert!(ByteStateV1::from_evidence_bytes(2, 4, &evidence).is_none());
+    }
+
+    // --- S1-M1-EQ-SEPARATION-LOCK ---
+
+    #[test]
+    fn eq_separation_status_only_change() {
+        let mut a = ByteStateV1::new(2, 4);
+        let mut b = ByteStateV1::new(2, 4);
+
+        // Same identity.
+        a.set_identity(0, 0, Code32::new(1, 0, 0));
+        b.set_identity(0, 0, Code32::new(1, 0, 0));
+
+        // Different status.
+        a.set_status(0, 0, SlotStatus::Certified);
+        b.set_status(0, 0, SlotStatus::Shadow);
+
+        // identity_eq: true (status ignored).
+        assert!(a.identity_eq(&b));
+        // bitwise_eq: false (status differs).
+        assert!(!a.bitwise_eq(&b));
+        // identity_bytes: same.
+        assert_eq!(a.identity_bytes(), b.identity_bytes());
+        // evidence_bytes: different.
+        assert_ne!(a.evidence_bytes(), b.evidence_bytes());
     }
 }

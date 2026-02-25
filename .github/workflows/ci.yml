@@ -10,9 +10,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: Build + Lint + Test
-    runs-on: ubuntu-latest
+  # S1-M1-DETERMINISM-CROSSOS: golden fixtures must pass on both OSes.
+  test:
+    name: Build + Lint + Test (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +44,12 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
+
+  docs:
+    name: Doc lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Doc lint check
         run: python3 tools/lint_docs.py --all
