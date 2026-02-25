@@ -1,0 +1,10 @@
+[package]
+name = "lock-tests"
+edition.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sterling-kernel = { path = "../../kernel" }
