@@ -106,9 +106,7 @@ fn write_number(buf: &mut Vec<u8>, n: &serde_json::Number) -> Result<(), CanonEr
         Ok(())
     } else {
         // Float, NaN, Infinity — reject.
-        Err(CanonError::NonIntegerNumber {
-            raw: n.to_string(),
-        })
+        Err(CanonError::NonIntegerNumber { raw: n.to_string() })
     }
 }
 
@@ -179,8 +177,7 @@ mod tests {
     fn whitespace_invariance() {
         let compact: serde_json::Value = serde_json::from_str(r#"{"a":1}"#).unwrap();
         let spaced: serde_json::Value = serde_json::from_str("{ \"a\" : 1 }").unwrap();
-        let newlined: serde_json::Value =
-            serde_json::from_str("{\n  \"a\": 1\n}").unwrap();
+        let newlined: serde_json::Value = serde_json::from_str("{\n  \"a\": 1\n}").unwrap();
         let b1 = canonical_json_bytes(&compact).unwrap();
         let b2 = canonical_json_bytes(&spaced).unwrap();
         let b3 = canonical_json_bytes(&newlined).unwrap();
@@ -228,10 +225,7 @@ mod tests {
     fn string_escaping() {
         let v = json!({"a": "line1\nline2\ttab\\slash\"quote"});
         let bytes = canonical_json_bytes(&v).unwrap();
-        assert_eq!(
-            bytes,
-            b"{\"a\":\"line1\\nline2\\ttab\\\\slash\\\"quote\"}"
-        );
+        assert_eq!(bytes, b"{\"a\":\"line1\\nline2\\ttab\\\\slash\\\"quote\"}");
     }
 
     #[test]

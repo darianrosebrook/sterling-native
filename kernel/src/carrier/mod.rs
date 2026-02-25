@@ -6,3 +6,4 @@ pub mod bytestate;
 pub mod bytetrace;
 pub mod code32;
 pub mod compile;
+pub mod registry;
