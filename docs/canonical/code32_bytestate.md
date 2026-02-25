@@ -534,9 +534,8 @@ comparison logic runs 170-340x faster when bypassing CPython's object protocol.
 The gap widens with N — goal distance at N=5000 goes from 396ms (object path)
 to 0.11ms (numpy) or 0.24ms (Rust).
 
-Full benchmark, rationale, and next steps:
-[`test-scenarios/bytestate-benchmark/`](../../../test-scenarios/bytestate-benchmark/README.md)
-(see `SESSION-NOTES.md` for detailed decisions and code diffs).
+Full benchmark, rationale, and next steps are in `test-scenarios/bytestate-benchmark/`
+(v1 test artifact — to be recreated in v2 benchmarks).
 
 ### Step 3: One Relational Operator Slice — NOT YET STARTED
 

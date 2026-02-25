@@ -33,22 +33,22 @@ apps/tools/caws/
 caws-debug.log*
 **/caws.log
 .caws/*.log
+# Local development overrides (developer-specific)
+caws.local.*
+.caws/local.*
+.caws/worktrees/
+.caws/provenance
 
-# Cursor IDE logs
+# IDE-specific directories
+.idea/
+.vscode/
+.windsurf/ 
 .cursor/logs/*.log
 
 # Runtime logs
 run.log
 *.log
 
-# Local development overrides (developer-specific)
-caws.local.*
-.caws/local.*
-
-# IDE-specific directories
-.idea/
-.vscode/
-.windsurf/
 
 # Documentation folders (internal, external, archive)
 # docs/internal/
@@ -172,4 +172,23 @@ data/certified_operators/provisional/*.json
 
 .caws/provenance/
 outputs/
+
+# ====================================================================
+# Documentation regime (see docs/policy/doc_authority_policy.md)
+# ====================================================================
+# Ephemeral docs: temporal work (roadmaps, sprint plans, session notes)
+# These are intentionally NOT committed — they live locally only.
+docs/ephemeral/
 ephemeral/
+
+# Doc index cache (local LLM augmentation cache, machine-specific)
+.cache/docs-index/
+
+# Inventory LLM description cache (machine-specific, regenerated)
+.cache/inventory/
+
+# Structural doc index IS tracked (docs/_index/docs_index.v1.json)
+# Do NOT ignore docs/_index/
+
+# MOC inventory IS tracked (docs/MOC/PROJECT_INVENTORY.json + .md)
+# Do NOT ignore docs/MOC/

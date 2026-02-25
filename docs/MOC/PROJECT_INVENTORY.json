@@ -1,0 +1,960 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-02-25T01:15:46.139989+00:00Z",
+  "project": "sterling-native",
+  "entry_count": 68,
+  "entries": [
+    {
+      "path": "docs/canonical/README.md",
+      "content_type": "documentation",
+      "category": "Canonical Contracts",
+      "authority": null,
+      "title": "Canonical Definitions (Sterling Native)",
+      "description": null,
+      "blob_sha": "5d504945c1233f3e8a08ac49a05712d25e347724",
+      "metadata": {
+        "lines": 40,
+        "size_bytes": 2348,
+        "modified": "2026-02-24T12:35:39.038419"
+      }
+    },
+    {
+      "path": "docs/canonical/bytestate_compilation_boundary.md",
+      "content_type": "documentation",
+      "category": "Canonical Contracts",
+      "authority": "canonical",
+      "title": "ByteState Compilation Boundary",
+      "description": "Partially implemented (core compilation boundary operational; epoch transitions and dynamic domain handshake not yet wired)",
+      "blob_sha": "bbbc0ba86893bafc5725d81c7a702bedecc1327c",
+      "metadata": {
+        "lines": 421,
+        "size_bytes": 21095,
+        "modified": "2026-02-24T14:03:16.101649"
+      }
+    },
+    {
+      "path": "docs/canonical/code32_bytestate.md",
+      "content_type": "documentation",
+      "category": "Canonical Contracts",
+      "authority": "canonical",
+      "title": "Code32 and ByteStateV1: Hardware-Native Semantic Representation",
+      "description": "Implemented (V1 substrate complete)",
+      "blob_sha": "fcbfb39a9191eb16712e05a309c401d25dd85266",
+      "metadata": {
+        "lines": 666,
+        "size_bytes": 40213,
+        "modified": "2026-02-24T16:54:54.271037"
+      }
+    },
+    {
+      "path": "docs/canonical/core_constraints.md",
+      "content_type": "documentation",
+      "category": "Canonical Contracts",
+      "authority": "canonical",
+      "title": "Core Constraints v1",
+      "description": null,
+      "blob_sha": "be0fed5995b40285666507a0d46362466f1a7011",
+      "metadata": {
+        "lines": 46,
+        "size_bytes": 4604,
+        "modified": "2026-02-24T14:03:09.119005"
+      }
+    },
+    {
+      "path": "docs/canonical/global_invariants.md",
+      "content_type": "documentation",
+      "category": "Canonical Contracts",
+      "authority": "canonical",
+      "title": "global_invariants.md",
+      "description": null,
+      "blob_sha": "f73570bfcf0b1a2f14a26f8ede43b77995b8d15e",
+      "metadata": {
+        "lines": 22,
+        "size_bytes": 1771,
+        "modified": "2026-02-24T14:03:10.564979"
+      }
+    },
+    {
+      "path": "docs/canonical/glossary.md",
+      "content_type": "documentation",
+      "category": "Canonical Contracts",
+      "authority": "canonical",
+      "title": "Sterling Native Glossary",
+      "description": "Definitions enforced by contracts, invariants, and ADRs. For the comprehensive v1 glossary (historical), see docs/reference/v1/glossary_full.md.",
+      "blob_sha": "ee95bb7f56039c7341ed997b5f6d50b591a22272",
+      "metadata": {
+        "lines": 108,
+        "size_bytes": 7506,
+        "modified": "2026-02-24T16:52:14.196698"
+      }
+    },
+    {
+      "path": "docs/canonical/neural_usage_contract.md",
+      "content_type": "documentation",
+      "category": "Canonical Contracts",
+      "authority": "canonical",
+      "title": "Neural Usage Contract",
+      "description": null,
+      "blob_sha": "2dc032d7a4fd353d805cf9aa06aeb4103e172ca7",
+      "metadata": {
+        "lines": 135,
+        "size_bytes": 5858,
+        "modified": "2026-02-24T14:03:12.358274"
+      }
+    },
+    {
+      "path": "docs/canonical/philosophy.md",
+      "content_type": "documentation",
+      "category": "Canonical Contracts",
+      "authority": "canonical",
+      "title": "Sterling Native Design Philosophy",
+      "description": "v2 canonical",
+      "blob_sha": "a21457dbc732cf11f812d6978b7dfadb867c60ea",
+      "metadata": {
+        "lines": 136,
+        "size_bytes": 6423,
+        "modified": "2026-02-24T14:03:06.585231"
+      }
+    },
+    {
+      "path": "docs/policy/benchmarking_policy.md",
+      "content_type": "documentation",
+      "category": "Policy",
+      "authority": "policy",
+      "title": "Benchmarking Policy",
+      "description": "All benchmarks and performance claims",
+      "blob_sha": "2b42d442caae61a6ef365544494593db32d4bb32",
+      "metadata": {
+        "lines": 84,
+        "size_bytes": 3322,
+        "modified": "2026-02-24T14:03:48.638772"
+      }
+    },
+    {
+      "path": "docs/policy/canonical_doc_change_policy.md",
+      "content_type": "documentation",
+      "category": "Policy",
+      "authority": "policy",
+      "title": "Canonical Document Change Policy",
+      "description": "“docs/canonical/* and other canonical surfaces”",
+      "blob_sha": "818ff858f9494ac2a536a77c12f2c21331d4ce21",
+      "metadata": {
+        "lines": 28,
+        "size_bytes": 816,
+        "modified": "2026-02-24T14:03:55.729599"
+      }
+    },
+    {
+      "path": "docs/policy/doc_authority_policy.md",
+      "content_type": "documentation",
+      "category": "Policy",
+      "authority": "policy",
+      "title": "Document Authority Policy",
+      "description": "All documents in docs/ except docs/reference/v1/",
+      "blob_sha": "df9fc292309aeda416d922056f24190b2c125267",
+      "metadata": {
+        "lines": 39,
+        "size_bytes": 2609,
+        "modified": "2026-02-24T14:03:47.242641"
+      }
+    },
+    {
+      "path": "docs/policy/domain_transfer_policy.md",
+      "content_type": "documentation",
+      "category": "Policy",
+      "authority": "policy",
+      "title": "Domain Transfer Scenario Policy",
+      "description": "Transfer claims across worlds / truth regimes",
+      "blob_sha": "8237c0bcd599ced8a36d6a763daa64d0c6bc12af",
+      "metadata": {
+        "lines": 87,
+        "size_bytes": 3033,
+        "modified": "2026-02-24T14:03:50.816319"
+      }
+    },
+    {
+      "path": "docs/policy/governance_policy.md",
+      "content_type": "documentation",
+      "category": "Policy",
+      "authority": "policy",
+      "title": "Governance Policy",
+      "description": "Run modes, eligibility, and artifact semantics",
+      "blob_sha": "2879adbe1108c1e6645d9c8c781e2b50a1ce2cf3",
+      "metadata": {
+        "lines": 36,
+        "size_bytes": 1294,
+        "modified": "2026-02-24T14:03:52.092868"
+      }
+    },
+    {
+      "path": "docs/policy/versioning_policy.md",
+      "content_type": "documentation",
+      "category": "Policy",
+      "authority": "policy",
+      "title": "Versioning and Epoch Policy",
+      "description": "schemas, registries, epochs, and compatibility",
+      "blob_sha": "6d65026c5aa9a6a60de8082ec4cd5bb4722fc262",
+      "metadata": {
+        "lines": 25,
+        "size_bytes": 933,
+        "modified": "2026-02-24T14:03:53.757086"
+      }
+    },
+    {
+      "path": "docs/adr/0001-compilation-boundary.md",
+      "content_type": "documentation",
+      "category": "Architecture Decision Records",
+      "authority": "adr",
+      "title": "ADR 0001: Compilation Boundary as Architectural Spine",
+      "description": "Accepted (Design target)",
+      "blob_sha": "af6028d454d07bcd803a84a710ee84cd20148767",
+      "metadata": {
+        "lines": 26,
+        "size_bytes": 841,
+        "modified": "2026-02-24T14:03:29.674962"
+      }
+    },
+    {
+      "path": "docs/adr/0002-byte-trace-is-canonical.md",
+      "content_type": "documentation",
+      "category": "Architecture Decision Records",
+      "authority": "adr",
+      "title": "ADR 0002: ByteTrace is the Canonical Trace Artifact",
+      "description": "Accepted (Design target)",
+      "blob_sha": "70f143d54414dbe36136e470ad08f74c27fad966",
+      "metadata": {
+        "lines": 22,
+        "size_bytes": 610,
+        "modified": "2026-02-24T14:03:31.727327"
+      }
+    },
+    {
+      "path": "docs/adr/0003-neural-advisory-only.md",
+      "content_type": "documentation",
+      "category": "Architecture Decision Records",
+      "authority": "adr",
+      "title": "ADR 0003: Neural Components are Advisory Only (Enforced by API Shape)",
+      "description": "Accepted (Design target)",
+      "blob_sha": "f840f79fa41d1289129e13f977d0343b1d18e039",
+      "metadata": {
+        "lines": 21,
+        "size_bytes": 630,
+        "modified": "2026-02-24T14:03:33.434968"
+      }
+    },
+    {
+      "path": "docs/adr/0004-operator-taxonomy-names.md",
+      "content_type": "documentation",
+      "category": "Architecture Decision Records",
+      "authority": "adr",
+      "title": "ADR 0004: Operator Taxonomy Names (Seek/Memorize/Perceive/Knowledge/Control)",
+      "description": "Accepted",
+      "blob_sha": "5fcbed5e186f0284e0fbdaaf39fc228d4f2747b7",
+      "metadata": {
+        "lines": 46,
+        "size_bytes": 2180,
+        "modified": "2026-02-24T14:03:35.760441"
+      }
+    },
+    {
+      "path": "docs/adr/0005-v1-is-oracle-not-dependency.md",
+      "content_type": "documentation",
+      "category": "Architecture Decision Records",
+      "authority": "adr",
+      "title": "ADR 0005: v1 Is a Test Oracle, Not a Dependency",
+      "description": "Accepted",
+      "blob_sha": "7e2cd361545cea1461a9c589a4884bb827e65ad2",
+      "metadata": {
+        "lines": 38,
+        "size_bytes": 1562,
+        "modified": "2026-02-24T14:03:39.515877"
+      }
+    },
+    {
+      "path": "docs/adr/README.md",
+      "content_type": "documentation",
+      "category": "Architecture Decision Records",
+      "authority": null,
+      "title": "Architecture Decision Records (ADRs)",
+      "description": null,
+      "blob_sha": "9c8defd89302829b8dafa92225e368d78a52448e",
+      "metadata": {
+        "lines": 19,
+        "size_bytes": 516,
+        "modified": "2026-02-24T13:22:07.771189"
+      }
+    },
+    {
+      "path": "docs/architecture/clean_sheet_architecture.md",
+      "content_type": "documentation",
+      "category": "Architecture",
+      "authority": "architecture",
+      "title": "Sterling v2: Clean-Sheet Architecture",
+      "description": "Design Document (not a commitment — a compass)",
+      "blob_sha": "c3334b48d4dae7a4469996f4d7f4985c5106b1d6",
+      "metadata": {
+        "lines": 482,
+        "size_bytes": 29275,
+        "modified": "2026-02-24T16:54:41.165094"
+      }
+    },
+    {
+      "path": "docs/architecture/module_map.md",
+      "content_type": "documentation",
+      "category": "Architecture",
+      "authority": "architecture",
+      "title": "Module Map (Sterling Native)",
+      "description": null,
+      "blob_sha": "2d5b90640c83437902836dfc9464a056fbcba5cc",
+      "metadata": {
+        "lines": 14,
+        "size_bytes": 654,
+        "modified": "2026-02-24T14:04:01.875295"
+      }
+    },
+    {
+      "path": "docs/architecture/v1_contract_promotion_queue.md",
+      "content_type": "documentation",
+      "category": "Architecture",
+      "authority": "architecture",
+      "title": "v1 Contract Promotion Queue",
+      "description": null,
+      "blob_sha": "d0852c56dcb90346ab86d83f5d146c0396bddef3",
+      "metadata": {
+        "lines": 70,
+        "size_bytes": 5840,
+        "modified": "2026-02-24T14:04:06.176728"
+      }
+    },
+    {
+      "path": "docs/architecture/v2_success_rubric.md",
+      "content_type": "documentation",
+      "category": "Architecture",
+      "authority": "architecture",
+      "title": "Sterling v2 Success Rubric",
+      "description": "Design target",
+      "blob_sha": "ba68f6707b5f8dce651742e1c0cc69389ca69a6f",
+      "metadata": {
+        "lines": 299,
+        "size_bytes": 12995,
+        "modified": "2026-02-24T14:04:00.339156"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/00_INDEX.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive Implementation Specs Bundle",
+      "description": "imported",
+      "blob_sha": "df6ed906ba5a7dffe17b416959d6ebec5357e642",
+      "metadata": {
+        "lines": 373,
+        "size_bytes": 18143,
+        "modified": "2026-02-24T16:54:20.227096"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/00_IO_CONTRACT.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Sterling Rig Harness I/O Contract (Draft)",
+      "description": "imported",
+      "blob_sha": "3efd38d7c1b43ef7b221475cd1488ae03a3e8297",
+      "metadata": {
+        "lines": 69,
+        "size_bytes": 2672,
+        "modified": "2026-02-24T16:53:16.863366"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P01_deterministic_transformation_planning_resource_product.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 1: Deterministic transformation planning (resource → product)",
+      "description": "imported",
+      "blob_sha": "e3f5594fd97602245e79308a523b221a7ad1d4e9",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5196,
+        "modified": "2026-02-24T16:53:16.863551"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P02_capability_gating_and_legality_what_actions_are_permitted.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 2: Capability gating and legality (what actions are permitted)",
+      "description": "imported",
+      "blob_sha": "d91eb383c5bbd1daed5f4ed399d9f799f3af85d6",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5033,
+        "modified": "2026-02-24T16:53:16.863727"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P03_temporal_planning_with_durations_batching_and_capacity.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 3: Temporal planning with durations, batching, and capacity",
+      "description": "imported",
+      "blob_sha": "f13ec4182cbce66e06488f335ca11730d5d51aef",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5071,
+        "modified": "2026-02-24T16:53:16.863863"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P04_multi_strategy_acquisition_alternative_methods_different_fai.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 4: Multi-strategy acquisition (alternative methods, different failure modes)",
+      "description": "imported",
+      "blob_sha": "98dd6d66cd9cffd4a056efab5ef9d0bbe874c70b",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5086,
+        "modified": "2026-02-24T16:53:16.863981"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P05_hierarchical_planning_macro_policy_over_micro_solvers.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 5: Hierarchical planning (macro policy over micro solvers)",
+      "description": "imported",
+      "blob_sha": "6dc90af03062074fab410ac710a514254ac5a5d6",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5129,
+        "modified": "2026-02-24T16:53:16.864095"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P06_goal_conditioned_valuation_under_scarcity_keep_drop_allocate.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 6: Goal-conditioned valuation under scarcity (keep/drop/allocate)",
+      "description": "imported",
+      "blob_sha": "53cabfd15192fbcd20b9caf2002a5caea6c99bbf",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 4993,
+        "modified": "2026-02-24T16:53:16.864212"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P07_feasibility_under_constraints_and_partial_order_structure.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 7: Feasibility under constraints and partial-order structure",
+      "description": "imported",
+      "blob_sha": "2b6248e7a2ce9df60edb561155cc03c0fc33a976",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5000,
+        "modified": "2026-02-24T16:53:16.864329"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P08_systems_synthesis_compose_components_to_satisfy_a_behavioral.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 8: Systems synthesis (compose components to satisfy a behavioral spec)",
+      "description": "imported",
+      "blob_sha": "568bc0d26f39a807694d9b9ce7412e6ca5010c2b",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5056,
+        "modified": "2026-02-24T16:53:16.864445"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P09_contingency_planning_with_exogenous_events.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 9: Contingency planning with exogenous events",
+      "description": "imported",
+      "blob_sha": "09cacb1f972c446c2c7b5d362ad92c070d97b165",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5042,
+        "modified": "2026-02-24T16:53:16.864551"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P10_risk_aware_planning_tail_risk_not_just_expected_cost.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 10: Risk-aware planning (tail risk, not just expected cost)",
+      "description": "imported",
+      "blob_sha": "163052876ae58bd44951658f0a7a7176f8d776dd",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5000,
+        "modified": "2026-02-24T16:53:16.864657"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P11_epistemic_planning_belief_state_and_active_sensing.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 11: Epistemic planning (belief-state and active sensing)",
+      "description": "imported",
+      "blob_sha": "d2bb90ff7358f62ffbd6226ce3e79a5753fbd9de",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5007,
+        "modified": "2026-02-24T16:53:16.864773"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P12_invariant_maintenance_non_terminal_goals_control_by_receding.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 12: Invariant maintenance (non-terminal goals; control-by-receding-horizon)",
+      "description": "imported",
+      "blob_sha": "7c6d89b7a87c8ac40bdc817b42cc43cd8fbaf495",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 4991,
+        "modified": "2026-02-24T16:53:16.864889"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P13_irreversibility_and_commitment_planning.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 13: Irreversibility and commitment planning",
+      "description": "imported",
+      "blob_sha": "2930d531b959f75177757bc2bd8a00b89cf5b277",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 4956,
+        "modified": "2026-02-24T16:53:16.864997"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P14_program_level_planning_search_over_compressed_representation.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 14: Program-level planning (search over compressed representations)",
+      "description": "imported",
+      "blob_sha": "b09801a943258c5341a70acf4d032d72f050a92a",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 5057,
+        "modified": "2026-02-24T16:53:16.865106"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P15_fault_diagnosis_and_repair_hypotheses_tests_fix.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 15: Fault diagnosis and repair (hypotheses → tests → fix)",
+      "description": "imported",
+      "blob_sha": "944f5e2e94df812a28f597cd0cee44fb4d1ab65e",
+      "metadata": {
+        "lines": 94,
+        "size_bytes": 4963,
+        "modified": "2026-02-24T16:53:16.865211"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P16_representation_invariance_and_state_canonicalization.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 16: Representation invariance and state canonicalization",
+      "description": "imported",
+      "blob_sha": "5a39761af5c32e92cc782c173add8333def8e0cb",
+      "metadata": {
+        "lines": 97,
+        "size_bytes": 5065,
+        "modified": "2026-02-24T16:53:16.865319"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P17_credit_assignment_tied_to_execution_not_plans.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 17: Credit assignment tied to execution, not plans",
+      "description": "imported",
+      "blob_sha": "c30ba6ba4f17ec03ecadc978004a9bbf23c9771f",
+      "metadata": {
+        "lines": 96,
+        "size_bytes": 4985,
+        "modified": "2026-02-24T16:53:16.865420"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P18_multi_objective_optimization_and_preference_articulation.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 18: Multi-objective optimization and preference articulation",
+      "description": "imported",
+      "blob_sha": "fff68b2961deec3c36acf84ba2becafa82c1ca6c",
+      "metadata": {
+        "lines": 96,
+        "size_bytes": 4943,
+        "modified": "2026-02-24T16:53:16.865514"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P19_audit_grade_explanations_why_this_plan_why_not_that_plan.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 19: Audit-grade explanations (why this plan, why not that plan)",
+      "description": "imported",
+      "blob_sha": "9d5432184ebcd473daa7abfef00e849ceaa3eaa3",
+      "metadata": {
+        "lines": 95,
+        "size_bytes": 4983,
+        "modified": "2026-02-24T16:53:16.865618"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P20_adversarial_robustness_rule_injection_hardening.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 20: Adversarial robustness / “rule injection” hardening",
+      "description": "imported",
+      "blob_sha": "72a6d882fba285fea4cf066e570c7510abd11aa1",
+      "metadata": {
+        "lines": 96,
+        "size_bytes": 4854,
+        "modified": "2026-02-24T16:53:16.865720"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P21_entity_belief_maintenance_and_saliency.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive 21: Entity belief maintenance and saliency under partial observability",
+      "description": "imported",
+      "blob_sha": "f47617c7496370580980e18510627f2d75c0a85d",
+      "metadata": {
+        "lines": 153,
+        "size_bytes": 9139,
+        "modified": "2026-02-24T16:53:16.865850"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/P22_perceptual_substrate_and_visual_realization.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "P22: Perceptual Substrate + Visual Realization",
+      "description": "imported",
+      "blob_sha": "68f98d756648354fcb7b5b2605ef04ad2eefc63c",
+      "metadata": {
+        "lines": 39,
+        "size_bytes": 1436,
+        "modified": "2026-02-24T16:53:16.865957"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/README.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "Capability Primitive Specs Bundle",
+      "description": "imported",
+      "blob_sha": "ebf8868d2909431eba750f1cdbf6bb39a749c838",
+      "metadata": {
+        "lines": 26,
+        "size_bytes": 963,
+        "modified": "2026-02-24T16:53:16.866112"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/templates/global_invariants.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "global_invariants.md",
+      "description": "imported",
+      "blob_sha": "f567fcfda771fdd5ffff8ef9b850bf497ac3b6e4",
+      "metadata": {
+        "lines": 25,
+        "size_bytes": 1846,
+        "modified": "2026-02-24T16:53:16.866235"
+      }
+    },
+    {
+      "path": "docs/specs/primitives/templates/rig_template_A_to_H.md",
+      "content_type": "documentation",
+      "category": "Specs",
+      "authority": "architecture",
+      "title": "rig_template_A_to_H.md",
+      "description": "imported",
+      "blob_sha": "3a5e67a518dac76687fac2cc6a3f4c98e2954550",
+      "metadata": {
+        "lines": 18,
+        "size_bytes": 478,
+        "modified": "2026-02-24T16:53:16.866340"
+      }
+    },
+    {
+      "path": "docs/templates/benchmark_run_manifest_template.md",
+      "content_type": "documentation",
+      "category": "Templates",
+      "authority": null,
+      "title": "Benchmark Run Manifest Template",
+      "description": null,
+      "blob_sha": "ec7f03806c6612f368018c0b7fc3481f36a48860",
+      "metadata": {
+        "lines": 17,
+        "size_bytes": 516,
+        "modified": "2026-02-24T08:22:33.021131"
+      }
+    },
+    {
+      "path": "docs/templates/transfer_pack_template.md",
+      "content_type": "documentation",
+      "category": "Templates",
+      "authority": null,
+      "title": "Transfer Pack Template",
+      "description": null,
+      "blob_sha": "ed118692935b1d6f955d11925706f704ce49022a",
+      "metadata": {
+        "lines": 29,
+        "size_bytes": 760,
+        "modified": "2026-02-24T08:22:33.021351"
+      }
+    },
+    {
+      "path": "tools/docs_index.py",
+      "content_type": "code",
+      "category": "Tools",
+      "authority": null,
+      "title": "CAWS Structural Docs Indexer",
+      "description": "CAWS Structural Docs Indexer\n\nBuilds a deterministic JSON index of all docs/ files with their metadata:\n- authority level (from YAML front-matter)\n- path, title, status\n- cross-reference links\n\nUsage:\n    # Build structural index (deterministic, no LLM)\n    python tools/docs_index.py --mode structural\n\n    # Check if index is stale (for pre-commit, reads working tree)\n    python tools/docs_index.py --check\n\n    # Check if index is stale against staged bytes (for pre-commit hook)\n    python tools/docs_index.py --check --staged\n\n    # Build with LLM-augmented summaries (optional, requires API key)\n    python tools/docs_index.py --mode augmented\n\nOutput:\n    docs/_index/docs_index.v1.json  (tracked in git)\n\nExit codes:\n    0 = index is up to date (or was rebuilt successfully)\n    1 = index is stale (--check mode)",
+      "blob_sha": "95f132de4a3823f8d48dc6d71c9965910daa369f",
+      "metadata": {
+        "lines": 304,
+        "size_bytes": 9391,
+        "modified": "2026-02-24T17:15:34.740728"
+      }
+    },
+    {
+      "path": "tools/generate_inventory.py",
+      "content_type": "code",
+      "category": "Tools",
+      "authority": null,
+      "title": "Sterling Native Project Inventory (MOC) Generator",
+      "description": "Sterling Native Project Inventory (MOC) Generator\n\nScans docs, scripts, tools, schemas, and config files to produce a\nproject-wide Map of Content (MOC) inventory.\n\nTwo modes:\n  --mode structural   Deterministic, commit-worthy. Extracts metadata from\n                      YAML front-matter, docstrings, and header comments.\n  --mode augmented    LLM-powered descriptions, cache-backed by git blob sha.\n                      Only regenerates entries whose content has changed.\n\nOutput:\n  docs/MOC/PROJECT_INVENTORY.json  — machine-readable\n  docs/MOC/PROJECT_INVENTORY.md    — human-readable, grouped by category\n\nCache (augmented mode only):\n  .cache/inventory/descriptions.json  — keyed by blob_sha + prompt_version\n\nAuthor: @darianrosebrook",
+      "blob_sha": "82d8665585d8bc1a1bebc99230bc629319c9d984",
+      "metadata": {
+        "lines": 497,
+        "size_bytes": 16003,
+        "modified": "2026-02-24T16:31:43.017915"
+      }
+    },
+    {
+      "path": "tools/lint_docs.py",
+      "content_type": "code",
+      "category": "Tools",
+      "authority": null,
+      "title": "CAWS Document Authority Linter",
+      "description": "CAWS Document Authority Linter\n\nValidates that markdown files in docs/ follow the doc authority policy:\n- YAML front-matter with `authority:` field present\n- authority value matches path convention (canonical/, policy/, adr/, architecture/)\n- Authority-specific banned terms (e.g. canonical forbids ephemeral language)\n- Link hygiene: resolves relative links and checks target existence\n- No ephemeral docs staged for commit\n- README/index files and docs/reference/v1/ are exempt\n\nUsage:\n    # Lint staged files only (for pre-commit hook)\n    python tools/lint_docs.py --staged [files...]\n\n    # Lint specific files\n    python tools/lint_docs.py docs/canonical/glossary.md docs/policy/foo.md\n\n    # Lint all docs\n    python tools/lint_docs.py --all\n\nExit codes:\n    0 = all checks pass\n    1 = lint errors found",
+      "blob_sha": "aa8822bc3efc46cc785c96193aee1c840bf9a67a",
+      "metadata": {
+        "lines": 325,
+        "size_bytes": 11274,
+        "modified": "2026-02-24T16:50:27.551809"
+      }
+    },
+    {
+      "path": "tools/llm_client.py",
+      "content_type": "code",
+      "category": "Tools",
+      "authority": null,
+      "title": "Shared LLM client for MOC generation scripts",
+      "description": "Shared LLM client for MOC generation scripts.\n\nProvides a unified interface for generating descriptions of code,\ndocumentation, and script files. Defaults to a local in-process\nTransformers harness for stability; Ollama remains opt-in.\n\nBackend selection via MOC_LLM_BACKEND env var:\n  - \"local\" (default): in-process Transformers (MOC_LOCAL_MODEL_PATH)\n  - \"ollama\": local Ollama HTTP/CLI fallback\n\nAuthor: @darianrosebrook",
+      "blob_sha": "9724f22dc2d485e52ee8f2bb9adfbb11f8394734",
+      "metadata": {
+        "lines": 479,
+        "size_bytes": 16555,
+        "modified": "2026-02-24T16:30:07.010019"
+      }
+    },
+    {
+      "path": "scripts/new_feature.sh",
+      "content_type": "script",
+      "category": "Scripts",
+      "authority": null,
+      "title": "Create a new CAWS feature spec + optional worktree",
+      "description": "Create a new CAWS feature spec + optional worktree\n\nUsage:\nscripts/new_feature.sh SPINE-002 \"ByteState/Code32 implementation\"\nscripts/new_feature.sh SPINE-002 \"ByteState/Code32 implementation\" --worktree\n\nThis script:\n1. Creates a feature spec in .caws/specs/<ID>.yaml\n2. Optionally creates a git worktree for isolated development",
+      "blob_sha": "4c0e23a1b52c9b1f15b12f1f08fdff5ec7af260d",
+      "metadata": {
+        "lines": 80,
+        "size_bytes": 1901,
+        "modified": "2026-02-24T14:37:26.417494"
+      }
+    },
+    {
+      "path": ".githooks/commit-msg",
+      "content_type": "script",
+      "category": "Git Hooks",
+      "authority": null,
+      "title": "CAWS commit-msg hook: enforce conventional commits + work tags",
+      "description": "CAWS commit-msg hook: enforce conventional commits + work tags\n\nPolicy:\n- All commits must use conventional commit format: type(scope): message\n- Commits touching kernel/ or docs/canonical/ on the main branch\nmust include a CAWS spec reference: [SPINE-NNN] or (SPINE-NNN)\n\nInstall: git config core.hooksPath .githooks",
+      "blob_sha": "78189d45f812a3e48811e700ed0f858ca21dfaa4",
+      "metadata": {
+        "lines": 47,
+        "size_bytes": 1840,
+        "modified": "2026-02-24T14:37:15.321873"
+      }
+    },
+    {
+      "path": ".githooks/pre-commit",
+      "content_type": "script",
+      "category": "Git Hooks",
+      "authority": null,
+      "title": "CAWS pre-commit hook: doc authority linter + docs index staleness check",
+      "description": "CAWS pre-commit hook: doc authority linter + docs index staleness check\nLints staged, non-ignored docs against the index (staged content).\nInstall: git config core.hooksPath .githooks",
+      "blob_sha": "2ae16223b30e9e8714f88aaecf2a63b99665435e",
+      "metadata": {
+        "lines": 27,
+        "size_bytes": 826,
+        "modified": "2026-02-24T16:49:39.371899"
+      }
+    },
+    {
+      "path": "schemas/SolveRequestV1.schema.json",
+      "content_type": "schema",
+      "category": "Schemas",
+      "authority": null,
+      "title": "SolveRequestV1.schema",
+      "description": null,
+      "blob_sha": "25251d0ee4fa9047238e973b83163705d0022adf",
+      "metadata": {
+        "lines": 112,
+        "size_bytes": 2128,
+        "modified": "2026-02-24T16:52:50.289208"
+      }
+    },
+    {
+      "path": "schemas/SolveResponseV1.schema.json",
+      "content_type": "schema",
+      "category": "Schemas",
+      "authority": null,
+      "title": "SolveResponseV1.schema",
+      "description": null,
+      "blob_sha": "73a461427c27b46922c2fa94a429ca9ee70a19be",
+      "metadata": {
+        "lines": 61,
+        "size_bytes": 1032,
+        "modified": "2026-02-24T16:52:50.289491"
+      }
+    },
+    {
+      "path": ".caws/specs/SPINE-001.yaml",
+      "content_type": "config",
+      "category": "CAWS Feature Specs",
+      "authority": null,
+      "title": "V2 Spine: Kernel contract surface, ByteState/Code32, ByteTrace, World Harness (M0-M3)",
+      "description": null,
+      "blob_sha": "88940e4c7fe42c7d162730b24113200f94633102",
+      "metadata": {
+        "lines": 127,
+        "size_bytes": 5107,
+        "modified": "2026-02-24T14:21:36.579532"
+      }
+    },
+    {
+      "path": "benchmarks/README.md",
+      "content_type": "documentation",
+      "category": "Benchmarks",
+      "authority": null,
+      "title": "Benchmarks",
+      "description": null,
+      "blob_sha": "0b2ebc7509f6caa4001c7d761fe4b3a49c75f7b6",
+      "metadata": {
+        "lines": 19,
+        "size_bytes": 712,
+        "modified": "2026-02-24T08:22:32.975614"
+      }
+    },
+    {
+      "path": "benchmarks/artifacts/README.md",
+      "content_type": "documentation",
+      "category": "Benchmarks",
+      "authority": null,
+      "title": "Benchmark artifacts (reference)",
+      "description": null,
+      "blob_sha": "66366680c6d7d089b2e93069e626abca2fe2990d",
+      "metadata": {
+        "lines": 4,
+        "size_bytes": 225,
+        "modified": "2026-02-24T08:22:32.976074"
+      }
+    },
+    {
+      "path": "benchmarks/artifacts/benchmark_report_20260206_122058.md",
+      "content_type": "documentation",
+      "category": "Benchmarks",
+      "authority": null,
+      "title": "Sterling Benchmark Report",
+      "description": null,
+      "blob_sha": "416f7762327085418dc5583ed5e6de96eb2100f3",
+      "metadata": {
+        "lines": 89,
+        "size_bytes": 3420,
+        "modified": "2026-02-24T08:22:32.976316"
+      }
+    },
+    {
+      "path": "benchmarks/artifacts/unified_benchmark_20260220_153525.json",
+      "content_type": "documentation",
+      "category": "Benchmarks",
+      "authority": null,
+      "title": "unified_benchmark_20260220_153525.json",
+      "description": null,
+      "blob_sha": "829334121d2114c8d9a73a9bd6fed67b7c455381",
+      "metadata": {
+        "lines": 557,
+        "size_bytes": 18231,
+        "modified": "2026-02-24T08:22:32.976559"
+      }
+    },
+    {
+      "path": "benchmarks/artifacts/unified_benchmark_20260220_153525_policy_validation.json",
+      "content_type": "documentation",
+      "category": "Benchmarks",
+      "authority": null,
+      "title": "unified_benchmark_20260220_153525_policy_validation.json",
+      "description": null,
+      "blob_sha": "812b51d23cb72a08579df12c3001f6525a2bbe57",
+      "metadata": {
+        "lines": 138,
+        "size_bytes": 3672,
+        "modified": "2026-02-24T08:22:32.976824"
+      }
+    }
+  ]
+}

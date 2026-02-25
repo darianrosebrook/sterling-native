@@ -1,0 +1,47 @@
+#!/bin/bash
+# CAWS commit-msg hook: enforce conventional commits + work tags
+#
+# Policy:
+#   - All commits must use conventional commit format: type(scope): message
+#   - Commits touching kernel/ or docs/canonical/ on the main branch
+#     must include a CAWS spec reference: [SPINE-NNN] or (SPINE-NNN)
+#
+# Install: git config core.hooksPath .githooks
+
+set -euo pipefail
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(head -1 "$COMMIT_MSG_FILE")
+
+# --- Conventional commit format check ---
+# type(scope): message  OR  type: message
+CONVENTIONAL_RE='^(feat|fix|refactor|docs|chore|test|perf|ci|build|style|revert)(\([a-zA-Z0-9_/-]+\))?: .+'
+if ! echo "$COMMIT_MSG" | grep -qE "$CONVENTIONAL_RE"; then
+  echo "error: commit message must follow conventional format:" >&2
+  echo "  type(scope): description" >&2
+  echo "  valid types: feat fix refactor docs chore test perf ci build style revert" >&2
+  echo "  got: $COMMIT_MSG" >&2
+  exit 1
+fi
+
+# --- CAWS spec reference check for protected paths ---
+# Only enforce on main branch
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
+  # Check if any staged files touch protected paths
+  PROTECTED_FILES=$(git diff --cached --name-only | grep -E '^(kernel/|docs/canonical/)' || true)
+  if [ -n "$PROTECTED_FILES" ]; then
+    # Require a spec reference like [SPINE-001] or (SPINE-001)
+    SPEC_REF_RE='(\[[A-Z]+-[0-9]+\]|\([A-Z]+-[0-9]+\))'
+    FULL_MSG=$(cat "$COMMIT_MSG_FILE")
+    if ! echo "$FULL_MSG" | grep -qE "$SPEC_REF_RE"; then
+      echo "error: commits touching kernel/ or docs/canonical/ on main require a CAWS spec reference" >&2
+      echo "  add [SPINE-NNN] to the commit message or body" >&2
+      echo "  protected files in this commit:" >&2
+      echo "$PROTECTED_FILES" | sed 's/^/    /' >&2
+      exit 1
+    fi
+  fi
+fi
+
+exit 0

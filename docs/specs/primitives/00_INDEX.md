@@ -1,9 +1,13 @@
 ---
+authority: architecture
+status: imported
+source: tmp/capability_primitives_bundle
 version: v0.4
-authority: canonical
-date: 2026-02-01
 ---
 # Capability Primitive Implementation Specs Bundle
+
+Version: v0.4
+Date: 2026-02-01
 
 This bundle decomposes Sterling's reasoning work into domain-agnostic capability primitives. Each primitive has its own implementation spec and cert-grade gates.
 
@@ -365,6 +369,5 @@ This bundle decomposes Sterling's reasoning work into domain-agnostic capability
 
 ## See Also
 
-- [Capability Testing Guide](../../eval/CAPABILITY_TESTING.md) - How primitives map to benchmark domains
-- [Toy Domains Analysis](../../working/experiments/worlds/toy-domains.md) - Signal worlds for unproven capabilities
 - [I/O Contract](00_IO_CONTRACT.md) - Rig input/output schemas
+- [v1 Toy Domains](../../reference/v1/toy-domains.md) - Signal worlds for unproven capabilities *(v1 reference)*

@@ -1,0 +1,2157 @@
+{
+  "version": "1.0.0",
+  "aggregate_hash": "457e653626a0862b",
+  "entry_count": 105,
+  "entries": [
+    {
+      "path": "docs/README.md",
+      "title": "Docs Index",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "72f45cd24dffc1c8",
+      "links": []
+    },
+    {
+      "path": "docs/adr/0001-compilation-boundary.md",
+      "title": "ADR 0001: Compilation Boundary as Architectural Spine",
+      "authority": "adr",
+      "status": "Accepted (Design target)",
+      "scope": null,
+      "content_hash": "af6028d454d07bcd",
+      "links": []
+    },
+    {
+      "path": "docs/adr/0002-byte-trace-is-canonical.md",
+      "title": "ADR 0002: ByteTrace is the Canonical Trace Artifact",
+      "authority": "adr",
+      "status": "Accepted (Design target)",
+      "scope": null,
+      "content_hash": "70f143d54414dbe3",
+      "links": []
+    },
+    {
+      "path": "docs/adr/0003-neural-advisory-only.md",
+      "title": "ADR 0003: Neural Components are Advisory Only (Enforced by API Shape)",
+      "authority": "adr",
+      "status": "Accepted (Design target)",
+      "scope": null,
+      "content_hash": "f840f79fa41d1289",
+      "links": []
+    },
+    {
+      "path": "docs/adr/0004-operator-taxonomy-names.md",
+      "title": "ADR 0004: Operator Taxonomy Names (Seek/Memorize/Perceive/Knowledge/Control)",
+      "authority": "adr",
+      "status": "Accepted",
+      "scope": null,
+      "content_hash": "5fcbed5e186f0284",
+      "links": []
+    },
+    {
+      "path": "docs/adr/0005-v1-is-oracle-not-dependency.md",
+      "title": "ADR 0005: v1 Is a Test Oracle, Not a Dependency",
+      "authority": "adr",
+      "status": "Accepted",
+      "scope": null,
+      "content_hash": "7e2cd361545cea14",
+      "links": []
+    },
+    {
+      "path": "docs/adr/README.md",
+      "title": "Architecture Decision Records (ADRs)",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "9c8defd89302829b",
+      "links": []
+    },
+    {
+      "path": "docs/architecture/clean_sheet_architecture.md",
+      "title": "Sterling v2: Clean-Sheet Architecture",
+      "authority": "architecture",
+      "status": "Design Document (not a commitment — a compass)",
+      "scope": null,
+      "content_hash": "c3334b48d4dae7a4",
+      "links": [
+        {
+          "text": "Future State Vision 2027",
+          "target": "docs/architecture/../reference/v1/future_state_vision_2027.md"
+        },
+        {
+          "text": "North Star",
+          "target": "docs/architecture/../reference/v1/canonical/north_star.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/architecture/module_map.md",
+      "title": "Module Map (Sterling Native)",
+      "authority": "architecture",
+      "status": null,
+      "scope": null,
+      "content_hash": "2d5b90640c834379",
+      "links": []
+    },
+    {
+      "path": "docs/architecture/v1_contract_promotion_queue.md",
+      "title": "v1 Contract Promotion Queue",
+      "authority": "architecture",
+      "status": null,
+      "scope": null,
+      "content_hash": "d0852c56dcb90346",
+      "links": []
+    },
+    {
+      "path": "docs/architecture/v2_success_rubric.md",
+      "title": "Sterling v2 Success Rubric",
+      "authority": "architecture",
+      "status": "Design target",
+      "scope": null,
+      "content_hash": "ba68f6707b5f8dce",
+      "links": []
+    },
+    {
+      "path": "docs/canonical/README.md",
+      "title": "Canonical Definitions (Sterling Native)",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "5d504945c1233f3e",
+      "links": []
+    },
+    {
+      "path": "docs/canonical/bytestate_compilation_boundary.md",
+      "title": "ByteState Compilation Boundary",
+      "authority": "canonical",
+      "status": "Partially implemented (core compilation boundary operational; epoch transitions and dynamic domain handshake not yet wired)",
+      "scope": null,
+      "content_hash": "bbbc0ba86893bafc",
+      "links": [
+        {
+          "text": "code32_bytestate.md",
+          "target": "docs/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "philosophy.md",
+          "target": "docs/canonical/philosophy.md"
+        },
+        {
+          "text": "philosophy.md",
+          "target": "docs/canonical/philosophy.md"
+        },
+        {
+          "text": "`philosophy_full.md`",
+          "target": "docs/canonical/../reference/v1/philosophy_full.md"
+        },
+        {
+          "text": "code32_bytestate.md",
+          "target": "docs/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "code32_bytestate.md",
+          "target": "docs/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "code32_bytestate.md",
+          "target": "docs/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "philosophy.md",
+          "target": "docs/canonical/philosophy.md"
+        },
+        {
+          "text": "neural_usage_contract.md",
+          "target": "docs/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "text_boundary_index.md",
+          "target": "docs/canonical/../reference/v1/canonical/text_boundary_index.md"
+        },
+        {
+          "text": "minecraft_domains.md",
+          "target": "docs/canonical/../reference/v1/minecraft_domains.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/canonical/code32_bytestate.md",
+      "title": "Code32 and ByteStateV1: Hardware-Native Semantic Representation",
+      "authority": "canonical",
+      "status": "Implemented (V1 substrate complete)",
+      "scope": null,
+      "content_hash": "fcbfb39a9191eb16",
+      "links": [
+        {
+          "text": "light_vs_full.md",
+          "target": "docs/canonical/../reference/v1/canonical/light_vs_full.md"
+        },
+        {
+          "text": "Neural Usage Contract",
+          "target": "docs/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "light_vs_full.md",
+          "target": "docs/canonical/../reference/v1/canonical/light_vs_full.md"
+        },
+        {
+          "text": "neural_usage_contract.md",
+          "target": "docs/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "Capability Primitives P14",
+          "target": "docs/canonical/../specs/primitives/00_INDEX.md"
+        },
+        {
+          "text": "Capability Primitives P16",
+          "target": "docs/canonical/../specs/primitives/00_INDEX.md"
+        },
+        {
+          "text": "Capability Primitives P19",
+          "target": "docs/canonical/../specs/primitives/00_INDEX.md"
+        },
+        {
+          "text": "bytestate_compilation_boundary.md",
+          "target": "docs/canonical/bytestate_compilation_boundary.md"
+        },
+        {
+          "text": "ByteState Compilation Boundary",
+          "target": "docs/canonical/bytestate_compilation_boundary.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/canonical/core_constraints.md",
+      "title": "Core Constraints v1",
+      "authority": "canonical",
+      "status": null,
+      "scope": null,
+      "content_hash": "be0fed5995b40285",
+      "links": []
+    },
+    {
+      "path": "docs/canonical/global_invariants.md",
+      "title": "",
+      "authority": "canonical",
+      "status": null,
+      "scope": null,
+      "content_hash": "f73570bfcf0b1a2f",
+      "links": []
+    },
+    {
+      "path": "docs/canonical/glossary.md",
+      "title": "Sterling Native Glossary",
+      "authority": "canonical",
+      "status": "v2 canonical — curated vocabulary for Sterling Native.",
+      "scope": "Definitions enforced by contracts, invariants, and ADRs. For the comprehensive v1 glossary (historical), see docs/reference/v1/glossary_full.md.",
+      "content_hash": "ee95bb7f56039c73",
+      "links": [
+        {
+          "text": "`code32_bytestate.md`",
+          "target": "docs/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "`bytestate_compilation_boundary.md`",
+          "target": "docs/canonical/bytestate_compilation_boundary.md"
+        },
+        {
+          "text": "ADR 0002",
+          "target": "docs/canonical/../adr/0002-byte-trace-is-canonical.md"
+        },
+        {
+          "text": "ADR 0001",
+          "target": "docs/canonical/../adr/0001-compilation-boundary.md"
+        },
+        {
+          "text": "ADR 0004",
+          "target": "docs/canonical/../adr/0004-operator-taxonomy-names.md"
+        },
+        {
+          "text": "`neural_usage_contract.md`",
+          "target": "docs/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "ADR 0003",
+          "target": "docs/canonical/../adr/0003-neural-advisory-only.md"
+        },
+        {
+          "text": "`core_constraints.md`",
+          "target": "docs/canonical/core_constraints.md"
+        },
+        {
+          "text": "`docs/specs/primitives/`",
+          "target": "docs/canonical/../specs/primitives/00_INDEX.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/canonical/neural_usage_contract.md",
+      "title": "Neural Usage Contract",
+      "authority": "canonical",
+      "status": null,
+      "scope": null,
+      "content_hash": "2dc032d7a4fd353d",
+      "links": []
+    },
+    {
+      "path": "docs/canonical/philosophy.md",
+      "title": "Sterling Native Design Philosophy",
+      "authority": "canonical",
+      "status": "v2 canonical",
+      "scope": null,
+      "content_hash": "a21457dbc732cf11",
+      "links": [
+        {
+          "text": "docs/reference/v1/philosophy_full.md",
+          "target": "docs/canonical/../reference/v1/philosophy_full.md"
+        },
+        {
+          "text": "ADR 0001",
+          "target": "docs/canonical/../adr/0001-compilation-boundary.md"
+        },
+        {
+          "text": "`bytestate_compilation_boundary.md`",
+          "target": "docs/canonical/bytestate_compilation_boundary.md"
+        },
+        {
+          "text": "ADR 0003",
+          "target": "docs/canonical/../adr/0003-neural-advisory-only.md"
+        },
+        {
+          "text": "`neural_usage_contract.md`",
+          "target": "docs/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "ADR 0002",
+          "target": "docs/canonical/../adr/0002-byte-trace-is-canonical.md"
+        },
+        {
+          "text": "ADR 0004",
+          "target": "docs/canonical/../adr/0004-operator-taxonomy-names.md"
+        },
+        {
+          "text": "`docs/reference/v1/philosophy_full.md`",
+          "target": "docs/canonical/../reference/v1/philosophy_full.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/policy/benchmarking_policy.md",
+      "title": "Benchmarking Policy",
+      "authority": "policy",
+      "status": "Draft (Sterling Native)",
+      "scope": "All benchmarks and performance claims",
+      "content_hash": "2b42d442caae61a6",
+      "links": []
+    },
+    {
+      "path": "docs/policy/canonical_doc_change_policy.md",
+      "title": "Canonical Document Change Policy",
+      "authority": "policy",
+      "status": "“Draft (Sterling Native)”",
+      "scope": "“docs/canonical/* and other canonical surfaces”",
+      "content_hash": "818ff858f9494ac2",
+      "links": []
+    },
+    {
+      "path": "docs/policy/doc_authority_policy.md",
+      "title": "Document Authority Policy",
+      "authority": "policy",
+      "status": "Active",
+      "scope": "All documents in docs/ except docs/reference/v1/",
+      "content_hash": "df9fc292309aeda4",
+      "links": []
+    },
+    {
+      "path": "docs/policy/domain_transfer_policy.md",
+      "title": "Domain Transfer Scenario Policy",
+      "authority": "policy",
+      "status": "Draft (Sterling Native)",
+      "scope": "Transfer claims across worlds / truth regimes",
+      "content_hash": "8237c0bcd599ced8",
+      "links": []
+    },
+    {
+      "path": "docs/policy/governance_policy.md",
+      "title": "Governance Policy",
+      "authority": "policy",
+      "status": "Draft (Sterling Native)",
+      "scope": "Run modes, eligibility, and artifact semantics",
+      "content_hash": "2879adbe1108c1e6",
+      "links": []
+    },
+    {
+      "path": "docs/policy/versioning_policy.md",
+      "title": "Versioning and Epoch Policy",
+      "authority": "policy",
+      "status": "Draft (Sterling Native)",
+      "scope": "schemas, registries, epochs, and compatibility",
+      "content_hash": "6d65026c5aa9a6a6",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/PROVING-GROUNDS.md",
+      "title": "Test-Scenarios as Capability Proving Grounds",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "1130f301db290862",
+      "links": [
+        {
+          "text": "`README-demos.md`",
+          "target": "docs/reference/v1/README-demos.md"
+        },
+        {
+          "text": "`demo-promotion.md`",
+          "target": "docs/reference/v1/demo-promotion.md"
+        },
+        {
+          "text": "`capability-promotion-runbook.md`",
+          "target": "docs/reference/v1/capability-promotion-runbook.md"
+        },
+        {
+          "text": "`docs/reference/capability_primitives_bundle/00_INDEX.md`",
+          "target": "docs/reference/v1/../docs/reference/capability_primitives_bundle/00_INDEX.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/README-demos.md",
+      "title": "Test Scenarios Capability Evidence Ledger",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "82c3baba2523fafd",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/README.md",
+      "title": "Sterling – Semantic Tree Embedding & Reasoning for Linguistic Neuro-Symbolic Graphs",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "cdaed17ca277353e",
+      "links": [
+        {
+          "text": "docs/canonical/north_star.md",
+          "target": "docs/reference/v1/docs/canonical/north_star.md"
+        },
+        {
+          "text": "docs/canonical/core_constraints_v1.md",
+          "target": "docs/reference/v1/docs/canonical/core_constraints_v1.md"
+        },
+        {
+          "text": "docs/canonical/neural_usage_contract.md",
+          "target": "docs/reference/v1/docs/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "docs/canonical/evaluation_gates_v1.md",
+          "target": "docs/reference/v1/docs/canonical/evaluation_gates_v1.md"
+        },
+        {
+          "text": "docs/guides/newcomers.md",
+          "target": "docs/reference/v1/docs/guides/newcomers.md"
+        },
+        {
+          "text": "Sterling",
+          "target": "docs/reference/v1/README.md#L62-L70"
+        },
+        {
+          "text": "Sterling",
+          "target": "docs/reference/v1/README.md#L66-L74"
+        },
+        {
+          "text": "Sterling",
+          "target": "docs/reference/v1/README.md#L66-L74"
+        },
+        {
+          "text": "Sterling",
+          "target": "docs/reference/v1/README.md#L66-L74"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/README.md",
+      "title": "v1 Canonical Contracts (Quarantine)",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "25e1a77358f3540b",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/canonical/claim_schema_system_v1.md",
+      "title": "Claim and Schema System Contract",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "9a8feeeddaf1a58e",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Governance Certification",
+          "target": "docs/reference/v1/canonical/governance_certification_contract_v1.md"
+        },
+        {
+          "text": "Hashing Contracts",
+          "target": "docs/reference/v1/canonical/hashing_contracts_v1.md"
+        },
+        {
+          "text": "Proof Evidence System",
+          "target": "docs/reference/v1/canonical/proof_evidence_system_v1.md"
+        },
+        {
+          "text": "State Model",
+          "target": "docs/reference/v1/canonical/state_model_contract_v1.md"
+        },
+        {
+          "text": "Semantic Working Memory",
+          "target": "docs/reference/v1/canonical/semantic_working_memory_contract_v0.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/conformance.md",
+      "title": "Theory Conformance Specification",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "f675ce315ecbc217",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/core_constraints_v1.md",
+      "title": "Core Constraints v1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "5f07ba777dd16755",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/core_features.md",
+      "title": "Sterling Core Features",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "823f70558752a3f2",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Value Function Components v1",
+          "target": "docs/reference/v1/canonical/value_function_components_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/discourse_intent_contract_v1.md",
+      "title": "Discourse Intent Contract v1.1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "7f8a8336c580b0a5",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "World Adapter Protocol",
+          "target": "docs/reference/v1/canonical/world_adapter_protocol_v1.md"
+        },
+        {
+          "text": "Text Hard IR Contract",
+          "target": "docs/reference/v1/canonical/text_hard_ir_contract_v1.md"
+        },
+        {
+          "text": "Claim Schema System",
+          "target": "docs/reference/v1/canonical/claim_schema_system_v1.md"
+        },
+        {
+          "text": "Operator Registry Contract",
+          "target": "docs/reference/v1/canonical/operator_registry_contract_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/evaluation_gates_v1.md",
+      "title": "Evaluation Gates v1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "fb4b114cc69668bb",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/governance_certification_contract_v1.md",
+      "title": "Governance and Certification Contract",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "43b453bc8683041f",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Hashing Contracts",
+          "target": "docs/reference/v1/canonical/hashing_contracts_v1.md"
+        },
+        {
+          "text": "Proof Evidence System",
+          "target": "docs/reference/v1/canonical/proof_evidence_system_v1.md"
+        },
+        {
+          "text": "Evaluation Gates",
+          "target": "docs/reference/v1/canonical/evaluation_gates_v1.md"
+        },
+        {
+          "text": "Conformance",
+          "target": "docs/reference/v1/canonical/conformance.md"
+        },
+        {
+          "text": "State Model",
+          "target": "docs/reference/v1/canonical/state_model_contract_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/hashing_contracts_v1.md",
+      "title": "Hashing Contracts and Canonical Serialization",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "b0f44d8ea7d8cedf",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Code32 and ByteState",
+          "target": "docs/reference/v1/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "Governance Certification",
+          "target": "docs/reference/v1/canonical/governance_certification_contract_v1.md"
+        },
+        {
+          "text": "Proof Evidence System",
+          "target": "docs/reference/v1/canonical/proof_evidence_system_v1.md"
+        },
+        {
+          "text": "Conformance",
+          "target": "docs/reference/v1/canonical/conformance.md"
+        },
+        {
+          "text": "State Model Contract",
+          "target": "docs/reference/v1/canonical/state_model_contract_v1.md"
+        },
+        {
+          "text": "Rust Parity Audit",
+          "target": "docs/reference/v1/canonical/../../rust_parity_audit.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/knowledge_graph_contract_v1.md",
+      "title": "Knowledge Graph and Domain Registration Contract",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "f477bdd82205a6a9",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Hashing Contracts",
+          "target": "docs/reference/v1/canonical/hashing_contracts_v1.md"
+        },
+        {
+          "text": "Governance Certification",
+          "target": "docs/reference/v1/canonical/governance_certification_contract_v1.md"
+        },
+        {
+          "text": "Proof Evidence System",
+          "target": "docs/reference/v1/canonical/proof_evidence_system_v1.md"
+        },
+        {
+          "text": "State Model",
+          "target": "docs/reference/v1/canonical/state_model_contract_v1.md"
+        },
+        {
+          "text": "Claim Schema System",
+          "target": "docs/reference/v1/canonical/claim_schema_system_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/light_vs_full.md",
+      "title": "Sterling Light vs Full",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "a623f08a1ba68b53",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Sterling Architecture Layers",
+          "target": "docs/reference/v1/canonical/sterling_architecture_layers.md"
+        },
+        {
+          "text": "Code32 and ByteStateV1",
+          "target": "docs/reference/v1/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "Sterling Architecture Layers",
+          "target": "docs/reference/v1/canonical/sterling_architecture_layers.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/linguistic_ir_contract_v0.md",
+      "title": "Linguistic IR Contract v0",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "2a314a3d9f56c986",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/module_interdependencies_v1.md",
+      "title": "Module Interdependencies v1.1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "71d8f6338881c4f7",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "State Model Contract",
+          "target": "docs/reference/v1/canonical/state_model_contract_v1.md"
+        },
+        {
+          "text": "Operator Registry Contract",
+          "target": "docs/reference/v1/canonical/operator_registry_contract_v1.md"
+        },
+        {
+          "text": "Hashing Contracts",
+          "target": "docs/reference/v1/canonical/hashing_contracts_v1.md"
+        },
+        {
+          "text": "Governance Certification Contract",
+          "target": "docs/reference/v1/canonical/governance_certification_contract_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/north_star.md",
+      "title": "Sterling's North Star",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "877e5809ac4cda49",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/operator_induction_contract_v1.md",
+      "title": "Operator Induction Contract v1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "6a50b423be473e1f",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Operator Registry Contract",
+          "target": "docs/reference/v1/canonical/operator_registry_contract_v1.md"
+        },
+        {
+          "text": "Governance & Certification",
+          "target": "docs/reference/v1/canonical/governance_certification_contract_v1.md"
+        },
+        {
+          "text": "Proof & Evidence System",
+          "target": "docs/reference/v1/canonical/proof_evidence_system_v1.md"
+        },
+        {
+          "text": "Hashing Contracts",
+          "target": "docs/reference/v1/canonical/hashing_contracts_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/operator_policy.md",
+      "title": "Sterling Operator Learning v1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "b7d2a08a63a6fbe6",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/operator_registry_contract_v1.md",
+      "title": "Operator Registry Contract v1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "1c7f11a763f5248f",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "State Model Contract",
+          "target": "docs/reference/v1/canonical/state_model_contract_v1.md"
+        },
+        {
+          "text": "Governance & Certification",
+          "target": "docs/reference/v1/canonical/governance_certification_contract_v1.md"
+        },
+        {
+          "text": "Operator Induction Contract",
+          "target": "docs/reference/v1/canonical/operator_induction_contract_v1.md"
+        },
+        {
+          "text": "Hashing Contracts",
+          "target": "docs/reference/v1/canonical/hashing_contracts_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/proof_evidence_system_v1.md",
+      "title": "Proof and Evidence System Contract",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "3009a11444023af2",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Hashing Contracts",
+          "target": "docs/reference/v1/canonical/hashing_contracts_v1.md"
+        },
+        {
+          "text": "Governance Certification",
+          "target": "docs/reference/v1/canonical/governance_certification_contract_v1.md"
+        },
+        {
+          "text": "Claim Schema System",
+          "target": "docs/reference/v1/canonical/claim_schema_system_v1.md"
+        },
+        {
+          "text": "Code32 and ByteState",
+          "target": "docs/reference/v1/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "Conformance",
+          "target": "docs/reference/v1/canonical/conformance.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/reasoning_framework.md",
+      "title": "The Sterling Reasoning Framework",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "4fb6bdb655fcb6cc",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "World Adapter Protocol",
+          "target": "docs/reference/v1/canonical/world_adapter_protocol_v1.md"
+        },
+        {
+          "text": "docs/canonical/north_star.md",
+          "target": "docs/reference/v1/canonical/../canonical/north_star.md"
+        },
+        {
+          "text": "docs/canonical/core_constraints_v1.md",
+          "target": "docs/reference/v1/canonical/../canonical/core_constraints_v1.md"
+        },
+        {
+          "text": "docs/canonical/neural_usage_contract.md",
+          "target": "docs/reference/v1/canonical/../canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "docs/canonical/neural_usage_contract.md",
+          "target": "docs/reference/v1/canonical/../canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "Value Function Components",
+          "target": "docs/reference/v1/canonical/value_function_components_v1.md"
+        },
+        {
+          "text": "State Model Contract",
+          "target": "docs/reference/v1/canonical/state_model_contract_v1.md"
+        },
+        {
+          "text": "Value Function Components",
+          "target": "docs/reference/v1/canonical/value_function_components_v1.md"
+        },
+        {
+          "text": "Operator Registry Contract",
+          "target": "docs/reference/v1/canonical/operator_registry_contract_v1.md"
+        },
+        {
+          "text": "World Adapter Protocol",
+          "target": "docs/reference/v1/canonical/world_adapter_protocol_v1.md"
+        },
+        {
+          "text": "Core Constraints",
+          "target": "docs/reference/v1/canonical/core_constraints_v1.md"
+        },
+        {
+          "text": "Neural Usage Contract",
+          "target": "docs/reference/v1/canonical/neural_usage_contract.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/schema_registry.md",
+      "title": "",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "1a702eb6594cb9a5",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/schemas.md",
+      "title": "Sterling Schema Registry v1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "378e78d2184aa6c7",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Hashing Contracts",
+          "target": "docs/reference/v1/canonical/hashing_contracts_v1.md"
+        },
+        {
+          "text": "Governance Certification Contract",
+          "target": "docs/reference/v1/canonical/governance_certification_contract_v1.md"
+        },
+        {
+          "text": "Proof Evidence System",
+          "target": "docs/reference/v1/canonical/proof_evidence_system_v1.md"
+        },
+        {
+          "text": "Operator Registry Contract",
+          "target": "docs/reference/v1/canonical/operator_registry_contract_v1.md"
+        },
+        {
+          "text": "World Adapter Protocol",
+          "target": "docs/reference/v1/canonical/world_adapter_protocol_v1.md"
+        },
+        {
+          "text": "Module Interdependencies",
+          "target": "docs/reference/v1/canonical/module_interdependencies_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/semantic_realization_convergence.md",
+      "title": "Semantic Realization Convergence Design",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "ef9509d385edb98b",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Sterling Architecture Layers",
+          "target": "docs/reference/v1/canonical/sterling_architecture_layers.md"
+        },
+        {
+          "text": "Code32 and ByteStateV1",
+          "target": "docs/reference/v1/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "ByteState Compilation Boundary",
+          "target": "docs/reference/v1/canonical/bytestate_compilation_boundary.md"
+        },
+        {
+          "text": "SWM Contract v0",
+          "target": "docs/reference/v1/canonical/../../canonical/semantic_working_memory_contract_v0.md"
+        },
+        {
+          "text": "Diffusion Realization v10",
+          "target": "docs/reference/v1/canonical/../specifications/ir/diffusion_realization_v10.md"
+        },
+        {
+          "text": "Realization IR Text Contract",
+          "target": "docs/reference/v1/canonical/../specifications/text-semantic-ir/realization-ir-text-contract.md"
+        },
+        {
+          "text": "Semantic Text Contract",
+          "target": "docs/reference/v1/canonical/../specifications/text-semantic-ir/semantic-text-contract.md"
+        },
+        {
+          "text": "MS-00 Thesis",
+          "target": "docs/reference/v1/canonical/../specifications/memory-substrate/MS-00-thesis.md"
+        },
+        {
+          "text": "MS-01 Claim Schema",
+          "target": "docs/reference/v1/canonical/../specifications/memory-substrate/MS-01-claim-schema.md"
+        },
+        {
+          "text": "MS Roadmap",
+          "target": "docs/reference/v1/canonical/../specifications/memory-substrate/MS-Roadmap.md"
+        },
+        {
+          "text": "Generative Inversion",
+          "target": "docs/reference/v1/canonical/../../theory/generative-inversion.md"
+        },
+        {
+          "text": "WordNet Harness",
+          "target": "docs/reference/v1/canonical/../../theory/wordnet_harness_not_an_oracle.md"
+        },
+        {
+          "text": "Diffusion Demo",
+          "target": "docs/reference/v1/canonical/../../../test-scenarios/diffusion-demo/README.md"
+        },
+        {
+          "text": "SWM I/O Demo",
+          "target": "docs/reference/v1/canonical/../../../test-scenarios/swm-io-demo/README.md"
+        },
+        {
+          "text": "Lemma-Grammar Demo",
+          "target": "docs/reference/v1/canonical/../../../test-scenarios/lemma-grammar-demo/README.md"
+        },
+        {
+          "text": "Realization LanguagePacks Demo",
+          "target": "docs/reference/v1/canonical/../../../test-scenarios/realization-languagepacks-demo/README.md"
+        },
+        {
+          "text": "Toy E2E Demo",
+          "target": "docs/reference/v1/canonical/../../../test-scenarios/toy-e2e-demo/README.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/semantic_working_memory_contract_v0.md",
+      "title": "Semantic Working Memory Contract v0",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "59e86868fe1fc96b",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Operator Induction Contract §8.2",
+          "target": "docs/reference/v1/canonical/operator_induction_contract_v1.md"
+        },
+        {
+          "text": "Claim Schema System",
+          "target": "docs/reference/v1/canonical/claim_schema_system_v1.md"
+        },
+        {
+          "text": "Proof Evidence System",
+          "target": "docs/reference/v1/canonical/proof_evidence_system_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/state_model_contract_v1.md",
+      "title": "State Model and Search Contract",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "8345174f8effe362",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Value Function Components v1.1",
+          "target": "docs/reference/v1/canonical/value_function_components_v1.md"
+        },
+        {
+          "text": "Reasoning Framework",
+          "target": "docs/reference/v1/canonical/reasoning_framework.md"
+        },
+        {
+          "text": "Code32 and ByteState",
+          "target": "docs/reference/v1/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "Hashing Contracts",
+          "target": "docs/reference/v1/canonical/hashing_contracts_v1.md"
+        },
+        {
+          "text": "Semantic Working Memory",
+          "target": "docs/reference/v1/canonical/semantic_working_memory_contract_v0.md"
+        },
+        {
+          "text": "Evaluation Gates",
+          "target": "docs/reference/v1/canonical/evaluation_gates_v1.md"
+        },
+        {
+          "text": "Rust Parity Audit",
+          "target": "docs/reference/v1/canonical/../../rust_parity_audit.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/sterling_architecture_layers.md",
+      "title": "Sterling Architecture Layers",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "1d608308528cfebf",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "light_vs_full.md",
+          "target": "docs/reference/v1/canonical/light_vs_full.md"
+        },
+        {
+          "text": "Capability Campaign Plan",
+          "target": "docs/reference/v1/canonical/../../analysis/capability_campaign_plan.md"
+        },
+        {
+          "text": "Core Realignment Closeout",
+          "target": "docs/reference/v1/canonical/../../planning/core_realignment_2026_consolidated_closeout.md"
+        },
+        {
+          "text": "SWM Implementation Trackers",
+          "target": "docs/reference/v1/canonical/../../planning/semantic_working_memory_implementation.md"
+        },
+        {
+          "text": "Code32 and ByteStateV1",
+          "target": "docs/reference/v1/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "ByteState Compilation Boundary",
+          "target": "docs/reference/v1/canonical/bytestate_compilation_boundary.md"
+        },
+        {
+          "text": "Generative Inversion",
+          "target": "docs/reference/v1/canonical/../../working/experiments/diffusion/generative-inversion.md"
+        },
+        {
+          "text": "SEDD / Diffusion LLM Research",
+          "target": "docs/reference/v1/canonical/../../working/experiments/diffusion/diffusion-llm.md"
+        },
+        {
+          "text": "SWM I/O Integration",
+          "target": "docs/reference/v1/canonical/../../working/experiments/diffusion/SWM-IO.md"
+        },
+        {
+          "text": "Theory Document",
+          "target": "docs/reference/v1/canonical/../../theory/linguistic/sterling_full.md"
+        },
+        {
+          "text": "Neural Usage Contract",
+          "target": "docs/reference/v1/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "Agent Agency V4 Tasks",
+          "target": "docs/reference/v1/canonical/../../../../agent-agency/iterations/v4/docs/TASKS.md"
+        },
+        {
+          "text": "light_vs_full.md",
+          "target": "docs/reference/v1/canonical/light_vs_full.md"
+        },
+        {
+          "text": "code32_bytestate.md",
+          "target": "docs/reference/v1/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "bytestate_compilation_boundary.md",
+          "target": "docs/reference/v1/canonical/bytestate_compilation_boundary.md"
+        },
+        {
+          "text": "neural_usage_contract.md",
+          "target": "docs/reference/v1/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "Philosophy",
+          "target": "docs/reference/v1/canonical/../capability_primitives_bundle/philosophy.md"
+        },
+        {
+          "text": "Capability Campaign Plan",
+          "target": "docs/reference/v1/canonical/../../analysis/capability_campaign_plan.md"
+        },
+        {
+          "text": "SWM Contract",
+          "target": "docs/reference/v1/canonical/../../canonical/semantic_working_memory_contract_v0.md"
+        },
+        {
+          "text": "Generative Inversion",
+          "target": "docs/reference/v1/canonical/../../working/experiments/diffusion/generative-inversion.md"
+        },
+        {
+          "text": "Theory Document",
+          "target": "docs/reference/v1/canonical/../../theory/linguistic/sterling_full.md"
+        },
+        {
+          "text": "Toy Domains",
+          "target": "docs/reference/v1/canonical/../../working/experiments/worlds/toy-domains.md"
+        },
+        {
+          "text": "Induced Domains",
+          "target": "docs/reference/v1/canonical/../../working/experiments/worlds/induced-domain.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/text_boundary_index.md",
+      "title": "",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "fb0dc0c0ae50d05d",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/text_hard_ir_contract_v1.md",
+      "title": "Text Hard IR Contract v1.1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "5950ec88d9e729ca",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "World Adapter Protocol",
+          "target": "docs/reference/v1/canonical/world_adapter_protocol_v1.md"
+        },
+        {
+          "text": "Discourse Intent Contract",
+          "target": "docs/reference/v1/canonical/discourse_intent_contract_v1.md"
+        },
+        {
+          "text": "Semantic Realization Convergence",
+          "target": "docs/reference/v1/canonical/semantic_realization_convergence.md"
+        },
+        {
+          "text": "Claim Schema System",
+          "target": "docs/reference/v1/canonical/claim_schema_system_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/text_io_contract_v1.md",
+      "title": "Text I/O Contract v1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "aa9be2e2b331d59e",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/value_function_components_v1.md",
+      "title": "Value Function Components v1.1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "289cfab3d0844950",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "State Model Contract",
+          "target": "docs/reference/v1/canonical/state_model_contract_v1.md"
+        },
+        {
+          "text": "Reasoning Framework",
+          "target": "docs/reference/v1/canonical/reasoning_framework.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/world_adapter_protocol_v1.md",
+      "title": "World Adapter Protocol v1.1",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "e1afc8ff8251327b",
+      "links": [
+        {
+          "text": "promotion criteria",
+          "target": "docs/reference/v1/canonical/README.md"
+        },
+        {
+          "text": "Operator Registry Contract",
+          "target": "docs/reference/v1/canonical/operator_registry_contract_v1.md"
+        },
+        {
+          "text": "State Model Contract",
+          "target": "docs/reference/v1/canonical/state_model_contract_v1.md"
+        },
+        {
+          "text": "Discourse Intent Contract",
+          "target": "docs/reference/v1/canonical/discourse_intent_contract_v1.md"
+        },
+        {
+          "text": "Text Hard IR Contract",
+          "target": "docs/reference/v1/canonical/text_hard_ir_contract_v1.md"
+        },
+        {
+          "text": "Knowledge Graph Contract",
+          "target": "docs/reference/v1/canonical/knowledge_graph_contract_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/capability-promotion-runbook.md",
+      "title": "Capability Promotion Run Book",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "4ace54d8bcab0d3f",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/capability_campaign_plan.md",
+      "title": "Capability Campaign Plan and Acceptance Gates",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "b5111dac0a8bcca0",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/core_features.md",
+      "title": "Sterling Core Features",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "597ece458687abad",
+      "links": [
+        {
+          "text": "Value Function Components v1",
+          "target": "docs/reference/v1/value_function_components_v1.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/demo-promotion.md",
+      "title": "",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "a3fdc78f2d2b23d6",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/future_state_vision_2027.md",
+      "title": "Sterling Future State Vision: January 2027",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "2d313263d422f2a3",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/glossary_full.md",
+      "title": "Glossary of Sterling System Concepts",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "adef2bafbe90106b",
+      "links": [
+        {
+          "text": "View",
+          "target": "docs/reference/v1/canonical/north_star.md"
+        },
+        {
+          "text": "View",
+          "target": "docs/reference/v1/canonical/core_constraints_v1.md"
+        },
+        {
+          "text": "View",
+          "target": "docs/reference/v1/reference/canonical/sterling_architecture_layers.md"
+        },
+        {
+          "text": "sterling_architecture_layers.md",
+          "target": "docs/reference/v1/../reference/v1/canonical/sterling_architecture_layers.md"
+        },
+        {
+          "text": "View",
+          "target": "docs/reference/v1/reference/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "View",
+          "target": "docs/reference/v1/reference/canonical/bytestate_compilation_boundary.md"
+        },
+        {
+          "text": "View",
+          "target": "docs/reference/v1/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "View",
+          "target": "docs/reference/v1/canonical/evaluation_gates_v1.md"
+        },
+        {
+          "text": "core_constraints_v1.md",
+          "target": "docs/reference/v1/canonical/core_constraints_v1.md"
+        },
+        {
+          "text": "evaluation_gates_v1.md",
+          "target": "docs/reference/v1/canonical/evaluation_gates_v1.md"
+        },
+        {
+          "text": "neural_usage_contract.md",
+          "target": "docs/reference/v1/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "`docs/reference/v1/canonical/light_vs_full.md`",
+          "target": "docs/reference/v1/../reference/v1/canonical/light_vs_full.md"
+        },
+        {
+          "text": "`docs/architecture/clean_sheet_architecture.md`",
+          "target": "docs/reference/v1/../architecture/clean_sheet_architecture.md"
+        },
+        {
+          "text": "ADR 0001",
+          "target": "docs/reference/v1/../adr/0001-compilation-boundary.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/industry_convergence.md",
+      "title": "Industry Convergence Analysis (February 2026)",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "e7ba63abda263dd1",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/minecraft_domains.md",
+      "title": "Minecraft Domains for Sterling",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "03af12bdcbd788bc",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/myelin-sheath.md",
+      "title": "",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "d7cfeb39164bfd67",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/newcomers.md",
+      "title": "Sterling: An Introduction for Newcomers",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "ae8157cd72543bf8",
+      "links": [
+        {
+          "text": "Sterling Architecture Layers",
+          "target": "docs/reference/v1/../../reference/canonical/sterling_architecture_layers.md"
+        },
+        {
+          "text": "spec",
+          "target": "docs/reference/v1/../../reference/canonical/code32_bytestate.md"
+        },
+        {
+          "text": "docs/canonical/north_star.md",
+          "target": "docs/reference/v1/../canonical/north_star.md"
+        },
+        {
+          "text": "docs/internal/notes/not_graph_rag.md",
+          "target": "docs/reference/v1/../internal/notes/not_graph_rag.md"
+        },
+        {
+          "text": "docs/canonical/core_constraints_v1.md",
+          "target": "docs/reference/v1/../canonical/core_constraints_v1.md"
+        },
+        {
+          "text": "Governance Deep Dive",
+          "target": "docs/reference/v1/study_materials/10_governance_and_lifecycle_deep_dive.md"
+        },
+        {
+          "text": "docs/canonical/neural_usage_contract.md",
+          "target": "docs/reference/v1/../canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "`docs/archive/roadmaps/core_roadmap.md`",
+          "target": "docs/reference/v1/../archive/roadmaps/core_roadmap.md"
+        },
+        {
+          "text": "`docs/GLOSSARY.md`",
+          "target": "docs/reference/v1/../GLOSSARY.md"
+        },
+        {
+          "text": "`docs/architecture/quick_reference.md`",
+          "target": "docs/reference/v1/../architecture/quick_reference.md"
+        },
+        {
+          "text": "`core/state_model.py`",
+          "target": "docs/reference/v1/../../core/state_model.py"
+        },
+        {
+          "text": "`core/reasoning/state_graph.py`",
+          "target": "docs/reference/v1/../../core/reasoning/state_graph.py"
+        },
+        {
+          "text": "`core/reasoning/loop.py`",
+          "target": "docs/reference/v1/../../core/reasoning/loop.py"
+        },
+        {
+          "text": "`core/operators/registry.py`",
+          "target": "docs/reference/v1/../../core/operators/registry.py"
+        },
+        {
+          "text": "`benchmarks/wordnet_navigation_v1/README.md`",
+          "target": "docs/reference/v1/../../benchmarks/wordnet_navigation_v1/README.md"
+        },
+        {
+          "text": "`experiments/latent/results/`",
+          "target": "docs/reference/v1/../../experiments/latent/results"
+        },
+        {
+          "text": "`scripts/run_wordnet_experiment.py`",
+          "target": "docs/reference/v1/../../experiments/run_wordnet_experiment.py"
+        },
+        {
+          "text": "`README.md`",
+          "target": "docs/reference/v1/README.md"
+        },
+        {
+          "text": "`docs/architecture/quick_reference.md`",
+          "target": "docs/reference/v1/../architecture/quick_reference.md"
+        },
+        {
+          "text": "`docs/archive/roadmaps/core_roadmap.md`",
+          "target": "docs/reference/v1/../archive/roadmaps/core_roadmap.md"
+        },
+        {
+          "text": "`docs/roadmaps/core_realignment_2026_consolidated_closeout.md`",
+          "target": "docs/reference/v1/../roadmaps/core_realignment_2026_consolidated_closeout.md"
+        },
+        {
+          "text": "`core/engine.py`",
+          "target": "docs/reference/v1/../../core/engine.py"
+        },
+        {
+          "text": "`core/reasoning/loop.py`",
+          "target": "docs/reference/v1/../../core/reasoning/loop.py"
+        },
+        {
+          "text": "`core/worlds/base.py`",
+          "target": "docs/reference/v1/../../core/worlds/base.py"
+        },
+        {
+          "text": "`core/value/hybrid.py`",
+          "target": "docs/reference/v1/../../core/value/hybrid.py"
+        },
+        {
+          "text": "`core/worlds/pn.py`",
+          "target": "docs/reference/v1/../../core/worlds/pn.py"
+        },
+        {
+          "text": "`core/tasks/pn_verification.py`",
+          "target": "docs/reference/v1/../../core/tasks/pn_verification.py"
+        },
+        {
+          "text": "`kg/swm_policy.py`",
+          "target": "docs/reference/v1/../../kg/swm_policy.py"
+        },
+        {
+          "text": "`tests/unit/test_state_model.py`",
+          "target": "docs/reference/v1/../../tests/unit/test_state_model.py"
+        },
+        {
+          "text": "`tests/integration/test_sterling_engine.py`",
+          "target": "docs/reference/v1/../../tests/integration/test_sterling_engine.py"
+        },
+        {
+          "text": "`docs/GLOSSARY.md`",
+          "target": "docs/reference/v1/../GLOSSARY.md"
+        },
+        {
+          "text": "`core/reasoning/state_graph.py`",
+          "target": "docs/reference/v1/../../core/reasoning/state_graph.py"
+        },
+        {
+          "text": "`core/operators/registry.py`",
+          "target": "docs/reference/v1/../../core/operators/registry.py"
+        },
+        {
+          "text": "`core/reasoning/episode_logger.py`",
+          "target": "docs/reference/v1/../../core/reasoning/episode_logger.py"
+        },
+        {
+          "text": "`core/reasoning/state_graph.py::get_path_to_goal()`",
+          "target": "docs/reference/v1/../../core/reasoning/state_graph.py"
+        },
+        {
+          "text": "`scripts/check_episode_v2_integrity.py`",
+          "target": "docs/reference/v1/../../scripts/utils/check_episode_v2_integrity.py"
+        },
+        {
+          "text": "`docs/internal/risks_full_model.md`",
+          "target": "docs/reference/v1/../internal/risks/risks_full_model.md"
+        },
+        {
+          "text": "`docs/internal/risks_toy_model.md`",
+          "target": "docs/reference/v1/../internal/risks/risks_toy_model.md"
+        },
+        {
+          "text": "`experiments/latent/results/`",
+          "target": "docs/reference/v1/../../experiments/latent/results"
+        },
+        {
+          "text": "`tests/unit/test_operator_registry_shadow.py`",
+          "target": "docs/reference/v1/../../tests/unit/test_operator_registry_shadow.py"
+        },
+        {
+          "text": "`tests/unit/test_stage_a_hardening.py`",
+          "target": "docs/reference/v1/../../tests/unit/test_stage_a_hardening.py"
+        },
+        {
+          "text": "docs/canonical/evaluation_gates_v1.md",
+          "target": "docs/reference/v1/../canonical/evaluation_gates_v1.md"
+        },
+        {
+          "text": "`docs/reference/canonical/reasoning_framework.md`",
+          "target": "docs/reference/v1/../theory/reasoning_framework.md"
+        },
+        {
+          "text": "`scripts/run_wordnet_experiment.py`",
+          "target": "docs/reference/v1/../../experiments/run_wordnet_experiment.py"
+        },
+        {
+          "text": "`DEVELOPMENT.md`",
+          "target": "docs/reference/v1/../../DEVELOPMENT.md"
+        },
+        {
+          "text": "`docs/internal/risks_full_model.md`",
+          "target": "docs/reference/v1/../internal/risks/risks_full_model.md"
+        },
+        {
+          "text": "`scripts/check_episode_v2_integrity.py`",
+          "target": "docs/reference/v1/../../scripts/utils/check_episode_v2_integrity.py"
+        },
+        {
+          "text": "`docs/canonical/core_constraints_v1.md`",
+          "target": "docs/reference/v1/../canonical/core_constraints_v1.md"
+        },
+        {
+          "text": "`docs/canonical/neural_usage_contract.md`",
+          "target": "docs/reference/v1/../canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "`docs/canonical/evaluation_gates_v1.md`",
+          "target": "docs/reference/v1/../canonical/evaluation_gates_v1.md"
+        },
+        {
+          "text": "`docs/roadmaps/sprints/k6-induction-proof-certification-e2e-pipeline.md`",
+          "target": "docs/reference/v1/../roadmaps/sprints/k6-induction-proof-certification-e2e-pipeline.md"
+        },
+        {
+          "text": "`core/benchmarks/fence/`",
+          "target": "docs/reference/v1/../../core/benchmarks/fence"
+        },
+        {
+          "text": "`README.md`",
+          "target": "docs/reference/v1/README.md"
+        },
+        {
+          "text": "`docs/GLOSSARY.md`",
+          "target": "docs/reference/v1/../GLOSSARY.md"
+        },
+        {
+          "text": "`docs/architecture/quick_reference.md`",
+          "target": "docs/reference/v1/../architecture/quick_reference.md"
+        },
+        {
+          "text": "`docs/roadmaps/core_realignment_2026_consolidated_closeout.md`",
+          "target": "docs/reference/v1/../roadmaps/core_realignment_2026_consolidated_closeout.md"
+        },
+        {
+          "text": "`docs/archive/roadmaps/core_roadmap.md`",
+          "target": "docs/reference/v1/../archive/roadmaps/core_roadmap.md"
+        },
+        {
+          "text": "`DEVELOPMENT.md`",
+          "target": "docs/reference/v1/../../DEVELOPMENT.md"
+        },
+        {
+          "text": "`core/engine.py`",
+          "target": "docs/reference/v1/../../core/engine.py"
+        },
+        {
+          "text": "`core/reasoning/loop.py`",
+          "target": "docs/reference/v1/../../core/reasoning/loop.py"
+        },
+        {
+          "text": "`core/state_model.py`",
+          "target": "docs/reference/v1/../../core/state_model.py"
+        },
+        {
+          "text": "`core/operators/registry.py`",
+          "target": "docs/reference/v1/../../core/operators/registry.py"
+        },
+        {
+          "text": "`benchmarks/wordnet_navigation_v1/`",
+          "target": "docs/reference/v1/../../benchmarks/wordnet_navigation_v1"
+        },
+        {
+          "text": "`experiments/latent/results/`",
+          "target": "docs/reference/v1/../../experiments/latent/results"
+        },
+        {
+          "text": "GLOSSARY",
+          "target": "docs/reference/v1/../GLOSSARY.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/not_graph_rag.md",
+      "title": "Sterling: Not Another Graph-RAG",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "be369f59146b60e8",
+      "links": [
+        {
+          "text": "docs/canonical/north_star.md",
+          "target": "docs/reference/v1/../../canonical/north_star.md"
+        },
+        {
+          "text": "docs/canonical/core_constraints_v1.md",
+          "target": "docs/reference/v1/../../canonical/core_constraints_v1.md"
+        },
+        {
+          "text": "docs/canonical/neural_usage_contract.md",
+          "target": "docs/reference/v1/../../canonical/neural_usage_contract.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/reference/v1/philosophy_full.md",
+      "title": "Sterling Capability Ingestion Philosophy",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "9c1d3f96007f59eb",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/primitive-inventory.md",
+      "title": "Primitive Inventory",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "f4294fc947eccec1",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/primitives_philosophy.md",
+      "title": "Sterling Capability Ingestion Philosophy",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "1076ab7ea3b8e97a",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/primitives_philosophy_convo.md",
+      "title": "",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "3d45b30659cb1862",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/retrospective.md",
+      "title": "Sterling v1 Retrospective",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "76239607f490cc2b",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/toy-domains.md",
+      "title": "A practical “coverage map” of what your current domains *don’t* force",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "69e9ac0d0e4ee569",
+      "links": []
+    },
+    {
+      "path": "docs/reference/v1/toy_model_plan.md",
+      "title": "Toy Model Plan: Micro-Domain Linguistic LLM on Apple Silicon",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "1397be00c6c27590",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/00_INDEX.md",
+      "title": "Capability Primitive Implementation Specs Bundle",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "df6ed906ba5a7dff",
+      "links": [
+        {
+          "text": "I/O Contract",
+          "target": "docs/specs/primitives/00_IO_CONTRACT.md"
+        },
+        {
+          "text": "v1 Toy Domains",
+          "target": "docs/specs/primitives/../../reference/v1/toy-domains.md"
+        }
+      ]
+    },
+    {
+      "path": "docs/specs/primitives/00_IO_CONTRACT.md",
+      "title": "Sterling Rig Harness I/O Contract (Draft)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "3efd38d7c1b43ef7",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P01_deterministic_transformation_planning_resource_product.md",
+      "title": "Capability Primitive 1: Deterministic transformation planning (resource → product)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "e3f5594fd9760224",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P02_capability_gating_and_legality_what_actions_are_permitted.md",
+      "title": "Capability Primitive 2: Capability gating and legality (what actions are permitted)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "d91eb383c5bbd1da",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P03_temporal_planning_with_durations_batching_and_capacity.md",
+      "title": "Capability Primitive 3: Temporal planning with durations, batching, and capacity",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "f13ec4182cbce66e",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P04_multi_strategy_acquisition_alternative_methods_different_fai.md",
+      "title": "Capability Primitive 4: Multi-strategy acquisition (alternative methods, different failure modes)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "98dd6d66cd9cffd4",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P05_hierarchical_planning_macro_policy_over_micro_solvers.md",
+      "title": "Capability Primitive 5: Hierarchical planning (macro policy over micro solvers)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "6dc90af03062074f",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P06_goal_conditioned_valuation_under_scarcity_keep_drop_allocate.md",
+      "title": "Capability Primitive 6: Goal-conditioned valuation under scarcity (keep/drop/allocate)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "53cabfd15192fbcd",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P07_feasibility_under_constraints_and_partial_order_structure.md",
+      "title": "Capability Primitive 7: Feasibility under constraints and partial-order structure",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "2b6248e7a2ce9df6",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P08_systems_synthesis_compose_components_to_satisfy_a_behavioral.md",
+      "title": "Capability Primitive 8: Systems synthesis (compose components to satisfy a behavioral spec)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "568bc0d26f39a807",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P09_contingency_planning_with_exogenous_events.md",
+      "title": "Capability Primitive 9: Contingency planning with exogenous events",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "09cacb1f972c446c",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P10_risk_aware_planning_tail_risk_not_just_expected_cost.md",
+      "title": "Capability Primitive 10: Risk-aware planning (tail risk, not just expected cost)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "163052876ae58bd4",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P11_epistemic_planning_belief_state_and_active_sensing.md",
+      "title": "Capability Primitive 11: Epistemic planning (belief-state and active sensing)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "d2bb90ff7358f62f",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P12_invariant_maintenance_non_terminal_goals_control_by_receding.md",
+      "title": "Capability Primitive 12: Invariant maintenance (non-terminal goals; control-by-receding-horizon)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "7c6d89b7a87c8ac4",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P13_irreversibility_and_commitment_planning.md",
+      "title": "Capability Primitive 13: Irreversibility and commitment planning",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "2930d531b959f751",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P14_program_level_planning_search_over_compressed_representation.md",
+      "title": "Capability Primitive 14: Program-level planning (search over compressed representations)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "b09801a943258c53",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P15_fault_diagnosis_and_repair_hypotheses_tests_fix.md",
+      "title": "Capability Primitive 15: Fault diagnosis and repair (hypotheses → tests → fix)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "944f5e2e94df812a",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P16_representation_invariance_and_state_canonicalization.md",
+      "title": "Capability Primitive 16: Representation invariance and state canonicalization",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "5a39761af5c32e92",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P17_credit_assignment_tied_to_execution_not_plans.md",
+      "title": "Capability Primitive 17: Credit assignment tied to execution, not plans",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "c30ba6ba4f17ec03",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P18_multi_objective_optimization_and_preference_articulation.md",
+      "title": "Capability Primitive 18: Multi-objective optimization and preference articulation",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "fff68b2961deec3c",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P19_audit_grade_explanations_why_this_plan_why_not_that_plan.md",
+      "title": "Capability Primitive 19: Audit-grade explanations (why this plan, why not that plan)",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "9d5432184ebcd473",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P20_adversarial_robustness_rule_injection_hardening.md",
+      "title": "Capability Primitive 20: Adversarial robustness / “rule injection” hardening",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "72a6d882fba285fe",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P21_entity_belief_maintenance_and_saliency.md",
+      "title": "Capability Primitive 21: Entity belief maintenance and saliency under partial observability",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "f47617c749637058",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/P22_perceptual_substrate_and_visual_realization.md",
+      "title": "P22: Perceptual Substrate + Visual Realization",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "68f98d756648354f",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/README.md",
+      "title": "Capability Primitive Specs Bundle",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "ebf8868d2909431e",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/templates/global_invariants.md",
+      "title": "",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "f567fcfda771fdd5",
+      "links": []
+    },
+    {
+      "path": "docs/specs/primitives/templates/rig_template_A_to_H.md",
+      "title": "",
+      "authority": "architecture",
+      "status": "imported",
+      "scope": null,
+      "content_hash": "3a5e67a518dac766",
+      "links": []
+    },
+    {
+      "path": "docs/templates/benchmark_run_manifest_template.md",
+      "title": "Benchmark Run Manifest Template",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "ec7f03806c6612f3",
+      "links": []
+    },
+    {
+      "path": "docs/templates/transfer_pack_template.md",
+      "title": "Transfer Pack Template",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "ed118692935b1d6f",
+      "links": []
+    }
+  ]
+}

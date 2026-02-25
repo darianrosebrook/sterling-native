@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# CAWS pre-commit hook: doc authority linter + docs index staleness check
+# Lints staged, non-ignored docs against the index (staged content).
+# Install: git config core.hooksPath .githooks
+
+set -euo pipefail
+
+# Collect staged paths (added/copied/modified/renamed)
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR --)"
+
+DOCS=()
+while IFS= read -r p; do
+  [[ -z "$p" ]] && continue
+  [[ "$p" == docs/* ]] || continue
+  [[ "$p" == *.md ]] || continue
+  git check-ignore -q "$p" 2>/dev/null && continue
+  DOCS+=("$p")
+done <<< "$STAGED"
+
+# Nothing to lint
+[[ ${#DOCS[@]} -eq 0 ]] && exit 0
+
+# Lint staged bytes (tool reads via git show :path)
+python3 tools/lint_docs.py --staged "${DOCS[@]}"
+
+# Check docs index against staged content (not working tree)
+python3 tools/docs_index.py --check --staged

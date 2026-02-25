@@ -476,9 +476,7 @@ These emerged from cross-referencing multiple redesign proposals:
 
 ## Relationship to Other Documents
 
-- **[Future State Vision 2027](./future_state_vision_2027.md)** — The 5-act narrative this architecture would accelerate
-- **[Sterling Realignment Roadmap 2026](./sterling_realignment_roadmap_2026.md)** — Current execution plan (works within existing architecture)
-- **[North Star](../reference/canonical/north_star.md)** — The thesis this architecture serves
-- **[Capability Axes](./README.md#capability-axes-coverage)** — What the architecture must prove
+- **[Future State Vision 2027](../reference/v1/future_state_vision_2027.md)** — The 5-act narrative this architecture would accelerate *(v1 reference)*
+- **[North Star](../reference/v1/canonical/north_star.md)** — The thesis this architecture serves *(v1 reference)*
 
 This document does not replace the 2026 roadmap. The roadmap describes what to build *next* within the current architecture. This document describes what the architecture *should be* if we were starting clean. The two inform each other: the roadmap's friction points validate this document's proposed changes; this document's target structure guides the roadmap's consolidation decisions.

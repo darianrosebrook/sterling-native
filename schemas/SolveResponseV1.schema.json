@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SolveResponseV1",
+  "type": "object",
+  "required": [
+    "request_id",
+    "status",
+    "trace_bundle"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "no_solution",
+        "budget_exhausted",
+        "invalid_input",
+        "error"
+      ]
+    },
+    "solution": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "trace_bundle": {
+      "type": "object",
+      "required": [
+        "trace_hash",
+        "artifacts"
+      ],
+      "properties": {
+        "trace_hash": {
+          "type": "string"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "explanation_bundle": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "metrics": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  }
+}

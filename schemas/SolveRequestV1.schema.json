@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SolveRequestV1",
+  "type": "object",
+  "required": [
+    "request_id",
+    "primitive_id",
+    "schema_version",
+    "config",
+    "domain_spec",
+    "state",
+    "goal"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "primitive_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "rig_id": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "config": {
+      "type": "object",
+      "required": [
+        "budgets",
+        "determinism"
+      ],
+      "properties": {
+        "budgets": {
+          "type": "object",
+          "properties": {
+            "node_cap": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "edge_cap": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "wall_clock_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "objective": {
+          "type": "object"
+        },
+        "determinism": {
+          "type": "object",
+          "properties": {
+            "seed": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ordering_key": {
+              "type": "string"
+            },
+            "hash_version": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "domain_spec": {
+      "type": "object"
+    },
+    "state": {
+      "type": "object",
+      "required": [
+        "state_canon",
+        "state_digest"
+      ],
+      "properties": {
+        "state_canon": {
+          "type": "object"
+        },
+        "state_digest": {
+          "type": "string"
+        }
+      }
+    },
+    "goal": {
+      "type": "object"
+    },
+    "observations": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "context": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  }
+}
