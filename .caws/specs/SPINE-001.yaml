@@ -173,7 +173,7 @@ milestones:
     status: complete
     deliverables:
       - "sha2 canonical hashing (SHA-256, V1 domain prefixes, single canonicalizer)"
-      - "compile() for Rome payload shape (canonical JSON of initial planes)"
+      - "compile() for Rome payload shape (takes RegistryV1 for membership validation, emits RegistrySnapshot as portable descriptor in result)"
       - "ByteStateV1 encode/decode with strict round-trip"
       - "Golden fixtures from v1 oracle (evidence bytes + digests, hash vectors, registry digest)"
       - "Determinism envelope: in-process, cross-process, cross-OS (Linux + macOS CI)"

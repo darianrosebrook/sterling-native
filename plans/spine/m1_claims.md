@@ -15,7 +15,9 @@
 
 **Statement**: All content/state/registry hashing uses SHA-256 with the exact V1 domain-separation prefix bytes (null-terminated), producing `"sha256:<lowercase hex>"` outputs that match v1 oracle outputs.
 
-**Falsifier**: Compute `sha256(prefix || data)` for the same inputs in both v1 Python and Native Rust. If any digest differs, the claim is false. The prefix bytes must include the null terminator.
+**Scope**: This claim covers the five V1-originated domain prefixes (`DOMAIN_IDENTITY_PLANE`, `DOMAIN_EVIDENCE_PLANE`, `DOMAIN_BYTETRACE`, `DOMAIN_REGISTRY_SNAPSHOT`, `DOMAIN_SCHEMA_BUNDLE`). The `DOMAIN_COMPILATION_PAYLOAD` prefix is Native-originated (the `compile()` boundary is a new concept not present in v1) and is intentionally outside V1 oracle parity. It uses the same SHA-256 algorithm and null-terminated prefix convention but has no v1 counterpart to match against.
+
+**Falsifier**: Compute `sha256(prefix || data)` for the same inputs in both v1 Python and Native Rust. If any digest differs for a V1-originated prefix, the claim is false. The prefix bytes must include the null terminator.
 
 **Required artifacts**: S1-M1-HASH-V1-VECTORS golden test vectors (>=3), generated offline by v1.
 
