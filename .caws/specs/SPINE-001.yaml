@@ -1,6 +1,6 @@
 id: SPINE-001
 type: feature
-title: "V2 Spine: Kernel contract surface, ByteState/Code32, ByteTrace, World Harness (M0-M3)"
+title: "V2 Spine: Kernel contract surface, ByteState/Code32, ByteTrace, World Harness, Bundle Persistence (M0-M4)"
 status: draft
 risk_tier: 2
 mode: development
@@ -282,3 +282,26 @@ milestones:
       fixtures:
         - tests/lock/src/bin/harness_fixture.rs
       stability_contract: "Bundle digest is computed from normative artifacts only (digest_basis). Observational artifacts (trace.bst1) are listed in manifest with content hashes but excluded from digest. verify_bundle() mechanically enforces the trace/report binding by recomputing payload_hash and step_chain_digest from trace.bst1 and comparing to verification_report.json."
+  - id: M4
+    title: "Bundle Directory Format + Persistence + Fail-Closed Verification"
+    status: in_progress
+    deliverables:
+      - "BundleDirectoryV1 format: fixed metadata files + manifest-declared artifact files"
+      - "write_bundle_dir(): deterministic directory write with atomic file ops"
+      - "read_bundle_dir(): fail-closed read (missing/extra/invalid → error)"
+      - "verify_bundle_dir(): read + verify_bundle() integrity check"
+      - "bundle_fixture cross-process binary (run → write → read → verify → print)"
+      - "Fail-closed strictness tests (missing file, extra file, hash mismatch, noncanonical manifest)"
+      - "Cross-process determinism (4 env variants)"
+      - "No path leakage in normative surfaces"
+    evidence:
+      commits: "b31d1cb..75a21da"
+      test_count: 213
+      tests:
+        - tests/lock/tests/s1_m4_bundle_dir.rs
+        - tests/lock/tests/s1_m4_crossproc.rs
+      implementation_artifacts:
+        - harness/src/bundle_dir.rs
+      fixtures:
+        - tests/lock/src/bin/bundle_fixture.rs
+      stability_contract: "BundleDirectoryV1 directory format is stable: fixed metadata filenames (bundle_manifest.json, bundle_digest_basis.json, bundle_digest.txt) plus artifact files declared in manifest. Extra files rejected. Directory path never appears in any hashed surface."
