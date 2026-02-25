@@ -10,3 +10,7 @@ workspace = true
 hex = "0.4"
 serde_json = "1"
 sterling-kernel = { path = "../../kernel" }
+
+[[bin]]
+name = "compile_fixture"
+path = "src/bin/compile_fixture.rs"
