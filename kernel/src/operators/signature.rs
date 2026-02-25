@@ -45,6 +45,18 @@ impl OperatorCategory {
     }
 }
 
+impl std::fmt::Display for OperatorCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Seek => "S(Seek)",
+            Self::Memorize => "M(Memorize)",
+            Self::Perceive => "P(Perceive)",
+            Self::Knowledge => "K(Knowledge)",
+            Self::Control => "C(Control)",
+        })
+    }
+}
+
 /// Full-width operator mask over the identity plane.
 ///
 /// Each entry corresponds to a `(layer, slot)` position in the `ByteStateV1`.
@@ -238,6 +250,23 @@ mod tests {
     fn mask_dimensions_match_construction() {
         let mask = IdentityMaskV1::new(4, 32);
         assert_eq!(mask.dimensions(), (4, 32));
+    }
+
+    #[test]
+    fn category_codes_match_adr_0004() {
+        assert_eq!(OperatorCategory::Seek.code(), 'S');
+        assert_eq!(OperatorCategory::Memorize.code(), 'M');
+        assert_eq!(OperatorCategory::Perceive.code(), 'P');
+        assert_eq!(OperatorCategory::Knowledge.code(), 'K');
+        assert_eq!(OperatorCategory::Control.code(), 'C');
+    }
+
+    #[test]
+    fn category_display_includes_code() {
+        let s = format!("{}", OperatorCategory::Seek);
+        assert!(s.starts_with('S'));
+        let m = format!("{}", OperatorCategory::Memorize);
+        assert!(m.starts_with('M'));
     }
 
     #[test]
