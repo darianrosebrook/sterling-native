@@ -186,6 +186,7 @@ dependencies = [
  "serde_json",
  "sterling-harness",
  "sterling-kernel",
+ "sterling-search",
  "tempfile",
 ]
 

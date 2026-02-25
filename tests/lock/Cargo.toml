@@ -10,6 +10,7 @@ workspace = true
 hex = "0.4"
 serde_json = "1"
 sterling-kernel = { path = "../../kernel" }
+sterling-search = { path = "../../search" }
 sterling-harness = { path = "../../harness" }
 
 [dev-dependencies]
@@ -34,3 +35,7 @@ path = "src/bin/bundle_fixture.rs"
 [[bin]]
 name = "policy_fixture"
 path = "src/bin/policy_fixture.rs"
+
+[[bin]]
+name = "search_fixture"
+path = "src/bin/search_fixture.rs"
