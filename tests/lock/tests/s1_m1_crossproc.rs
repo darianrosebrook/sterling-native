@@ -25,6 +25,9 @@ fn fixture_path() -> String {
 ///
 /// `cargo test` puts test binaries in `target/debug/` (or the profile dir).
 /// The `compile_fixture` binary lives alongside them.
+///
+/// NOTE: If CI expands to Windows, this needs `.exe` suffix handling
+/// (e.g., `path.set_extension("exe")` on `cfg!(target_os = "windows")`).
 fn binary_path() -> String {
     let mut path = std::env::current_exe()
         .expect("can resolve test binary path")

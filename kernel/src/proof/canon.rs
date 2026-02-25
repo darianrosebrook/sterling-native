@@ -6,7 +6,9 @@
 //!
 //! # Canonicalization rules
 //!
-//! 1. Object keys are sorted lexicographically (byte order).
+//! 1. Object keys must be ASCII and are sorted lexicographically (byte order).
+//!    Non-ASCII keys are rejected to guarantee that Rust and Python produce
+//!    identical sort orderings.
 //! 2. No extraneous whitespace (compact form: `{"a":1,"b":2}`).
 //! 3. Strings are JSON-escaped per RFC 8259 §7.
 //! 4. Numbers must be integers (`i64` or `u64`). Non-integer numbers (floats,
@@ -21,6 +23,12 @@ use std::io::Write;
 pub enum CanonError {
     /// A JSON number was not an integer (float, NaN, Infinity).
     NonIntegerNumber { raw: String },
+    /// An object key contains non-ASCII bytes.
+    ///
+    /// ASCII keys guarantee that Rust's `String::cmp` (UTF-8 byte order) matches
+    /// Python's `sort_keys=True` (also byte order for ASCII). Non-ASCII keys could
+    /// produce different orderings between Unicode normalization strategies.
+    NonAsciiKey { key: String },
 }
 
 impl std::fmt::Display for CanonError {
@@ -28,6 +36,9 @@ impl std::fmt::Display for CanonError {
         match self {
             Self::NonIntegerNumber { raw } => {
                 write!(f, "non-integer number in canonical JSON: {raw}")
+            }
+            Self::NonAsciiKey { key } => {
+                write!(f, "non-ASCII object key in canonical JSON: {key}")
             }
         }
     }
@@ -77,7 +88,16 @@ fn write_value(buf: &mut Vec<u8>, value: &serde_json::Value) -> Result<(), Canon
             buf.push(b']');
         }
         serde_json::Value::Object(map) => {
-            // Sorted keys (lexicographic byte order).
+            // Reject non-ASCII keys: ensures Rust's String::cmp matches Python's
+            // sort_keys=True, preventing cross-language ordering divergence.
+            for key in map.keys() {
+                if !key.is_ascii() {
+                    return Err(CanonError::NonAsciiKey { key: key.clone() });
+                }
+            }
+
+            // Sorted keys (ASCII byte order — guaranteed equivalent to Python's
+            // sort_keys=True since all keys are ASCII).
             let mut keys: Vec<&String> = map.keys().collect();
             keys.sort();
 
@@ -256,6 +276,20 @@ mod tests {
         for _ in 0..10 {
             assert_eq!(canonical_json_bytes(&v).unwrap(), first);
         }
+    }
+
+    #[test]
+    fn rejects_non_ascii_key() {
+        let v = json!({"clé": 1});
+        let err = canonical_json_bytes(&v).unwrap_err();
+        assert!(matches!(err, CanonError::NonAsciiKey { .. }));
+    }
+
+    #[test]
+    fn rejects_emoji_key() {
+        let v = json!({"🔑": "value"});
+        let err = canonical_json_bytes(&v).unwrap_err();
+        assert!(matches!(err, CanonError::NonAsciiKey { .. }));
     }
 
     #[test]

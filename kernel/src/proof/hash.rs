@@ -104,6 +104,13 @@ pub const DOMAIN_REGISTRY_SNAPSHOT: &[u8] = b"STERLING::REGISTRY_SNAPSHOT::V1\0"
 /// Domain prefix for schema bundle hashing.
 pub const DOMAIN_SCHEMA_BUNDLE: &[u8] = b"STERLING::BYTESTATE_SCHEMA_BUNDLE::V1\0";
 
+/// Domain prefix for compilation payload commitment.
+///
+/// This is a Native-originated prefix (not from v1) — the `compile()` boundary
+/// is a new concept. Using a dedicated prefix prevents domain collapse between
+/// "payload commitment in compilation manifest" and "identity plane digest."
+pub const DOMAIN_COMPILATION_PAYLOAD: &[u8] = b"STERLING::COMPILATION_PAYLOAD::V1\0";
+
 /// Compute the canonical hash of a byte slice with domain separation.
 ///
 /// Algorithm: SHA-256 (V1-compatible).
@@ -161,6 +168,7 @@ mod tests {
         assert!(DOMAIN_BYTETRACE.ends_with(&[0]));
         assert!(DOMAIN_REGISTRY_SNAPSHOT.ends_with(&[0]));
         assert!(DOMAIN_SCHEMA_BUNDLE.ends_with(&[0]));
+        assert!(DOMAIN_COMPILATION_PAYLOAD.ends_with(&[0]));
     }
 
     #[test]
@@ -211,6 +219,15 @@ mod tests {
         assert_eq!(
             h.hex_digest(),
             "a32aab7658bb3b8ad8cdbad70ad071ef9a17a5a560ad91394dfead7e9249caa2"
+        );
+    }
+
+    #[test]
+    fn hash_vector_compilation_payload_prefix() {
+        let h = canonical_hash(DOMAIN_COMPILATION_PAYLOAD, b"test-payload");
+        assert_eq!(
+            h.hex_digest(),
+            "0bcc379abca7b4f1c5abf704feb81362f1f2b406435661666c10ae240960f275"
         );
     }
 

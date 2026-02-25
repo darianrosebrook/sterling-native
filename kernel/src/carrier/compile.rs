@@ -31,7 +31,8 @@ use crate::carrier::code32::Code32;
 use crate::carrier::registry::RegistryV1;
 use crate::proof::canon::canonical_json_bytes;
 use crate::proof::hash::{
-    canonical_hash, ContentHash, DOMAIN_EVIDENCE_PLANE, DOMAIN_IDENTITY_PLANE,
+    canonical_hash, ContentHash, DOMAIN_COMPILATION_PAYLOAD, DOMAIN_EVIDENCE_PLANE,
+    DOMAIN_IDENTITY_PLANE,
 };
 
 /// A successful compilation result.
@@ -156,7 +157,7 @@ pub fn compile(
                 detail: format!("registry snapshot error: {e:?}"),
             })?;
 
-    let payload_hash = canonical_hash(DOMAIN_IDENTITY_PLANE, &canonical_payload);
+    let payload_hash = canonical_hash(DOMAIN_COMPILATION_PAYLOAD, &canonical_payload);
 
     let manifest_value = serde_json::json!({
         "evidence_digest": evidence_digest.as_str(),
