@@ -178,9 +178,10 @@ fn verify_bundle_detects_trace_report_payload_hash_mismatch() {
     let envelope_len = u16::from_le_bytes([mutated_bytes[0], mutated_bytes[1]]) as usize;
     let magic_offset = 2 + envelope_len;
     let header_len_offset = magic_offset + 4; // after "BST1"
-    let header_len =
-        u16::from_le_bytes([mutated_bytes[header_len_offset], mutated_bytes[header_len_offset + 1]])
-            as usize;
+    let header_len = u16::from_le_bytes([
+        mutated_bytes[header_len_offset],
+        mutated_bytes[header_len_offset + 1],
+    ]) as usize;
     let body_start = header_len_offset + 2 + header_len;
 
     // Frame 1 identity region: body_start + 26 (frame 0 stride) + 4 (op_code) + 12 (op_args)
@@ -225,8 +226,6 @@ fn verify_bundle_detects_trace_report_payload_hash_mismatch() {
         | BundleVerifyError::StepChainMismatch { .. } => {
             // Expected: identity byte mutation detected via payload/step-chain commitment.
         }
-        other => panic!(
-            "expected PayloadHashMismatch or StepChainMismatch, got {other:?}"
-        ),
+        other => panic!("expected PayloadHashMismatch or StepChainMismatch, got {other:?}"),
     }
 }

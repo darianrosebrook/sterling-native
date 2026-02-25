@@ -12,6 +12,7 @@
 #![warn(clippy::pedantic)]
 
 pub mod bundle;
+pub mod bundle_dir;
 pub mod contract;
 pub mod runner;
 pub mod worlds;
