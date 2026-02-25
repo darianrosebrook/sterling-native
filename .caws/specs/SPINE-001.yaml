@@ -370,8 +370,8 @@ milestones:
               - S1-M2-DETERMINISM-INPROC
               - S1-M2-DETERMINISM-CROSSPROC
             tests:
-              - "s1_m2_determinism.rs::bst1_round_trip_deterministic_n10"
-              - "s1_m2_crossproc.rs::crossproc_determinism_four_env_variants"
+              - "s1_m2_determinism.rs::trace_write_read_round_trip_deterministic_n10"
+              - "s1_m2_crossproc.rs::crossproc_determinism_three_env_variants"
             files:
               - "kernel/src/carrier/trace_writer.rs"
               - "kernel/src/carrier/trace_reader.rs"
@@ -384,7 +384,6 @@ milestones:
               - S1-M2-GOLDEN
               - S1-M2-PAYLOAD-HASH-V1
             tests:
-              - "s1_m2_determinism.rs::v1_bst1_file_parseable_by_native_reader"
               - "s1_m2_crossproc.rs::crossproc_output_matches_v1_oracle"
             files:
               - "tests/fixtures/m2_golden_trace.bst1"
@@ -397,7 +396,7 @@ milestones:
             acceptance_ids:
               - S1-M2-DETERMINISM-CROSSPROC
             tests:
-              - "s1_m2_crossproc.rs::crossproc_determinism_four_env_variants"
+              - "s1_m2_crossproc.rs::crossproc_determinism_three_env_variants"
             files:
               - "tests/lock/src/bin/trace_fixture.rs"
         - id: M2-CLAIM-004

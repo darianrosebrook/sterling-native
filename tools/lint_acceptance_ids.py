@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """
-Acceptance ID Anchoring Linter
+Spec Traceability Linter
 
-Validates that every acceptance ID declared in .caws/specs/SPINE-001.yaml
-is referenced at least once in tracked source files outside the spec itself.
+Two lint modes, both enforced in CI:
 
-"Referenced" means a literal string match (comment, doc, test name, etc.).
-This ensures acceptance IDs are mechanically traceable from spec to proof.
+1. Acceptance ID anchoring: every S1-M* acceptance ID in SPINE-001.yaml
+   must appear as a literal string in at least one tracked source file
+   outside the spec itself.
+
+2. Claim pointer resolution: every "file.rs::fn_name" entry under
+   pointers.tests in SPINE-001.yaml must resolve to an actual Rust
+   test function (matched by `fn fn_name(` in the resolved file).
 
 Usage:
     python tools/lint_acceptance_ids.py
 
 Exit codes:
-    0 = all acceptance IDs are anchored
-    1 = one or more acceptance IDs are unanchored
+    0 = all checks pass
+    1 = one or more checks failed
 """
 
 import re
@@ -26,15 +30,38 @@ SPEC_PATH = Path(".caws/specs/SPINE-001.yaml")
 # Directories to search for anchors (relative to repo root).
 SEARCH_PATHS = ["kernel/", "harness/", "tests/", ".github/"]
 
-# Acceptance ID pattern: S1-M followed by digit(s), then optional dash-separated
+# Directories to search when resolving bare filenames in pointers.tests.
+RESOLVE_ROOTS = [
+    Path("kernel/src"),
+    Path("harness/src"),
+    Path("tests/lock/tests"),
+    Path("tests/lock/src"),
+]
+
+# Acceptance ID pattern: S1-M followed by digit(s), then dash-separated
 # uppercase segments (e.g., S1-M1-DETERMINISM-CROSSPROC).
 ACCEPTANCE_ID_RE = re.compile(r"\bS1-M\d+(?:-[A-Z0-9]+)+\b")
+
+# Pointer pattern: "filename.rs::fn_name" in YAML.
+POINTER_RE = re.compile(r'"([^"]+\.rs)::([^"]+)"')
 
 
 def extract_acceptance_ids(spec_path: Path) -> set[str]:
     """Extract all acceptance IDs from the spec file."""
     text = spec_path.read_text()
     return set(ACCEPTANCE_ID_RE.findall(text))
+
+
+def extract_test_pointers(spec_path: Path) -> list[tuple[str, str, int]]:
+    """Extract all file.rs::fn_name pointers from the spec.
+
+    Returns list of (filename, fn_name, line_number).
+    """
+    pointers = []
+    for i, line in enumerate(spec_path.read_text().splitlines(), start=1):
+        for match in POINTER_RE.finditer(line):
+            pointers.append((match.group(1), match.group(2), i))
+    return pointers
 
 
 def grep_for_id(acceptance_id: str, search_paths: list[str]) -> list[str]:
@@ -62,42 +89,122 @@ def grep_for_id(acceptance_id: str, search_paths: list[str]) -> list[str]:
         return []
 
 
+def resolve_file(filename: str) -> Path | None:
+    """Resolve a bare or prefixed filename to a workspace path.
+
+    Handles both bare names like "compile.rs" (searched under RESOLVE_ROOTS)
+    and prefixed paths like "harness/src/bundle.rs".
+    """
+    # Try as a direct relative path first.
+    direct = Path(filename)
+    if direct.exists():
+        return direct
+
+    # Search under known roots.
+    basename = Path(filename).name
+    for root in RESOLVE_ROOTS:
+        # Walk the root looking for the basename.
+        for candidate in root.rglob(basename):
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def file_contains_fn(path: Path, fn_name: str) -> bool:
+    """Check whether a file contains `fn fn_name(`."""
+    try:
+        text = path.read_text()
+        # Match `fn fn_name(` with optional whitespace variations.
+        pattern = re.compile(rf"\bfn\s+{re.escape(fn_name)}\s*\(")
+        return bool(pattern.search(text))
+    except OSError:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Lint 1: Acceptance ID anchoring
+# ---------------------------------------------------------------------------
+
+
+def lint_acceptance_ids() -> list[str]:
+    """Returns list of unanchored acceptance IDs."""
+    ids = extract_acceptance_ids(SPEC_PATH)
+    unanchored = []
+    for aid in sorted(ids):
+        hits = grep_for_id(aid, SEARCH_PATHS)
+        if not hits:
+            unanchored.append(aid)
+    return unanchored
+
+
+# ---------------------------------------------------------------------------
+# Lint 2: Claim pointer resolution
+# ---------------------------------------------------------------------------
+
+
+def lint_test_pointers() -> list[str]:
+    """Returns list of broken pointer descriptions."""
+    pointers = extract_test_pointers(SPEC_PATH)
+    broken = []
+    for filename, fn_name, line_no in pointers:
+        resolved = resolve_file(filename)
+        if resolved is None:
+            broken.append(
+                f"  line {line_no}: {filename}::{fn_name} — file not found"
+            )
+        elif not file_contains_fn(resolved, fn_name):
+            broken.append(
+                f"  line {line_no}: {filename}::{fn_name} — fn not found in {resolved}"
+            )
+    return broken
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
 def main() -> int:
     if not SPEC_PATH.exists():
         print(f"ERROR: spec file not found: {SPEC_PATH}", file=sys.stderr)
         return 1
 
+    failed = False
+
+    # --- Lint 1: Acceptance ID anchoring ---
     ids = extract_acceptance_ids(SPEC_PATH)
-    if not ids:
-        print("WARNING: no acceptance IDs found in spec", file=sys.stderr)
-        return 0
+    unanchored = lint_acceptance_ids()
 
-    unanchored: list[str] = []
-    anchored: list[str] = []
-
-    for aid in sorted(ids):
-        hits = grep_for_id(aid, SEARCH_PATHS)
-        if hits:
-            anchored.append(aid)
-        else:
-            unanchored.append(aid)
-
-    print(f"Acceptance IDs in spec: {len(ids)}")
-    print(f"  Anchored: {len(anchored)}")
-    print(f"  Unanchored: {len(unanchored)}")
-
+    print(f"[1/2] Acceptance IDs: {len(ids)} in spec")
     if unanchored:
-        print("\nUNANCHORED acceptance IDs (no reference outside spec):")
+        print(f"  FAIL: {len(unanchored)} unanchored:")
         for aid in unanchored:
-            print(f"  - {aid}")
+            print(f"    - {aid}")
         print(
-            "\nFix: add a comment like '// ACCEPTANCE: {ID}' above the "
-            "relevant test cluster."
+            "\n  Fix: add '// ACCEPTANCE: {ID}' above the relevant test cluster."
         )
-        return 1
+        failed = True
+    else:
+        print(f"  OK: all {len(ids)} anchored")
 
-    print("\nAll acceptance IDs are anchored.")
-    return 0
+    # --- Lint 2: Claim pointer resolution ---
+    pointers = extract_test_pointers(SPEC_PATH)
+    broken = lint_test_pointers()
+
+    print(f"\n[2/2] Claim pointers: {len(pointers)} in spec")
+    if broken:
+        print(f"  FAIL: {len(broken)} broken:")
+        for msg in broken:
+            print(msg)
+        print(
+            "\n  Fix: update the pointer to match the actual file/fn name, "
+            "or create the missing test."
+        )
+        failed = True
+    else:
+        print(f"  OK: all {len(pointers)} resolve")
+
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
