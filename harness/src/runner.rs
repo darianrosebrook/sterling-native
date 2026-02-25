@@ -7,14 +7,21 @@
 //! # Pipeline
 //!
 //! ```text
-//! encode_payload() → compile() → [apply() × N] → build trace
-//!   → trace_to_bytes() → replay_verify() → hash → build bundle
+//! build_policy() → enforce_pre_execution()
+//!   → encode_payload() → compile() → [apply() × N] → build trace
+//!   → trace_to_bytes() → enforce_trace_bytes()
+//!   → replay_verify() → hash → build bundle (includes policy_snapshot.json)
 //! ```
 
 use crate::bundle::{
-    build_bundle, ArtifactBundleV1, BundleBuildError, DOMAIN_CODEBOOK_HASH, DOMAIN_HARNESS_FIXTURE,
+    build_bundle, ArtifactBundleV1, BundleBuildError, DOMAIN_BUNDLE_ARTIFACT, DOMAIN_CODEBOOK_HASH,
+    DOMAIN_HARNESS_FIXTURE,
 };
 use crate::contract::{WorldHarnessError, WorldHarnessV1};
+use crate::policy::{
+    build_policy, enforce_artifact_bytes, enforce_pre_execution, enforce_trace_bytes, PolicyConfig,
+    PolicyViolation,
+};
 
 use sterling_kernel::carrier::bytetrace::{
     ByteTraceEnvelopeV1, ByteTraceFooterV1, ByteTraceFrameV1, ByteTraceHeaderV1, ByteTraceV1,
@@ -50,22 +57,48 @@ pub enum RunError {
     HashFailed { detail: String },
     /// Canonical JSON serialization failed.
     CanonFailed { detail: String },
+    /// Policy construction failed.
+    PolicyBuildFailed { detail: String },
+    /// Policy violation (fail-closed).
+    PolicyViolation(PolicyViolation),
 }
 
-/// Run a world through the full harness pipeline.
+/// Run a world through the full harness pipeline with default policy.
+///
+/// Equivalent to `run_with_policy(world, &PolicyConfig::default())`.
+///
+/// # Errors
+///
+/// Returns [`RunError`] at any pipeline step.
+pub fn run(world: &dyn WorldHarnessV1) -> Result<ArtifactBundleV1, RunError> {
+    run_with_policy(world, &PolicyConfig::default())
+}
+
+/// Run a world through the full harness pipeline with explicit policy config.
 ///
 /// Produces an [`ArtifactBundleV1`] containing:
 /// - `fixture.json` (normative) — canonical JSON fixture description
 /// - `compilation_manifest.json` (normative) — from `CompilationResultV1`
+/// - `policy_snapshot.json` (normative) — auditable policy declaration
 /// - `trace.bst1` (observational) — full trace binary including envelope
-/// - `verification_report.json` (normative) — replay verdict + hashes
+/// - `verification_report.json` (normative) — replay verdict + hashes + policy digest
 ///
 /// # Errors
 ///
 /// Returns [`RunError`] at any step. Fail-closed: partial bundles are not
 /// produced.
-pub fn run(world: &dyn WorldHarnessV1) -> Result<ArtifactBundleV1, RunError> {
+pub fn run_with_policy(
+    world: &dyn WorldHarnessV1,
+    config: &PolicyConfig,
+) -> Result<ArtifactBundleV1, RunError> {
     let world_id = world.world_id();
+
+    // Phase 0: build and enforce policy.
+    let policy_snapshot = build_policy(world, config).map_err(|e| RunError::PolicyBuildFailed {
+        detail: format!("{e:?}"),
+    })?;
+
+    enforce_pre_execution(world, config).map_err(RunError::PolicyViolation)?;
 
     // Phase 1: compile + execute program.
     let payload_bytes = world.encode_payload().map_err(RunError::WorldError)?;
@@ -83,26 +116,37 @@ pub fn run(world: &dyn WorldHarnessV1) -> Result<ArtifactBundleV1, RunError> {
     let fixture_json = build_fixture_json(world, &payload_bytes)?;
     let trace = assemble_trace(world, &schema, &compilation, &fixture_json, frames)?;
 
-    // Phase 3: verify + hash + bundle.
+    // Phase 3: serialize trace + enforce byte budget.
     let trace_bytes = trace_to_bytes(&trace).map_err(|e| RunError::TraceWriteFailed {
         detail: format!("{e:?}"),
     })?;
 
+    enforce_trace_bytes(&trace_bytes, config).map_err(RunError::PolicyViolation)?;
+
+    // Phase 4: verify + hash + bundle.
     verify_trace(&trace, &compilation, &payload_bytes)?;
 
-    let verification_report = build_verification_report_from_trace(world_id, &trace)?;
+    let policy_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &policy_snapshot.bytes);
+    let verification_report =
+        build_verification_report_from_trace(world_id, &trace, &policy_content_hash)?;
 
-    build_bundle(vec![
+    let artifacts = vec![
         ("fixture.json".into(), fixture_json, true),
         (
             "compilation_manifest.json".into(),
             compilation.compilation_manifest,
             true,
         ),
+        ("policy_snapshot.json".into(), policy_snapshot.bytes, true),
         ("trace.bst1".into(), trace_bytes, false),
         ("verification_report.json".into(), verification_report, true),
-    ])
-    .map_err(RunError::BundleFailed)
+    ];
+
+    // Enforce total artifact byte budget.
+    let total_bytes: usize = artifacts.iter().map(|(_, content, _)| content.len()).sum();
+    enforce_artifact_bytes(total_bytes, config).map_err(RunError::PolicyViolation)?;
+
+    build_bundle(artifacts).map_err(RunError::BundleFailed)
 }
 
 /// Execute the world's program, producing trace frames.
@@ -226,6 +270,7 @@ fn verify_trace(
 fn build_verification_report_from_trace(
     world_id: &str,
     trace: &ByteTraceV1,
+    policy_content_hash: &ContentHash,
 ) -> Result<Vec<u8>, RunError> {
     let p_hash = payload_hash(trace).map_err(|e| RunError::HashFailed {
         detail: format!("{e:?}"),
@@ -235,7 +280,7 @@ fn build_verification_report_from_trace(
         detail: format!("{e:?}"),
     })?;
 
-    build_verification_report(world_id, &p_hash, &s_chain)
+    build_verification_report(world_id, &p_hash, &s_chain, policy_content_hash)
 }
 
 /// Build the fixture JSON artifact (canonical JSON bytes).
@@ -324,10 +369,12 @@ fn build_verification_report(
     world_id: &str,
     p_hash: &ContentHash,
     s_chain: &sterling_kernel::proof::trace_hash::StepChainResult,
+    policy_content_hash: &ContentHash,
 ) -> Result<Vec<u8>, RunError> {
     let report = serde_json::json!({
         "payload_hash": p_hash.as_str(),
         "planes_verified": ["identity", "status"],
+        "policy_digest": policy_content_hash.as_str(),
         "replay_verdict": "Match",
         "schema_version": "verification_report.v1",
         "step_chain_digest": s_chain.digest.as_str(),
@@ -349,9 +396,10 @@ mod tests {
     #[test]
     fn rome_mini_produces_bundle() {
         let bundle = run(&RomeMini).unwrap();
-        assert_eq!(bundle.artifacts.len(), 4);
+        assert_eq!(bundle.artifacts.len(), 5);
         assert!(bundle.artifacts.contains_key("fixture.json"));
         assert!(bundle.artifacts.contains_key("compilation_manifest.json"));
+        assert!(bundle.artifacts.contains_key("policy_snapshot.json"));
         assert!(bundle.artifacts.contains_key("trace.bst1"));
         assert!(bundle.artifacts.contains_key("verification_report.json"));
     }
@@ -369,6 +417,7 @@ mod tests {
         for name in [
             "fixture.json",
             "compilation_manifest.json",
+            "policy_snapshot.json",
             "verification_report.json",
         ] {
             let artifact = bundle.artifacts.get(name).unwrap();
@@ -385,5 +434,51 @@ mod tests {
         assert_eq!(planes.len(), 2);
         assert_eq!(planes[0], "identity");
         assert_eq!(planes[1], "status");
+    }
+
+    #[test]
+    fn rome_mini_verification_report_contains_policy_digest() {
+        let bundle = run(&RomeMini).unwrap();
+        let report = bundle.artifacts.get("verification_report.json").unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&report.content).unwrap();
+        let policy_digest = json["policy_digest"].as_str().unwrap();
+        assert!(policy_digest.starts_with("sha256:"));
+
+        // Should match policy artifact's content_hash.
+        let policy = bundle.artifacts.get("policy_snapshot.json").unwrap();
+        assert_eq!(policy_digest, policy.content_hash.as_str());
+    }
+
+    #[test]
+    fn rome_mini_policy_snapshot_is_normative() {
+        let bundle = run(&RomeMini).unwrap();
+        let policy = bundle.artifacts.get("policy_snapshot.json").unwrap();
+        assert!(policy.normative);
+    }
+
+    #[test]
+    fn run_with_step_budget_violation_fails() {
+        let config = PolicyConfig {
+            max_steps: Some(1),
+            ..PolicyConfig::default()
+        };
+        let err = run_with_policy(&RomeMini, &config).unwrap_err();
+        match err {
+            RunError::PolicyViolation(PolicyViolation::StepBudgetExceeded { .. }) => {}
+            other => panic!("expected PolicyViolation(StepBudgetExceeded), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_with_allowlist_violation_fails() {
+        let config = PolicyConfig {
+            allowed_ops: Some(vec![Code32::new(99, 99, 99)]),
+            ..PolicyConfig::default()
+        };
+        let err = run_with_policy(&RomeMini, &config).unwrap_err();
+        match err {
+            RunError::PolicyViolation(PolicyViolation::AllowlistViolation { .. }) => {}
+            other => panic!("expected PolicyViolation(AllowlistViolation), got {other:?}"),
+        }
     }
 }

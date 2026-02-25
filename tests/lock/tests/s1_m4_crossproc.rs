@@ -78,8 +78,8 @@ fn crossproc_determinism_four_env_variants() {
         "baseline output missing verification_verdict=Match"
     );
     assert!(
-        baseline.contains("artifact_count=4"),
-        "baseline output missing artifact_count=4"
+        baseline.contains("artifact_count=5"),
+        "baseline output missing artifact_count=5"
     );
     assert!(
         baseline.contains("roundtrip=ok"),

@@ -152,6 +152,11 @@ pub enum BundleVerifyError {
     },
     /// Report is missing a required field.
     ReportFieldMissing { field: String },
+    /// Recomputed `policy_digest` from `policy_snapshot.json` does not match report.
+    PolicyDigestMismatch {
+        declared: String,
+        recomputed: String,
+    },
     /// Canonical JSON error during verification.
     CanonError { detail: String },
 }
@@ -170,6 +175,8 @@ pub enum BundleVerifyError {
 /// 6. Normative JSON artifacts (`.json` extension + `normative: true`) are in canonical form.
 /// 7. If both `trace.bst1` and `verification_report.json` exist: `payload_hash` and
 ///    `step_chain_digest` recomputed from `trace.bst1` match the values declared in the report.
+/// 8. If both `policy_snapshot.json` and `verification_report.json` exist: `policy_digest`
+///    in the report matches `policy_snapshot.json`'s `content_hash`.
 ///
 /// # Errors
 ///
@@ -235,6 +242,10 @@ pub fn verify_bundle(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError>
     // Step 8: If trace.bst1 and verification_report.json both exist,
     // recompute payload commitments from trace and compare to report.
     verify_trace_report_binding(bundle)?;
+
+    // Step 9: If policy_snapshot.json and verification_report.json both exist,
+    // verify policy_digest in report matches policy artifact's content_hash.
+    verify_policy_digest_binding(bundle)?;
 
     Ok(())
 }
@@ -350,6 +361,40 @@ fn verify_trace_report_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleVe
         return Err(BundleVerifyError::StepChainMismatch {
             declared: declared_chain.to_string(),
             recomputed: computed_chain.digest.as_str().to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+/// If both `policy_snapshot.json` and `verification_report.json` exist, verify
+/// that the report's `policy_digest` matches the policy artifact's `content_hash`.
+fn verify_policy_digest_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError> {
+    let (Some(policy_artifact), Some(report_artifact)) = (
+        bundle.artifacts.get("policy_snapshot.json"),
+        bundle.artifacts.get("verification_report.json"),
+    ) else {
+        return Ok(());
+    };
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&report_artifact.content).map_err(|e| {
+            BundleVerifyError::ReportParseError {
+                detail: format!("{e:?}"),
+            }
+        })?;
+
+    let declared_policy_digest =
+        report["policy_digest"]
+            .as_str()
+            .ok_or_else(|| BundleVerifyError::ReportFieldMissing {
+                field: "policy_digest".into(),
+            })?;
+
+    if policy_artifact.content_hash.as_str() != declared_policy_digest {
+        return Err(BundleVerifyError::PolicyDigestMismatch {
+            declared: declared_policy_digest.to_string(),
+            recomputed: policy_artifact.content_hash.as_str().to_string(),
         });
     }
 

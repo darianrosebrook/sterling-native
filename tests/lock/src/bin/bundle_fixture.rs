@@ -11,7 +11,7 @@
 //!   `manifest_hash`=sha256:...
 //!   `digest_basis_hash`=sha256:...
 //!   `verification_verdict`=Match
-//!   `artifact_count`=4
+//!   `artifact_count`=5
 //!   `roundtrip`=ok
 
 use sterling_harness::bundle::DOMAIN_BUNDLE_ARTIFACT;

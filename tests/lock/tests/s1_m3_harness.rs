@@ -27,13 +27,14 @@ fn harness_run_produces_bundle() {
 }
 
 #[test]
-fn bundle_contains_four_artifacts() {
+fn bundle_contains_expected_artifacts() {
     let bundle = run(&RomeMini).unwrap();
-    assert_eq!(bundle.artifacts.len(), 4);
+    assert_eq!(bundle.artifacts.len(), 5);
 
     let expected = [
         "compilation_manifest.json",
         "fixture.json",
+        "policy_snapshot.json",
         "trace.bst1",
         "verification_report.json",
     ];
@@ -131,6 +132,7 @@ fn normative_observational_classification() {
     let normative = [
         "fixture.json",
         "compilation_manifest.json",
+        "policy_snapshot.json",
         "verification_report.json",
     ];
     for name in normative {
