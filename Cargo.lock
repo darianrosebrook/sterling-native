@@ -320,6 +320,7 @@ dependencies = [
  "hex",
  "serde_json",
  "sterling-kernel",
+ "sterling-search",
  "tempfile",
 ]
 

@@ -157,6 +157,11 @@ pub enum BundleVerifyError {
         declared: String,
         recomputed: String,
     },
+    /// Recomputed `search_graph_digest` from `search_graph.json` does not match report.
+    SearchGraphDigestMismatch {
+        declared: String,
+        recomputed: String,
+    },
     /// Canonical JSON error during verification.
     CanonError { detail: String },
 }
@@ -246,6 +251,10 @@ pub fn verify_bundle(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError>
     // Step 9: If policy_snapshot.json and verification_report.json both exist,
     // verify policy_digest in report matches policy artifact's content_hash.
     verify_policy_digest_binding(bundle)?;
+
+    // Step 10: If search_graph.json and verification_report.json both exist,
+    // verify search_graph_digest in report matches search_graph.json's content_hash.
+    verify_search_graph_digest_binding(bundle)?;
 
     Ok(())
 }
@@ -361,6 +370,38 @@ fn verify_trace_report_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleVe
         return Err(BundleVerifyError::StepChainMismatch {
             declared: declared_chain.to_string(),
             recomputed: computed_chain.digest.as_str().to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+/// If both `search_graph.json` and `verification_report.json` exist, verify
+/// that the report's `search_graph_digest` matches `search_graph.json`'s `content_hash`.
+fn verify_search_graph_digest_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError> {
+    let (Some(graph_artifact), Some(report_artifact)) = (
+        bundle.artifacts.get("search_graph.json"),
+        bundle.artifacts.get("verification_report.json"),
+    ) else {
+        return Ok(());
+    };
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&report_artifact.content).map_err(|e| {
+            BundleVerifyError::ReportParseError {
+                detail: format!("{e:?}"),
+            }
+        })?;
+
+    // Only verify if the report declares a search_graph_digest field.
+    let Some(declared_digest) = report.get("search_graph_digest").and_then(|v| v.as_str()) else {
+        return Ok(());
+    };
+
+    if graph_artifact.content_hash.as_str() != declared_digest {
+        return Err(BundleVerifyError::SearchGraphDigestMismatch {
+            declared: declared_digest.to_string(),
+            recomputed: graph_artifact.content_hash.as_str().to_string(),
         });
     }
 

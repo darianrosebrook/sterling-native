@@ -23,6 +23,11 @@ use crate::policy::{
     PolicyViolation,
 };
 
+use sterling_search::contract::SearchWorldV1;
+use sterling_search::policy::SearchPolicyV1;
+use sterling_search::scorer::ValueScorer;
+use sterling_search::search::MetadataBindings;
+
 use sterling_kernel::carrier::bytetrace::{
     ByteTraceEnvelopeV1, ByteTraceFooterV1, ByteTraceFrameV1, ByteTraceHeaderV1, ByteTraceV1,
     ReplayVerdict, TraceBundleV1,
@@ -61,6 +66,177 @@ pub enum RunError {
     PolicyBuildFailed { detail: String },
     /// Policy violation (fail-closed).
     PolicyViolation(PolicyViolation),
+}
+
+/// Error during a search harness run.
+#[derive(Debug)]
+pub enum SearchRunError {
+    /// Linear run error (from the underlying harness pipeline).
+    RunError(RunError),
+    /// Search error (from the search loop).
+    SearchError(sterling_search::error::SearchError),
+    /// Canonical JSON serialization failed.
+    CanonFailed { detail: String },
+    /// Bundle assembly failed.
+    BundleFailed(BundleBuildError),
+    /// Policy construction failed.
+    PolicyBuildFailed { detail: String },
+}
+
+/// Run a search world through the search pipeline, producing a bundle.
+///
+/// Pipeline:
+/// 1. `encode_payload()` → `compile()` → root `ByteStateV1`
+/// 2. Build search policy + metadata bindings
+/// 3. `search(root_state, world, policy, scorer)` → `SearchResult`
+/// 4. Assemble bundle with `search_graph.json` (normative)
+///
+/// The bundle includes all standard linear artifacts plus:
+/// - `search_graph.json` (normative) — the complete search audit trail
+///
+/// # Errors
+///
+/// Returns [`SearchRunError`] at any pipeline step.
+pub fn run_search(
+    world: &(dyn SearchWorldV1 + 'static),
+    harness_world: &dyn WorldHarnessV1,
+    search_policy: &SearchPolicyV1,
+    scorer: &dyn ValueScorer,
+) -> Result<ArtifactBundleV1, SearchRunError> {
+    // Phase 1: compile root state.
+    let payload_bytes = harness_world
+        .encode_payload()
+        .map_err(|e| SearchRunError::RunError(RunError::WorldError(e)))?;
+    let schema = harness_world.schema_descriptor();
+    let registry = harness_world
+        .registry()
+        .map_err(|e| SearchRunError::RunError(RunError::WorldError(e)))?;
+
+    let compilation = compile(&payload_bytes, &schema, &registry).map_err(|e| {
+        SearchRunError::RunError(RunError::CompilationFailed {
+            detail: format!("{e:?}"),
+        })
+    })?;
+
+    // Phase 2: build metadata bindings.
+    let policy_config = PolicyConfig::default();
+    let policy_snapshot = build_policy(harness_world, &policy_config).map_err(|e| {
+        SearchRunError::PolicyBuildFailed {
+            detail: format!("{e:?}"),
+        }
+    })?;
+    let policy_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &policy_snapshot.bytes);
+
+    // Build search policy canonical bytes for digest binding.
+    let search_policy_json = search_policy_to_json(search_policy);
+    let search_policy_bytes =
+        canonical_json_bytes(&search_policy_json).map_err(|e| SearchRunError::CanonFailed {
+            detail: format!("{e:?}"),
+        })?;
+    let search_policy_digest = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &search_policy_bytes);
+
+    let registry_digest = registry.digest().map_err(|e| {
+        SearchRunError::RunError(RunError::CompilationFailed {
+            detail: format!("registry digest: {e:?}"),
+        })
+    })?;
+
+    let codebook_hash = build_codebook_hash(harness_world).map_err(SearchRunError::RunError)?;
+
+    let bindings = MetadataBindings {
+        world_id: harness_world.world_id().to_string(),
+        schema_descriptor: format!("{}:{}:{}", schema.id, schema.version, schema.hash),
+        registry_digest: registry_digest.hex_digest().to_string(),
+        policy_snapshot_digest: policy_content_hash.hex_digest().to_string(),
+        search_policy_digest: search_policy_digest.hex_digest().to_string(),
+    };
+
+    // Phase 3: run search.
+    let search_result = sterling_search::search::search(
+        compilation.state.clone(),
+        world,
+        &registry,
+        search_policy,
+        scorer,
+        &bindings,
+    )
+    .map_err(SearchRunError::SearchError)?;
+
+    // Phase 4: serialize search graph + build bundle.
+    let search_graph_bytes =
+        search_result
+            .graph
+            .to_canonical_json_bytes()
+            .map_err(|e| SearchRunError::CanonFailed {
+                detail: format!("{e:?}"),
+            })?;
+
+    let fixture_json =
+        build_fixture_json(harness_world, &payload_bytes).map_err(SearchRunError::RunError)?;
+
+    // Build verification report for search.
+    let search_graph_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &search_graph_bytes);
+    let verification_report = build_search_verification_report(
+        harness_world.world_id(),
+        &policy_content_hash,
+        &search_graph_content_hash,
+        &codebook_hash,
+    )
+    .map_err(SearchRunError::RunError)?;
+
+    let artifacts = vec![
+        ("fixture.json".into(), fixture_json, true),
+        (
+            "compilation_manifest.json".into(),
+            compilation.compilation_manifest,
+            true,
+        ),
+        ("policy_snapshot.json".into(), policy_snapshot.bytes, true),
+        ("search_graph.json".into(), search_graph_bytes, true),
+        ("verification_report.json".into(), verification_report, true),
+    ];
+
+    build_bundle(artifacts).map_err(SearchRunError::BundleFailed)
+}
+
+/// Serialize a `SearchPolicyV1` to canonical JSON for digest binding.
+fn search_policy_to_json(policy: &SearchPolicyV1) -> serde_json::Value {
+    serde_json::json!({
+        "dedup_key": match policy.dedup_key {
+            sterling_search::policy::DedupKeyV1::IdentityOnly => "identity_only",
+            sterling_search::policy::DedupKeyV1::FullState => "full_state",
+        },
+        "max_candidates_per_node": policy.max_candidates_per_node,
+        "max_depth": policy.max_depth,
+        "max_expansions": policy.max_expansions,
+        "max_frontier_size": policy.max_frontier_size,
+        "prune_visited_policy": match policy.prune_visited_policy {
+            sterling_search::policy::PruneVisitedPolicyV1::KeepVisited => "keep_visited",
+            sterling_search::policy::PruneVisitedPolicyV1::ReleaseVisited => "release_visited",
+        },
+        "schema_version": "search_policy.v1",
+    })
+}
+
+/// Build a search-mode verification report.
+fn build_search_verification_report(
+    world_id: &str,
+    policy_content_hash: &ContentHash,
+    search_graph_content_hash: &ContentHash,
+    codebook_hash: &ContentHash,
+) -> Result<Vec<u8>, RunError> {
+    let report = serde_json::json!({
+        "codebook_hash": codebook_hash.as_str(),
+        "mode": "search",
+        "policy_digest": policy_content_hash.as_str(),
+        "schema_version": "verification_report.v1",
+        "search_graph_digest": search_graph_content_hash.as_str(),
+        "world_id": world_id,
+    });
+
+    canonical_json_bytes(&report).map_err(|e| RunError::CanonFailed {
+        detail: format!("{e:?}"),
+    })
 }
 
 /// Run a world through the full harness pipeline with default policy.
@@ -392,6 +568,7 @@ fn build_verification_report(
 mod tests {
     use super::*;
     use crate::worlds::rome_mini::RomeMini;
+    use crate::worlds::rome_mini_search::RomeMiniSearch;
 
     #[test]
     fn rome_mini_produces_bundle() {
@@ -480,5 +657,71 @@ mod tests {
             RunError::PolicyViolation(PolicyViolation::AllowlistViolation { .. }) => {}
             other => panic!("expected PolicyViolation(AllowlistViolation), got {other:?}"),
         }
+    }
+
+    // --- Search runner tests ---
+
+    #[test]
+    fn run_search_produces_bundle() {
+        let policy = SearchPolicyV1::default();
+        let scorer = sterling_search::scorer::UniformScorer;
+        let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+        assert!(bundle.artifacts.contains_key("fixture.json"));
+        assert!(bundle.artifacts.contains_key("compilation_manifest.json"));
+        assert!(bundle.artifacts.contains_key("policy_snapshot.json"));
+        assert!(bundle.artifacts.contains_key("search_graph.json"));
+        assert!(bundle.artifacts.contains_key("verification_report.json"));
+        assert_eq!(bundle.artifacts.len(), 5);
+    }
+
+    #[test]
+    fn run_search_graph_is_normative() {
+        let policy = SearchPolicyV1::default();
+        let scorer = sterling_search::scorer::UniformScorer;
+        let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+        let graph = bundle.artifacts.get("search_graph.json").unwrap();
+        assert!(graph.normative, "search_graph.json should be normative");
+    }
+
+    #[test]
+    fn run_search_verification_report_contains_search_graph_digest() {
+        let policy = SearchPolicyV1::default();
+        let scorer = sterling_search::scorer::UniformScorer;
+        let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+
+        let report = bundle.artifacts.get("verification_report.json").unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&report.content).unwrap();
+        let digest = json["search_graph_digest"].as_str().unwrap();
+        assert!(digest.starts_with("sha256:"));
+
+        // Should match search_graph.json's content_hash.
+        let graph = bundle.artifacts.get("search_graph.json").unwrap();
+        assert_eq!(digest, graph.content_hash.as_str());
+    }
+
+    #[test]
+    fn run_search_verify_bundle_passes() {
+        use crate::bundle::verify_bundle;
+        let policy = SearchPolicyV1::default();
+        let scorer = sterling_search::scorer::UniformScorer;
+        let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+        verify_bundle(&bundle).unwrap();
+    }
+
+    #[test]
+    fn run_search_finds_goal() {
+        let policy = SearchPolicyV1::default();
+        let scorer = sterling_search::scorer::UniformScorer;
+        let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+
+        let report = bundle.artifacts.get("verification_report.json").unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&report.content).unwrap();
+        assert_eq!(json["mode"], "search");
+
+        // Search graph should have goal_reached termination
+        let graph = bundle.artifacts.get("search_graph.json").unwrap();
+        let graph_json: serde_json::Value = serde_json::from_slice(&graph.content).unwrap();
+        let term = &graph_json["metadata"]["termination_reason"];
+        assert_eq!(term["type"], "goal_reached");
     }
 }
