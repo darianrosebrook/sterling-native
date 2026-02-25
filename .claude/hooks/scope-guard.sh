@@ -119,33 +119,64 @@ if [[ ! -f "$SPEC_FILE" ]] && [[ -f "$SCOPE_FILE" ]]; then
   fi
 fi
 
-# Use Node.js to parse YAML and check scope
+# Use Node.js to parse YAML and check scope across working spec + active feature specs
 if command -v node >/dev/null 2>&1; then
+  SPECS_DIR="$PROJECT_DIR/.caws/specs"
   SCOPE_CHECK=$(node -e "
     const yaml = require('js-yaml');
     const fs = require('fs');
     const path = require('path');
+    const glob = require('path');
 
     try {
-      const spec = yaml.load(fs.readFileSync('$SPEC_FILE', 'utf8'));
       const filePath = '$REL_PATH';
 
-      // Check if file is explicitly out of scope
-      const outOfScope = spec.scope?.out || [];
-      for (const pattern of outOfScope) {
-        // Simple glob-like matching
-        const regex = new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.'));
-        if (regex.test(filePath)) {
-          console.log('out_of_scope:' + pattern);
-          process.exit(0);
+      // Root-level files (no directory component) and .caws/ are always allowed
+      if (!filePath.includes('/') || filePath.startsWith('.caws/')) {
+        console.log('in_scope');
+        process.exit(0);
+      }
+
+      // Collect all specs: working-spec + active feature specs
+      const specs = [];
+      const specFile = '$SPEC_FILE';
+      if (fs.existsSync(specFile)) {
+        specs.push({ source: 'working-spec', spec: yaml.load(fs.readFileSync(specFile, 'utf8')) });
+      }
+      const specsDir = '$SPECS_DIR';
+      if (fs.existsSync(specsDir)) {
+        for (const f of fs.readdirSync(specsDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'))) {
+          try {
+            const s = yaml.load(fs.readFileSync(path.join(specsDir, f), 'utf8'));
+            // Only include active specs (not closed)
+            if (s.status !== 'closed') {
+              specs.push({ source: f, spec: s });
+            }
+          } catch (_) {}
         }
       }
 
-      // Check if file is in scope (if scope is explicitly defined)
-      const inScope = spec.scope?.in || [];
-      if (inScope.length > 0) {
+      if (specs.length === 0) {
+        console.log('in_scope');
+        process.exit(0);
+      }
+
+      // Check if file is explicitly out of scope in ANY spec
+      for (const { source, spec } of specs) {
+        for (const pattern of (spec.scope?.out || [])) {
+          const regex = new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.'));
+          if (regex.test(filePath)) {
+            console.log('out_of_scope:' + source + ':' + pattern);
+            process.exit(0);
+          }
+        }
+      }
+
+      // Union all in-scope patterns across specs
+      const allInScope = specs.flatMap(({ spec }) => spec.scope?.in || []);
+      if (allInScope.length > 0) {
         let found = false;
-        for (const pattern of inScope) {
+        for (const pattern of allInScope) {
           const regex = new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.'));
           if (regex.test(filePath)) {
             found = true;
@@ -165,12 +196,14 @@ if command -v node >/dev/null 2>&1; then
   " 2>&1)
 
   if [[ "$SCOPE_CHECK" == out_of_scope:* ]]; then
-    PATTERN="${SCOPE_CHECK#out_of_scope:}"
+    DETAIL="${SCOPE_CHECK#out_of_scope:}"
+    SOURCE="${DETAIL%%:*}"
+    PATTERN="${DETAIL#*:}"
     echo '{
       "hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "ask",
-        "permissionDecisionReason": "This file ('"$REL_PATH"') is marked as out-of-scope in the working spec (pattern: '"$PATTERN"'). Editing it may cause scope creep. Please confirm this edit is intentional."
+        "permissionDecisionReason": "This file ('"$REL_PATH"') is marked as out-of-scope in '"$SOURCE"' (pattern: '"$PATTERN"'). Editing it may cause scope creep. Please confirm this edit is intentional."
       }
     }'
     exit 0
@@ -181,7 +214,7 @@ if command -v node >/dev/null 2>&1; then
       "hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "ask",
-        "permissionDecisionReason": "This file ('"$REL_PATH"') is not in the defined scope of the working spec. Editing it may cause scope creep. Please confirm this edit is intentional."
+        "permissionDecisionReason": "This file ('"$REL_PATH"') is not in the defined scope of any active spec. Editing it may cause scope creep. Please confirm this edit is intentional."
       }
     }'
     exit 0
