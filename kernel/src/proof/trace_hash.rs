@@ -26,6 +26,8 @@ pub enum TraceHashError {
     PayloadExtraction { detail: String },
     /// Trace has no frames (step chain requires at least one frame).
     EmptyTrace,
+    /// Internal digest could not be decoded from hex (integrity violation).
+    DigestCorruption { detail: String },
 }
 
 impl From<TraceWriteError> for TraceHashError {
@@ -76,7 +78,7 @@ pub fn step_chain(trace: &ByteTraceV1) -> Result<StepChainResult, TraceHashError
 
     // chain_i = sha256(DOMAIN_TRACE_STEP_CHAIN || chain_{i-1} || frame_i_bytes)
     for frame in &trace.frames[1..] {
-        let prev_digest_bytes = hex_digest_to_bytes(prev.hex_digest());
+        let prev_digest_bytes = hex_digest_to_bytes(prev.hex_digest())?;
         let frame_bytes = frame.to_bytes();
 
         let mut input = Vec::with_capacity(prev_digest_bytes.len() + frame_bytes.len());
@@ -93,16 +95,11 @@ pub fn step_chain(trace: &ByteTraceV1) -> Result<StepChainResult, TraceHashError
     })
 }
 
-/// Decode a hex digest string to raw bytes.
-///
-/// Internal helper. `canonical_hash` always returns valid lowercase hex,
-/// so this cannot fail in practice. Uses a manual decode to avoid
-/// `expect`/`unwrap` that would trigger clippy panics warnings.
-fn hex_digest_to_bytes(hex_str: &str) -> Vec<u8> {
-    // canonical_hash guarantees 64-char lowercase hex (SHA-256).
-    // Fall back to empty vec if somehow invalid (fail-safe, not fail-open:
-    // a wrong digest just means the hash won't match, not UB).
-    hex::decode(hex_str).unwrap_or_default()
+/// Decode a hex digest string to raw bytes. Fail-closed.
+fn hex_digest_to_bytes(hex_str: &str) -> Result<Vec<u8>, TraceHashError> {
+    hex::decode(hex_str).map_err(|e| TraceHashError::DigestCorruption {
+        detail: format!("hex decode failed: {e}"),
+    })
 }
 
 /// Result of computing the step hash chain.

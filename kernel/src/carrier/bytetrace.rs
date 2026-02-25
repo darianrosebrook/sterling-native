@@ -253,6 +253,12 @@ pub enum TraceParseError {
     InvalidSlotStatus { frame_index: usize, byte_value: u8 },
     /// Header dimensions would cause arithmetic overflow.
     DimensionOverflow { detail: String },
+    /// Frame 0 does not use `INITIAL_STATE` sentinel or has non-zero `op_args`.
+    BadInitialFrame { detail: String },
+    /// Trailing bytes after footer section.
+    TrailingBytes { excess: usize },
+    /// Header or footer bytes are not in canonical JSON form.
+    NonCanonical { section: String, detail: String },
 }
 
 #[cfg(test)]

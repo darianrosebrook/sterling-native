@@ -17,6 +17,7 @@ use crate::carrier::bytetrace::{
     ByteTraceEnvelopeV1, ByteTraceFooterV1, ByteTraceHeaderV1, ByteTraceV1, BYTETRACE_V1_MAGIC,
     MAX_SECTION_LEN,
 };
+use crate::carrier::code32::Code32;
 use crate::proof::canon::canonical_json_bytes;
 
 /// Error during trace serialization.
@@ -30,6 +31,10 @@ pub enum TraceWriteError {
     CanonError { detail: String },
     /// Frame count does not match header `step_count`.
     StepCountMismatch { header: usize, actual: usize },
+    /// Size computation overflowed (checked arithmetic).
+    DimensionOverflow { detail: String },
+    /// Frame 0 does not use `INITIAL_STATE` sentinel or has non-zero `op_args`.
+    BadInitialFrame { detail: String },
 }
 
 /// Serialize a `ByteTraceV1` to `.bst1` bytes.
@@ -37,9 +42,66 @@ pub enum TraceWriteError {
 /// # Errors
 ///
 /// Returns [`TraceWriteError`] if any section exceeds u16 length,
-/// frame dimensions mismatch, or frame count != `step_count`.
+/// frame dimensions mismatch, frame count != `step_count`, frame 0
+/// is not the `INITIAL_STATE` sentinel, or dimensions overflow.
 pub fn trace_to_bytes(trace: &ByteTraceV1) -> Result<Vec<u8>, TraceWriteError> {
-    // Validate frame count matches header.
+    let stride = validate_trace(trace)?;
+
+    // Serialize sections.
+    let envelope_json = envelope_to_json(&trace.envelope);
+    check_section_len("envelope", envelope_json.len())?;
+    let header_json = header_to_canonical_json(&trace.header)?;
+    check_section_len("header", header_json.len())?;
+    let footer_json = footer_to_canonical_json(&trace.footer)?;
+    check_section_len("footer", footer_json.len())?;
+
+    // Build the byte stream (checked arithmetic for all size computations).
+    let body_len = trace.frames.len().checked_mul(stride).ok_or_else(|| {
+        TraceWriteError::DimensionOverflow {
+            detail: "frames.len() * stride overflows".into(),
+        }
+    })?;
+    let total_len = 2usize
+        .checked_add(envelope_json.len())
+        .and_then(|n| n.checked_add(4))
+        .and_then(|n| n.checked_add(2))
+        .and_then(|n| n.checked_add(header_json.len()))
+        .and_then(|n| n.checked_add(body_len))
+        .and_then(|n| n.checked_add(2))
+        .and_then(|n| n.checked_add(footer_json.len()))
+        .ok_or_else(|| TraceWriteError::DimensionOverflow {
+            detail: "total output length overflows".into(),
+        })?;
+    let mut buf = Vec::with_capacity(total_len);
+
+    // Envelope (not hashed).
+    write_u16le(&mut buf, envelope_json.len());
+    buf.extend_from_slice(&envelope_json);
+
+    // Magic.
+    buf.extend_from_slice(&BYTETRACE_V1_MAGIC);
+
+    // Header.
+    write_u16le(&mut buf, header_json.len());
+    buf.extend_from_slice(&header_json);
+
+    // Body (fixed-stride frames).
+    for frame in &trace.frames {
+        buf.extend_from_slice(&frame.op_code);
+        buf.extend_from_slice(&frame.op_args);
+        buf.extend_from_slice(&frame.result_identity);
+        buf.extend_from_slice(&frame.result_status);
+    }
+
+    // Footer.
+    write_u16le(&mut buf, footer_json.len());
+    buf.extend_from_slice(&footer_json);
+
+    Ok(buf)
+}
+
+/// Validate trace structure and return the frame stride.
+fn validate_trace(trace: &ByteTraceV1) -> Result<usize, TraceWriteError> {
     if trace.frames.len() != trace.header.step_count {
         return Err(TraceWriteError::StepCountMismatch {
             header: trace.header.step_count,
@@ -47,20 +109,50 @@ pub fn trace_to_bytes(trace: &ByteTraceV1) -> Result<Vec<u8>, TraceWriteError> {
         });
     }
 
-    // Validate frame dimensions against header.
-    let stride =
-        trace
-            .header
-            .frame_stride()
-            .ok_or_else(|| TraceWriteError::FrameDimensionMismatch {
-                frame_index: 0,
-                detail: "header dimensions cause arithmetic overflow".into(),
-            })?;
+    let stride = trace
+        .header
+        .frame_stride()
+        .ok_or_else(|| TraceWriteError::DimensionOverflow {
+            detail: "header dimensions cause arithmetic overflow in frame_stride".into(),
+        })?;
 
-    let total_slots = trace.header.layer_count * trace.header.slot_count;
-    let identity_len = total_slots * 4;
+    let total_slots = trace
+        .header
+        .layer_count
+        .checked_mul(trace.header.slot_count)
+        .ok_or_else(|| TraceWriteError::DimensionOverflow {
+            detail: "layer_count * slot_count overflows".into(),
+        })?;
+    let identity_len =
+        total_slots
+            .checked_mul(4)
+            .ok_or_else(|| TraceWriteError::DimensionOverflow {
+                detail: "total_slots * 4 overflows".into(),
+            })?;
     let status_len = total_slots;
-    let args_len = trace.header.arg_slot_count * 4;
+    let args_len = trace.header.arg_slot_count.checked_mul(4).ok_or_else(|| {
+        TraceWriteError::DimensionOverflow {
+            detail: "arg_slot_count * 4 overflows".into(),
+        }
+    })?;
+
+    // Validate frame 0 sentinel.
+    if let Some(frame_0) = trace.frames.first() {
+        let expected_op = Code32::INITIAL_STATE.to_le_bytes();
+        if frame_0.op_code != expected_op {
+            return Err(TraceWriteError::BadInitialFrame {
+                detail: format!(
+                    "frame 0 op_code {:?} != INITIAL_STATE {:?}",
+                    frame_0.op_code, expected_op
+                ),
+            });
+        }
+        if frame_0.op_args.iter().any(|&b| b != 0) {
+            return Err(TraceWriteError::BadInitialFrame {
+                detail: "frame 0 op_args must be zero-filled".into(),
+            });
+        }
+    }
 
     for (i, frame) in trace.frames.iter().enumerate() {
         let frame_len =
@@ -100,48 +192,7 @@ pub fn trace_to_bytes(trace: &ByteTraceV1) -> Result<Vec<u8>, TraceWriteError> {
         }
     }
 
-    // Serialize envelope JSON (not canonical — observability only, not hashed).
-    let envelope_json = envelope_to_json(&trace.envelope);
-    check_section_len("envelope", envelope_json.len())?;
-
-    // Serialize header canonical JSON.
-    let header_json = header_to_canonical_json(&trace.header)?;
-    check_section_len("header", header_json.len())?;
-
-    // Serialize footer canonical JSON.
-    let footer_json = footer_to_canonical_json(&trace.footer)?;
-    check_section_len("footer", footer_json.len())?;
-
-    // Build the byte stream.
-    let body_len = trace.frames.len() * stride;
-    let total_len =
-        2 + envelope_json.len() + 4 + 2 + header_json.len() + body_len + 2 + footer_json.len();
-    let mut buf = Vec::with_capacity(total_len);
-
-    // Envelope (not hashed).
-    write_u16le(&mut buf, envelope_json.len());
-    buf.extend_from_slice(&envelope_json);
-
-    // Magic.
-    buf.extend_from_slice(&BYTETRACE_V1_MAGIC);
-
-    // Header.
-    write_u16le(&mut buf, header_json.len());
-    buf.extend_from_slice(&header_json);
-
-    // Body (fixed-stride frames).
-    for frame in &trace.frames {
-        buf.extend_from_slice(&frame.op_code);
-        buf.extend_from_slice(&frame.op_args);
-        buf.extend_from_slice(&frame.result_identity);
-        buf.extend_from_slice(&frame.result_status);
-    }
-
-    // Footer.
-    write_u16le(&mut buf, footer_json.len());
-    buf.extend_from_slice(&footer_json);
-
-    Ok(buf)
+    Ok(stride)
 }
 
 /// Extract the hashed payload bytes from a serialized trace.

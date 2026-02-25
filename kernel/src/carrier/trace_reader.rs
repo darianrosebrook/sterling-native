@@ -1,8 +1,18 @@
 //! `ByteTraceV1` binary reader: deserializes `.bst1` bytes into structs.
 //!
 //! Fail-closed: rejects truncated input, bad magic, wrong body length,
-//! invalid `SlotStatus` discriminants. No partial frames. No panics on
-//! malformed input — all failure paths return typed [`TraceParseError`].
+//! invalid `SlotStatus` discriminants, non-canonical header/footer bytes,
+//! bad initial frame, and trailing bytes. No partial frames. No panics
+//! on malformed input — all failure paths return typed [`TraceParseError`].
+//!
+//! # Canonical enforcement
+//!
+//! Header and footer bytes are verified to be in canonical JSON form
+//! (sorted keys, compact, integers only) by re-serializing through
+//! `proof::canon::canonical_json_bytes` and comparing byte-for-byte.
+//! This ensures the payload hash claim surface is unambiguous: "hash of
+//! bytes in the `.bst1`" and "hash of canonicalized semantics" are the
+//! same thing, because non-canonical bytes are rejected at parse time.
 //!
 //! # Wire layout (same as `trace_writer`)
 //!
@@ -19,13 +29,16 @@ use crate::carrier::bytetrace::{
     ByteTraceEnvelopeV1, ByteTraceFooterV1, ByteTraceFrameV1, ByteTraceHeaderV1, ByteTraceV1,
     TraceParseError, BYTETRACE_V1_MAGIC, MAX_SECTION_LEN,
 };
+use crate::carrier::code32::Code32;
+use crate::proof::canon::canonical_json_bytes;
 
 /// Parse `.bst1` bytes into a `ByteTraceV1`.
 ///
 /// # Errors
 ///
 /// Returns [`TraceParseError`] if the input is truncated, has bad magic,
-/// mismatched body length, or contains invalid `SlotStatus` bytes.
+/// mismatched body length, contains invalid `SlotStatus` bytes,
+/// non-canonical header/footer JSON, bad initial frame, or trailing bytes.
 pub fn bytes_to_trace(data: &[u8]) -> Result<ByteTraceV1, TraceParseError> {
     let mut cursor = 0usize;
 
@@ -43,11 +56,12 @@ pub fn bytes_to_trace(data: &[u8]) -> Result<ByteTraceV1, TraceParseError> {
         return Err(TraceParseError::BadMagic { found: magic });
     }
 
-    // --- Header ---
+    // --- Header (canonical enforcement) ---
     let header_len = read_u16le(data, &mut cursor, "header")?;
     check_section_len("header", header_len)?;
     let header_bytes = read_slice(data, &mut cursor, header_len, "header")?;
     let header = parse_header(header_bytes)?;
+    verify_canonical(header_bytes, "header")?;
 
     // --- Body ---
     let stride = header
@@ -63,8 +77,6 @@ pub fn bytes_to_trace(data: &[u8]) -> Result<ByteTraceV1, TraceParseError> {
                 detail: "step_count * stride overflows".into(),
             })?;
 
-    // Remaining bytes minus footer (footer_len:u16le + footer_json).
-    // We need at least expected_body_len + 2 bytes for footer length.
     let remaining = data.len().saturating_sub(cursor);
     if remaining < expected_body_len {
         return Err(TraceParseError::Truncated {
@@ -75,11 +87,24 @@ pub fn bytes_to_trace(data: &[u8]) -> Result<ByteTraceV1, TraceParseError> {
     let body_bytes = read_slice(data, &mut cursor, expected_body_len, "body")?;
     let frames = parse_frames(body_bytes, &header, stride)?;
 
-    // --- Footer ---
+    // --- Frame 0 sentinel validation ---
+    if !frames.is_empty() {
+        validate_initial_frame(&frames[0], header.arg_slot_count)?;
+    }
+
+    // --- Footer (canonical enforcement) ---
     let footer_len = read_u16le(data, &mut cursor, "footer")?;
     check_section_len("footer", footer_len)?;
     let footer_bytes = read_slice(data, &mut cursor, footer_len, "footer")?;
     let footer = parse_footer(footer_bytes)?;
+    verify_canonical(footer_bytes, "footer")?;
+
+    // --- Reject trailing bytes ---
+    if cursor != data.len() {
+        return Err(TraceParseError::TrailingBytes {
+            excess: data.len() - cursor,
+        });
+    }
 
     Ok(ByteTraceV1 {
         envelope,
@@ -129,6 +154,59 @@ fn check_section_len(section: &str, len: usize) -> Result<(), TraceParseError> {
         return Err(TraceParseError::SectionTooLong {
             section: section.into(),
             len,
+        });
+    }
+    Ok(())
+}
+
+/// Verify that raw bytes are in canonical JSON form by re-serializing
+/// and comparing byte-for-byte.
+fn verify_canonical(raw_bytes: &[u8], section: &str) -> Result<(), TraceParseError> {
+    let value: serde_json::Value =
+        serde_json::from_slice(raw_bytes).map_err(|e| TraceParseError::NonCanonical {
+            section: section.into(),
+            detail: format!("JSON re-parse failed: {e}"),
+        })?;
+    let canonical = canonical_json_bytes(&value).map_err(|e| TraceParseError::NonCanonical {
+        section: section.into(),
+        detail: format!("canonical_json_bytes failed: {e:?}"),
+    })?;
+    if canonical != raw_bytes {
+        return Err(TraceParseError::NonCanonical {
+            section: section.into(),
+            detail: "bytes are not in canonical JSON form".into(),
+        });
+    }
+    Ok(())
+}
+
+/// Validate frame 0 sentinel: `op_code` must be `INITIAL_STATE`, `op_args` must be zero-filled.
+fn validate_initial_frame(
+    frame: &ByteTraceFrameV1,
+    arg_slot_count: usize,
+) -> Result<(), TraceParseError> {
+    let expected_op_code = Code32::INITIAL_STATE.to_le_bytes();
+    if frame.op_code != expected_op_code {
+        return Err(TraceParseError::BadInitialFrame {
+            detail: format!(
+                "frame 0 op_code {:?} != INITIAL_STATE {:?}",
+                frame.op_code, expected_op_code
+            ),
+        });
+    }
+    let expected_args_len = arg_slot_count * 4;
+    if frame.op_args.len() != expected_args_len {
+        return Err(TraceParseError::BadInitialFrame {
+            detail: format!(
+                "frame 0 op_args length {} != expected {}",
+                frame.op_args.len(),
+                expected_args_len
+            ),
+        });
+    }
+    if frame.op_args.iter().any(|&b| b != 0) {
+        return Err(TraceParseError::BadInitialFrame {
+            detail: "frame 0 op_args must be zero-filled".into(),
         });
     }
     Ok(())
@@ -204,14 +282,26 @@ fn parse_footer(bytes: &[u8]) -> Result<ByteTraceFooterV1, TraceParseError> {
         })?;
 
     let suite_identity = get_string(obj, "suite_identity", "footer")?;
-    let witness_store_digest = obj
-        .get("witness_store_digest")
-        .and_then(|v| v.as_str())
-        .map(String::from);
+
+    // Reject explicit null for witness_store_digest — spec says omit, not null.
+    if let Some(v) = obj.get("witness_store_digest") {
+        if v.is_null() {
+            return Err(TraceParseError::InvalidFooter {
+                detail: "witness_store_digest must be omitted when absent, not null".into(),
+            });
+        }
+        let digest = v.as_str().ok_or_else(|| TraceParseError::InvalidFooter {
+            detail: "witness_store_digest must be a string".into(),
+        })?;
+        return Ok(ByteTraceFooterV1 {
+            suite_identity,
+            witness_store_digest: Some(digest.to_string()),
+        });
+    }
 
     Ok(ByteTraceFooterV1 {
         suite_identity,
-        witness_store_digest,
+        witness_store_digest: None,
     })
 }
 
@@ -254,14 +344,13 @@ fn parse_frames(
 
         // result_status — validate each byte
         let status_slice = &body[pos..pos + status_bytes];
-        for (j, &b) in status_slice.iter().enumerate() {
+        for &b in status_slice {
             if SlotStatus::from_byte(b).is_none() {
                 return Err(TraceParseError::InvalidSlotStatus {
                     frame_index: i,
                     byte_value: b,
                 });
             }
-            let _ = j; // index available for future diagnostics
         }
         let result_status = status_slice.to_vec();
 
@@ -443,7 +532,6 @@ mod tests {
     fn rejects_bad_magic() {
         let trace = make_trace();
         let mut bytes = trace_to_bytes(&trace).unwrap();
-        // Find magic offset and corrupt it.
         let env_len = u16::from_le_bytes([bytes[0], bytes[1]]) as usize;
         let magic_offset = 2 + env_len;
         bytes[magic_offset] = b'X';
@@ -455,13 +543,11 @@ mod tests {
     fn rejects_truncated_body() {
         let trace = make_trace();
         let bytes = trace_to_bytes(&trace).unwrap();
-        // Truncate well into the body but before the footer.
         let env_len = u16::from_le_bytes([bytes[0], bytes[1]]) as usize;
-        let header_offset = 2 + env_len + 4; // past envelope + magic
+        let header_offset = 2 + env_len + 4;
         let header_len =
             u16::from_le_bytes([bytes[header_offset], bytes[header_offset + 1]]) as usize;
         let body_start = header_offset + 2 + header_len;
-        // Truncate in the middle of the body.
         let truncated = &bytes[..body_start + 2];
         let err = bytes_to_trace(truncated).unwrap_err();
         assert!(matches!(err, TraceParseError::Truncated { .. }));
@@ -471,16 +557,14 @@ mod tests {
     fn rejects_invalid_slot_status() {
         let trace = make_trace();
         let mut bytes = trace_to_bytes(&trace).unwrap();
-        // Find body start and inject an invalid status byte.
         let env_len = u16::from_le_bytes([bytes[0], bytes[1]]) as usize;
         let header_offset = 2 + env_len + 4;
         let header_len =
             u16::from_le_bytes([bytes[header_offset], bytes[header_offset + 1]]) as usize;
         let body_start = header_offset + 2 + header_len;
-        // Frame layout: op_code(4) + op_args(4) + identity(8) + status(2)
-        // Status bytes are at body_start + 4 + 4 + 8 = body_start + 16
+        // Status bytes at body_start + 4 + 4 + 8 = body_start + 16
         let status_offset = body_start + 16;
-        bytes[status_offset] = 42; // Invalid SlotStatus
+        bytes[status_offset] = 42;
         let err = bytes_to_trace(&bytes).unwrap_err();
         assert!(matches!(
             err,
@@ -495,10 +579,121 @@ mod tests {
     fn rejects_truncated_footer() {
         let trace = make_trace();
         let bytes = trace_to_bytes(&trace).unwrap();
-        // Remove the last byte of footer.
         let truncated = &bytes[..bytes.len() - 1];
         let err = bytes_to_trace(truncated).unwrap_err();
         assert!(matches!(err, TraceParseError::Truncated { .. }));
+    }
+
+    #[test]
+    fn rejects_trailing_bytes() {
+        let trace = make_trace();
+        let mut bytes = trace_to_bytes(&trace).unwrap();
+        bytes.push(0xFF); // garbage suffix
+        let err = bytes_to_trace(&bytes).unwrap_err();
+        assert!(matches!(err, TraceParseError::TrailingBytes { excess: 1 }));
+    }
+
+    #[test]
+    fn rejects_non_canonical_header() {
+        let trace = make_trace();
+        let bytes = trace_to_bytes(&trace).unwrap();
+
+        // Find header section and inject whitespace to break canonicality.
+        let env_len = u16::from_le_bytes([bytes[0], bytes[1]]) as usize;
+        let header_offset = 2 + env_len + 4; // after envelope + magic
+        let header_len =
+            u16::from_le_bytes([bytes[header_offset], bytes[header_offset + 1]]) as usize;
+        let header_start = header_offset + 2;
+
+        // Build a non-canonical header: add a space after first `{`.
+        let header_json = &bytes[header_start..header_start + header_len];
+        let mut bad_header = Vec::with_capacity(header_json.len() + 1);
+        bad_header.push(b'{');
+        bad_header.push(b' '); // whitespace = non-canonical
+        bad_header.extend_from_slice(&header_json[1..]);
+
+        // Rebuild the bytes with the bad header and updated length.
+        #[allow(clippy::cast_possible_truncation)]
+        let new_header_len_u16 = bad_header.len() as u16; // test value known < u16::MAX
+        let mut rebuilt = Vec::new();
+        rebuilt.extend_from_slice(&bytes[..header_offset]);
+        rebuilt.extend_from_slice(&new_header_len_u16.to_le_bytes());
+        rebuilt.extend_from_slice(&bad_header);
+        rebuilt.extend_from_slice(&bytes[header_start + header_len..]);
+
+        let err = bytes_to_trace(&rebuilt).unwrap_err();
+        assert!(matches!(err, TraceParseError::NonCanonical { .. }));
+    }
+
+    #[test]
+    fn rejects_null_witness_store_digest() {
+        // Build valid bytes, then manually replace footer with one that has null.
+        let trace = make_trace();
+        let bytes = trace_to_bytes(&trace).unwrap();
+
+        // Find footer section.
+        let env_len = u16::from_le_bytes([bytes[0], bytes[1]]) as usize;
+        let header_offset = 2 + env_len + 4;
+        let header_len =
+            u16::from_le_bytes([bytes[header_offset], bytes[header_offset + 1]]) as usize;
+        let body_start = header_offset + 2 + header_len;
+        let stride = trace.header.frame_stride().unwrap();
+        let body_len = trace.header.step_count * stride;
+        let footer_offset = body_start + body_len;
+
+        // Build footer with explicit null (not canonical, but test the null rejection).
+        let bad_footer = br#"{"suite_identity":"sha256:ddd","witness_store_digest":null}"#;
+        #[allow(clippy::cast_possible_truncation)]
+        let footer_len_u16 = bad_footer.len() as u16; // test value known < u16::MAX
+        let mut rebuilt = Vec::new();
+        rebuilt.extend_from_slice(&bytes[..footer_offset]);
+        rebuilt.extend_from_slice(&footer_len_u16.to_le_bytes());
+        rebuilt.extend_from_slice(bad_footer);
+
+        let err = bytes_to_trace(&rebuilt).unwrap_err();
+        // Could be InvalidFooter (null rejection) or NonCanonical (not canonical form).
+        // The null check happens before canonical check in parse_footer, so expect InvalidFooter.
+        assert!(
+            matches!(err, TraceParseError::InvalidFooter { .. })
+                || matches!(err, TraceParseError::NonCanonical { .. })
+        );
+    }
+
+    #[test]
+    fn rejects_bad_initial_frame_sentinel() {
+        let mut trace = make_trace();
+        trace.frames[0].op_code = Code32::new(1, 1, 1).to_le_bytes();
+        // Can't use trace_to_bytes (writer also validates), so build raw bytes manually.
+        // Actually — the writer doesn't validate frame 0 sentinel yet (that's fix #31).
+        // For now, test that the reader rejects it by building bytes that bypass the writer.
+        // Let's build from a valid trace and patch the op_code in the body.
+        let valid_trace = make_trace();
+        let mut bytes = trace_to_bytes(&valid_trace).unwrap();
+        let env_len = u16::from_le_bytes([bytes[0], bytes[1]]) as usize;
+        let header_offset = 2 + env_len + 4;
+        let header_len =
+            u16::from_le_bytes([bytes[header_offset], bytes[header_offset + 1]]) as usize;
+        let body_start = header_offset + 2 + header_len;
+        // Patch frame 0 op_code (first 4 bytes of body).
+        let bad_code = Code32::new(1, 1, 1).to_le_bytes();
+        bytes[body_start..body_start + 4].copy_from_slice(&bad_code);
+        let err = bytes_to_trace(&bytes).unwrap_err();
+        assert!(matches!(err, TraceParseError::BadInitialFrame { .. }));
+    }
+
+    #[test]
+    fn rejects_nonzero_initial_frame_args() {
+        let valid_trace = make_trace();
+        let mut bytes = trace_to_bytes(&valid_trace).unwrap();
+        let env_len = u16::from_le_bytes([bytes[0], bytes[1]]) as usize;
+        let header_offset = 2 + env_len + 4;
+        let header_len =
+            u16::from_le_bytes([bytes[header_offset], bytes[header_offset + 1]]) as usize;
+        let body_start = header_offset + 2 + header_len;
+        // op_args start at body_start + 4 (after op_code)
+        bytes[body_start + 4] = 0xFF; // non-zero arg
+        let err = bytes_to_trace(&bytes).unwrap_err();
+        assert!(matches!(err, TraceParseError::BadInitialFrame { .. }));
     }
 
     #[test]
