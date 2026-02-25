@@ -159,14 +159,33 @@ fn verify_bundle_passes_clean_bundle() {
 fn verify_bundle_detects_trace_report_payload_hash_mismatch() {
     let mut bundle = run(&RomeMini).unwrap();
 
-    // Mutate trace.bst1 body bytes (not just envelope) so payload_hash changes.
+    // Mutate a byte in frame 1's identity region of trace.bst1.
+    // Identity bytes are arbitrary Code32 values with no parse-time validation,
+    // so flipping one guarantees the trace remains parseable but payload_hash
+    // and/or step_chain_digest will differ from the verification report.
+    //
+    // Wire layout: [envelope_len:u16][envelope][magic:4][header_len:u16][header][body][footer_len:u16][footer]
+    // RomeMini dimensions: 1 layer, 2 slots, 3 arg slots
+    //   arg_bytes     = 3 * 4 = 12
+    //   identity_bytes = 1 * 2 * 4 = 8
+    //   status_bytes   = 1 * 2 = 2
+    //   stride         = 4 + 12 + 8 + 2 = 26
+    // Frame 1 identity starts at: body_start + stride + 4(op_code) + 12(op_args)
     let trace_artifact = bundle.artifacts.get("trace.bst1").unwrap();
     let mut mutated_bytes = trace_artifact.content.clone();
 
-    // The envelope is at the start; body comes after magic+header.
-    // Flip a byte deep in the body to ensure payload changes.
-    let body_offset = mutated_bytes.len() - 10;
-    mutated_bytes[body_offset] ^= 0xFF;
+    // Compute body_start from wire format.
+    let envelope_len = u16::from_le_bytes([mutated_bytes[0], mutated_bytes[1]]) as usize;
+    let magic_offset = 2 + envelope_len;
+    let header_len_offset = magic_offset + 4; // after "BST1"
+    let header_len =
+        u16::from_le_bytes([mutated_bytes[header_len_offset], mutated_bytes[header_len_offset + 1]])
+            as usize;
+    let body_start = header_len_offset + 2 + header_len;
+
+    // Frame 1 identity region: body_start + 26 (frame 0 stride) + 4 (op_code) + 12 (op_args)
+    let frame1_identity_offset = body_start + 26 + 4 + 12;
+    mutated_bytes[frame1_identity_offset] ^= 0xFF;
 
     // Recompute the trace artifact's content_hash to match the mutated bytes.
     let new_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &mutated_bytes);
@@ -197,16 +216,17 @@ fn verify_bundle_detects_trace_report_payload_hash_mismatch() {
     bundle.manifest = canonical_json_bytes(&manifest_value).unwrap();
 
     // Now verify_bundle should fail specifically on the trace↔report binding,
-    // not on content hash or manifest checks.
+    // not on content hash or manifest checks. The mutation targets identity bytes
+    // (not status bytes), so parsing always succeeds — the failure must be a
+    // commitment mismatch, not a parse error.
     let err = verify_bundle(&bundle).unwrap_err();
     match err {
         BundleVerifyError::PayloadHashMismatch { .. }
-        | BundleVerifyError::StepChainMismatch { .. }
-        | BundleVerifyError::TraceParseError { .. } => {
-            // Expected: trace body mutation detected via report binding.
+        | BundleVerifyError::StepChainMismatch { .. } => {
+            // Expected: identity byte mutation detected via payload/step-chain commitment.
         }
         other => panic!(
-            "expected PayloadHashMismatch, StepChainMismatch, or TraceParseError, got {other:?}"
+            "expected PayloadHashMismatch or StepChainMismatch, got {other:?}"
         ),
     }
 }
