@@ -14,8 +14,8 @@
 //! ```
 
 use crate::bundle::{
-    build_bundle, ArtifactBundleV1, BundleBuildError, DOMAIN_BUNDLE_ARTIFACT, DOMAIN_CODEBOOK_HASH,
-    DOMAIN_HARNESS_FIXTURE,
+    build_bundle, ArtifactBundleV1, ArtifactInput, BundleBuildError, DOMAIN_BUNDLE_ARTIFACT,
+    DOMAIN_CODEBOOK_HASH, DOMAIN_HARNESS_FIXTURE,
 };
 use crate::contract::{WorldHarnessError, WorldHarnessV1};
 use crate::policy::{
@@ -314,21 +314,27 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
     )
     .map_err(SearchRunError::RunError)?;
 
-    let mut artifacts = vec![
-        ("fixture.json".into(), fixture_json, true),
+    let mut artifacts: Vec<ArtifactInput> = vec![
+        ("fixture.json".into(), fixture_json, true).into(),
         (
-            "compilation_manifest.json".into(),
+            "compilation_manifest.json".to_string(),
             compilation.compilation_manifest,
             true,
-        ),
-        ("policy_snapshot.json".into(), policy_snapshot.bytes, true),
-        ("search_graph.json".into(), search_graph_bytes, true),
-        ("verification_report.json".into(), verification_report, true),
+        )
+            .into(),
+        ("policy_snapshot.json".into(), policy_snapshot.bytes, true).into(),
+        ArtifactInput {
+            name: "search_graph.json".into(),
+            content: search_graph_bytes,
+            normative: true,
+            precomputed_hash: Some(search_graph_content_hash),
+        },
+        ("verification_report.json".into(), verification_report, true).into(),
     ];
 
     // Include scorer artifact for Table mode (normative).
     if let ScorerInputV1::Table { artifact, .. } = scorer_input {
-        artifacts.push(("scorer.json".into(), artifact.bytes.clone(), true));
+        artifacts.push(("scorer.json".into(), artifact.bytes.clone(), true).into());
     }
 
     build_bundle(artifacts).map_err(SearchRunError::BundleFailed)

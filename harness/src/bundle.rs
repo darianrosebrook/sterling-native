@@ -71,28 +71,63 @@ pub enum BundleBuildError {
     CanonError { detail: String },
 }
 
-/// Build an `ArtifactBundleV1` from a list of `(name, content, normative)` tuples.
+/// Input for bundle assembly.
 ///
-/// Computes content hashes, builds the sorted manifest and digest basis,
-/// and derives the bundle digest. All JSON via kernel's `canonical_json_bytes`.
+/// Callers provide artifact bytes and metadata; bundle assembly computes
+/// or reuses content hashes. If `precomputed_hash` is provided, it must
+/// be `canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &content)` — the same domain
+/// separator and algorithm that `build_bundle` would compute.
+pub struct ArtifactInput {
+    /// Logical filename (e.g., `"fixture.json"`, `"search_graph.json"`).
+    pub name: String,
+    /// Raw bytes of the artifact.
+    pub content: Vec<u8>,
+    /// Whether this artifact participates in the bundle digest.
+    pub normative: bool,
+    /// If provided, `build_bundle` reuses this hash instead of recomputing.
+    pub precomputed_hash: Option<ContentHash>,
+}
+
+impl From<(String, Vec<u8>, bool)> for ArtifactInput {
+    fn from((name, content, normative): (String, Vec<u8>, bool)) -> Self {
+        Self {
+            name,
+            content,
+            normative,
+            precomputed_hash: None,
+        }
+    }
+}
+
+/// Build an `ArtifactBundleV1` from a list of artifact inputs.
+///
+/// Computes content hashes (or reuses precomputed ones), builds the sorted
+/// manifest and digest basis, and derives the bundle digest. All JSON via
+/// kernel's `canonical_json_bytes`.
+///
+/// Accepts `Vec<ArtifactInput>` or `Vec<(String, Vec<u8>, bool)>` (via `From`).
 ///
 /// # Errors
 ///
 /// Returns [`BundleBuildError`] if canonical JSON serialization fails.
 pub fn build_bundle(
-    artifacts: Vec<(String, Vec<u8>, bool)>,
+    artifacts: Vec<impl Into<ArtifactInput>>,
 ) -> Result<ArtifactBundleV1, BundleBuildError> {
     let mut artifact_map = BTreeMap::new();
 
-    for (name, content, normative) in artifacts {
-        let content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &content);
+    for input in artifacts {
+        let input = input.into();
+        let content_hash = match input.precomputed_hash {
+            Some(h) => h,
+            None => canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &input.content),
+        };
         artifact_map.insert(
-            name.clone(),
+            input.name.clone(),
             BundleArtifact {
-                name,
-                content,
+                name: input.name,
+                content: input.content,
                 content_hash,
-                normative,
+                normative: input.normative,
             },
         );
     }
@@ -777,7 +812,7 @@ mod tests {
 
     #[test]
     fn build_empty_bundle() {
-        let bundle = build_bundle(vec![]).unwrap();
+        let bundle = build_bundle(Vec::<ArtifactInput>::new()).unwrap();
         assert!(bundle.artifacts.is_empty());
         assert!(!bundle.manifest.is_empty());
         assert!(!bundle.digest_basis.is_empty());
