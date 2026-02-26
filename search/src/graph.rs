@@ -168,7 +168,7 @@ pub enum TerminationReasonV1 {
     /// A panic was caught in a world or scorer callback.
     InternalPanic { stage: PanicStageV1 },
     /// An internal search-loop invariant was violated without panicking.
-    FrontierInvariantViolation,
+    FrontierInvariantViolation { stage: FrontierInvariantStageV1 },
 }
 
 /// Stage at which a panic was caught.
@@ -182,6 +182,13 @@ pub enum PanicStageV1 {
     IsGoalRoot,
     /// `SearchWorldV1::is_goal()` panicked during expansion.
     IsGoalExpansion,
+}
+
+/// Stage at which a frontier invariant was violated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrontierInvariantStageV1 {
+    /// Frontier reported non-empty but pop returned None.
+    PopFromNonEmptyFrontier,
 }
 
 // ---------------------------------------------------------------------------
@@ -387,8 +394,8 @@ fn termination_reason_to_json(r: &TerminationReasonV1) -> serde_json::Value {
         TerminationReasonV1::InternalPanic { stage } => {
             serde_json::json!({"stage": panic_stage_str(*stage), "type": "internal_panic"})
         }
-        TerminationReasonV1::FrontierInvariantViolation => {
-            serde_json::json!({"type": "frontier_invariant_violation"})
+        TerminationReasonV1::FrontierInvariantViolation { stage } => {
+            serde_json::json!({"stage": frontier_invariant_stage_str(*stage), "type": "frontier_invariant_violation"})
         }
     }
 }
@@ -399,6 +406,12 @@ fn panic_stage_str(s: PanicStageV1) -> &'static str {
         PanicStageV1::ScoreCandidates => "score_candidates",
         PanicStageV1::IsGoalRoot => "is_goal_root",
         PanicStageV1::IsGoalExpansion => "is_goal_expansion",
+    }
+}
+
+fn frontier_invariant_stage_str(s: FrontierInvariantStageV1) -> &'static str {
+    match s {
+        FrontierInvariantStageV1::PopFromNonEmptyFrontier => "pop_from_non_empty_frontier",
     }
 }
 
@@ -463,7 +476,10 @@ mod tests {
         assert_eq!(panic["stage"], "enumerate_candidates");
 
         let frontier_inv =
-            termination_reason_to_json(&TerminationReasonV1::FrontierInvariantViolation);
+            termination_reason_to_json(&TerminationReasonV1::FrontierInvariantViolation {
+                stage: FrontierInvariantStageV1::PopFromNonEmptyFrontier,
+            });
         assert_eq!(frontier_inv["type"], "frontier_invariant_violation");
+        assert_eq!(frontier_inv["stage"], "pop_from_non_empty_frontier");
     }
 }

@@ -710,6 +710,51 @@ fn candidate_constructor_deterministic() {
 }
 
 // ---------------------------------------------------------------------------
+// ACCEPTANCE: SC1-M2-FRONTIER-INVARIANT-STAGE-IN-JSON
+// ---------------------------------------------------------------------------
+
+#[test]
+fn frontier_invariant_stage_serializes_in_json() {
+    use sterling_search::graph::{
+        FrontierInvariantStageV1, SearchGraphMetadata, SearchGraphV1, TerminationReasonV1,
+    };
+    use sterling_search::policy::{DedupKeyV1, PruneVisitedPolicyV1};
+
+    let graph = SearchGraphV1 {
+        metadata: SearchGraphMetadata {
+            world_id: "test".into(),
+            schema_descriptor: "test:1.0:test".into(),
+            root_state_fingerprint: "0".repeat(64),
+            registry_digest: "0".repeat(64),
+            policy_snapshot_digest: "0".repeat(64),
+            search_policy_digest: "0".repeat(64),
+            total_expansions: 0,
+            total_candidates_generated: 0,
+            total_duplicates_suppressed: 0,
+            total_dead_ends_exhaustive: 0,
+            total_dead_ends_budget_limited: 0,
+            frontier_high_water: 0,
+            termination_reason: TerminationReasonV1::FrontierInvariantViolation {
+                stage: FrontierInvariantStageV1::PopFromNonEmptyFrontier,
+            },
+            dedup_key: DedupKeyV1::IdentityOnly,
+            prune_visited_policy: PruneVisitedPolicyV1::KeepVisited,
+        },
+        expansions: vec![],
+        node_summaries: vec![],
+    };
+
+    let bytes = graph.to_canonical_json_bytes().unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let tr = &json["metadata"]["termination_reason"];
+    assert_eq!(tr["type"], "frontier_invariant_violation");
+    assert_eq!(
+        tr["stage"], "pop_from_non_empty_frontier",
+        "stage field must be present and serialized"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // ACCEPTANCE: SC1-M2-PANIC-PROFILE-UNWIND-ENFORCED
 // ---------------------------------------------------------------------------
 

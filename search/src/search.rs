@@ -11,8 +11,8 @@ use crate::error::SearchError;
 use crate::frontier::BestFirstFrontier;
 use crate::graph::{
     ApplyFailureKindV1, CandidateOutcomeV1, CandidateRecordV1, DeadEndReasonV1, ExpandEventV1,
-    ExpansionNoteV1, FrontierPopKeyV1, PanicStageV1, SearchGraphMetadata, SearchGraphNodeSummaryV1,
-    SearchGraphV1, TerminationReasonV1,
+    ExpansionNoteV1, FrontierInvariantStageV1, FrontierPopKeyV1, PanicStageV1, SearchGraphMetadata,
+    SearchGraphNodeSummaryV1, SearchGraphV1, TerminationReasonV1,
 };
 use crate::node::{SearchNodeV1, DOMAIN_SEARCH_NODE};
 use crate::policy::SearchPolicyV1;
@@ -191,7 +191,9 @@ pub fn search(
 
         // Pop best node — frontier was checked non-empty above
         let Some(current) = frontier.pop() else {
-            termination_reason = TerminationReasonV1::FrontierInvariantViolation;
+            termination_reason = TerminationReasonV1::FrontierInvariantViolation {
+                stage: FrontierInvariantStageV1::PopFromNonEmptyFrontier,
+            };
             break;
         };
         let current_fp_hex = current.state_fingerprint.hex_digest().to_string();
