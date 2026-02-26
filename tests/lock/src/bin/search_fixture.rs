@@ -15,8 +15,7 @@ use sterling_search::scorer::UniformScorer;
 fn main() {
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
-    let bundle =
-        run_search(&RomeMiniSearch, &policy, &scorer).expect("search run failed");
+    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).expect("search run failed");
 
     // Extract verification report.
     let report = bundle

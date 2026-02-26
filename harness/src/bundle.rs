@@ -171,16 +171,10 @@ pub enum BundleVerifyError {
     ModeSearchExpected { actual_mode: String },
     /// `policy_snapshot_digest` in `search_graph.json` metadata does not match
     /// `policy_snapshot.json`'s `content_hash`.
-    MetadataBindingPolicyMismatch {
-        in_graph: String,
-        in_policy: String,
-    },
+    MetadataBindingPolicyMismatch { in_graph: String, in_policy: String },
     /// `world_id` in `search_graph.json` metadata does not match
     /// `verification_report.json`'s `world_id`.
-    MetadataBindingWorldIdMismatch {
-        in_graph: String,
-        in_report: String,
-    },
+    MetadataBindingWorldIdMismatch { in_graph: String, in_report: String },
     /// Canonical JSON error during verification.
     CanonError { detail: String },
 }

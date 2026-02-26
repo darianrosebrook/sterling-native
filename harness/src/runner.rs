@@ -138,11 +138,10 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
 
     // Phase 2: build metadata bindings.
     let policy_config = PolicyConfig::default();
-    let policy_snapshot = build_policy(world, &policy_config).map_err(|e| {
-        SearchRunError::PolicyBuildFailed {
+    let policy_snapshot =
+        build_policy(world, &policy_config).map_err(|e| SearchRunError::PolicyBuildFailed {
             detail: format!("{e:?}"),
-        }
-    })?;
+        })?;
     let policy_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &policy_snapshot.bytes);
 
     // Build search policy canonical bytes for digest binding.
@@ -189,7 +188,8 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
                 detail: format!("{e:?}"),
             })?;
 
-    let fixture_json = build_fixture_json(world, &payload_bytes).map_err(SearchRunError::RunError)?;
+    let fixture_json =
+        build_fixture_json(world, &payload_bytes).map_err(SearchRunError::RunError)?;
 
     // Build verification report for search.
     let search_graph_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &search_graph_bytes);

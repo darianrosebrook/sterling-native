@@ -11,8 +11,8 @@ use crate::error::SearchError;
 use crate::frontier::BestFirstFrontier;
 use crate::graph::{
     ApplyFailureKindV1, CandidateOutcomeV1, CandidateRecordV1, DeadEndReasonV1, ExpandEventV1,
-    ExpansionNoteV1, FrontierPopKeyV1, PanicStageV1, SearchGraphMetadata,
-    SearchGraphNodeSummaryV1, SearchGraphV1, TerminationReasonV1,
+    ExpansionNoteV1, FrontierPopKeyV1, PanicStageV1, SearchGraphMetadata, SearchGraphNodeSummaryV1,
+    SearchGraphV1, TerminationReasonV1,
 };
 use crate::node::{SearchNodeV1, DOMAIN_SEARCH_NODE};
 use crate::policy::SearchPolicyV1;
