@@ -56,10 +56,8 @@ fn slot_lattice_schema_hash() -> String {
         "version": "1.0",
     });
     let bytes = canonical_json_bytes(&basis).expect("schema basis must be canonical");
-    let hash = sterling_kernel::proof::hash::canonical_hash(
-        crate::bundle::DOMAIN_HARNESS_FIXTURE,
-        &bytes,
-    );
+    let hash =
+        sterling_kernel::proof::hash::canonical_hash(crate::bundle::DOMAIN_HARNESS_FIXTURE, &bytes);
     hash.as_str().to_string()
 }
 
