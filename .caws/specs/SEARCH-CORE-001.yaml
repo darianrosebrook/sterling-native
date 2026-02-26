@@ -282,3 +282,38 @@ milestones:
       - "Mode↔artifact coherence: bidirectional enforcement"
       - "MetadataBindings cross-verification: policy_snapshot_digest and world_id"
       - "Workspace panic=unwind pinned in dev and release profiles"
+  - id: M2.1
+    title: "M2 post-review fixes: candidate identity, frontier stage, panic guard, binding convention"
+    status: complete
+    scope: "7 items from post-implementation review of M2 hardening"
+    evidence:
+      total_tests: 301
+      new_tests: 2
+      acceptance_ids_anchored: 17
+      commits:
+        - "e4e1ecf fix(search): preserve candidate identity on scorer failure paths [SEARCH-CORE-001]"
+        - "b79c060 feat(search): add FrontierInvariantStageV1 to FrontierInvariantViolation [SEARCH-CORE-001]"
+        - "aea1ef5 test(lock): add no-panic-macros guard for search core loop [SEARCH-CORE-001]"
+        - "2d51563 refactor(lock): move rebuild_with_modified_graph to shared test lib [SEARCH-CORE-001]"
+        - "9cf9729 docs(harness): binding_hex convention, diagnostic field marking, governance [SEARCH-CORE-001]"
+      files_created:
+        - "tests/lock/src/bundle_test_helpers.rs"
+      files_modified:
+        - "search/src/scorer.rs"
+        - "search/src/graph.rs"
+        - "search/src/search.rs"
+        - "harness/src/bundle.rs"
+        - "harness/src/runner.rs"
+        - "tests/lock/src/lib.rs"
+        - "tests/lock/tests/sc1_m2_hardening.rs"
+    deliverables:
+      - "ScoreSourceV1::Unavailable variant for unscored candidates (scorer panic or contract violation)"
+      - "CandidateOutcomeV1::NotEvaluated variant for candidates enumerated but not evaluated"
+      - "Scorer failure paths preserve post-sort/post-cap candidate identity with NotEvaluated + Unavailable"
+      - "FrontierInvariantStageV1 typed stage enum on FrontierInvariantViolation"
+      - "no_panic_macros_in_core_loop lock test with brace-depth cfg(test) skipper"
+      - "rebuild_with_modified_graph shared test primitive in lock_tests::bundle_test_helpers"
+      - "binding_hex() convention scoped to graph-metadata binding comparisons"
+      - "BINDING/DIAGNOSTIC field-level comments in verification report construction"
+      - "out_of_contract: UnsupportedPolicyMode pre-flight refusal produces no SearchGraphV1"
+      - "out_of_contract: codebook_hash is diagnostic (not verified by verify_bundle)"
