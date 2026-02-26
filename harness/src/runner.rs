@@ -81,9 +81,18 @@ pub enum SearchRunError {
     BundleFailed(BundleBuildError),
     /// Policy construction failed.
     PolicyBuildFailed { detail: String },
+    /// `SearchWorldV1::world_id()` and `WorldHarnessV1::world_id()` disagree.
+    WorldIdMismatch {
+        search_world_id: String,
+        harness_world_id: String,
+    },
 }
 
 /// Run a search world through the search pipeline, producing a bundle.
+///
+/// The world must implement both [`SearchWorldV1`] and [`WorldHarnessV1`].
+/// A runtime check verifies that both trait implementations report the same
+/// `world_id()`, preventing split-brain wiring.
 ///
 /// Pipeline:
 /// 1. `encode_payload()` → `compile()` → root `ByteStateV1`
@@ -97,18 +106,27 @@ pub enum SearchRunError {
 /// # Errors
 ///
 /// Returns [`SearchRunError`] at any pipeline step.
-pub fn run_search(
-    world: &(dyn SearchWorldV1 + 'static),
-    harness_world: &dyn WorldHarnessV1,
+pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
+    world: &W,
     search_policy: &SearchPolicyV1,
     scorer: &dyn ValueScorer,
 ) -> Result<ArtifactBundleV1, SearchRunError> {
+    // World ID coherence check: both traits must agree.
+    let search_wid = SearchWorldV1::world_id(world);
+    let harness_wid = WorldHarnessV1::world_id(world);
+    if search_wid != harness_wid {
+        return Err(SearchRunError::WorldIdMismatch {
+            search_world_id: search_wid.to_string(),
+            harness_world_id: harness_wid.to_string(),
+        });
+    }
+
     // Phase 1: compile root state.
-    let payload_bytes = harness_world
+    let payload_bytes = world
         .encode_payload()
         .map_err(|e| SearchRunError::RunError(RunError::WorldError(e)))?;
-    let schema = harness_world.schema_descriptor();
-    let registry = harness_world
+    let schema = world.schema_descriptor();
+    let registry = world
         .registry()
         .map_err(|e| SearchRunError::RunError(RunError::WorldError(e)))?;
 
@@ -120,7 +138,7 @@ pub fn run_search(
 
     // Phase 2: build metadata bindings.
     let policy_config = PolicyConfig::default();
-    let policy_snapshot = build_policy(harness_world, &policy_config).map_err(|e| {
+    let policy_snapshot = build_policy(world, &policy_config).map_err(|e| {
         SearchRunError::PolicyBuildFailed {
             detail: format!("{e:?}"),
         }
@@ -141,10 +159,10 @@ pub fn run_search(
         })
     })?;
 
-    let codebook_hash = build_codebook_hash(harness_world).map_err(SearchRunError::RunError)?;
+    let codebook_hash = build_codebook_hash(world).map_err(SearchRunError::RunError)?;
 
     let bindings = MetadataBindings {
-        world_id: harness_world.world_id().to_string(),
+        world_id: WorldHarnessV1::world_id(world).to_string(),
         schema_descriptor: format!("{}:{}:{}", schema.id, schema.version, schema.hash),
         registry_digest: registry_digest.hex_digest().to_string(),
         policy_snapshot_digest: policy_content_hash.hex_digest().to_string(),
@@ -171,13 +189,12 @@ pub fn run_search(
                 detail: format!("{e:?}"),
             })?;
 
-    let fixture_json =
-        build_fixture_json(harness_world, &payload_bytes).map_err(SearchRunError::RunError)?;
+    let fixture_json = build_fixture_json(world, &payload_bytes).map_err(SearchRunError::RunError)?;
 
     // Build verification report for search.
     let search_graph_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &search_graph_bytes);
     let verification_report = build_search_verification_report(
-        harness_world.world_id(),
+        WorldHarnessV1::world_id(world),
         &policy_content_hash,
         &search_graph_content_hash,
         &codebook_hash,
@@ -665,7 +682,7 @@ mod tests {
     fn run_search_produces_bundle() {
         let policy = SearchPolicyV1::default();
         let scorer = sterling_search::scorer::UniformScorer;
-        let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+        let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
         assert!(bundle.artifacts.contains_key("fixture.json"));
         assert!(bundle.artifacts.contains_key("compilation_manifest.json"));
         assert!(bundle.artifacts.contains_key("policy_snapshot.json"));
@@ -678,7 +695,7 @@ mod tests {
     fn run_search_graph_is_normative() {
         let policy = SearchPolicyV1::default();
         let scorer = sterling_search::scorer::UniformScorer;
-        let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+        let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
         let graph = bundle.artifacts.get("search_graph.json").unwrap();
         assert!(graph.normative, "search_graph.json should be normative");
     }
@@ -687,7 +704,7 @@ mod tests {
     fn run_search_verification_report_contains_search_graph_digest() {
         let policy = SearchPolicyV1::default();
         let scorer = sterling_search::scorer::UniformScorer;
-        let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+        let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
 
         let report = bundle.artifacts.get("verification_report.json").unwrap();
         let json: serde_json::Value = serde_json::from_slice(&report.content).unwrap();
@@ -704,7 +721,7 @@ mod tests {
         use crate::bundle::verify_bundle;
         let policy = SearchPolicyV1::default();
         let scorer = sterling_search::scorer::UniformScorer;
-        let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+        let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
         verify_bundle(&bundle).unwrap();
     }
 
@@ -712,7 +729,7 @@ mod tests {
     fn run_search_finds_goal() {
         let policy = SearchPolicyV1::default();
         let scorer = sterling_search::scorer::UniformScorer;
-        let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+        let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
 
         let report = bundle.artifacts.get("verification_report.json").unwrap();
         let json: serde_json::Value = serde_json::from_slice(&report.content).unwrap();

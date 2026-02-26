@@ -82,7 +82,7 @@ fn search_determinism_inproc_n10() {
 fn graph_in_bundle_normative_and_verifiable() {
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
-    let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
 
     let graph = bundle
         .artifacts
@@ -101,7 +101,7 @@ fn graph_in_bundle_normative_and_verifiable() {
 fn graph_metadata_has_snapshot_bindings() {
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
-    let bundle = run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).unwrap();
+    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
 
     let graph = bundle.artifacts.get("search_graph.json").unwrap();
     let json: serde_json::Value = serde_json::from_slice(&graph.content).unwrap();

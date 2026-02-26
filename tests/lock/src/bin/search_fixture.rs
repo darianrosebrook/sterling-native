@@ -16,7 +16,7 @@ fn main() {
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
     let bundle =
-        run_search(&RomeMiniSearch, &RomeMiniSearch, &policy, &scorer).expect("search run failed");
+        run_search(&RomeMiniSearch, &policy, &scorer).expect("search run failed");
 
     // Extract verification report.
     let report = bundle
