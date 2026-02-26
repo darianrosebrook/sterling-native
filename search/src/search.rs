@@ -251,6 +251,7 @@ pub fn search(
             Ok(cs) => {
                 // Scorer returned wrong arity — record expansion with candidate identity
                 let actual_len = cs.len() as u64;
+                total_candidates_generated += candidates.len() as u64;
                 expansions.push(ExpandEventV1 {
                     expansion_order: expansion_count,
                     node_id: current.node_id,
@@ -269,6 +270,7 @@ pub fn search(
             }
             Err(_) => {
                 // Scorer panicked — record expansion with candidate identity
+                total_candidates_generated += candidates.len() as u64;
                 expansions.push(ExpandEventV1 {
                     expansion_order: expansion_count,
                     node_id: current.node_id,
@@ -440,7 +442,7 @@ pub fn search(
                                 &all_nodes,
                                 termination_reason,
                                 frontier.high_water(),
-                                total_candidates_generated + candidates.len() as u64,
+                                total_candidates_generated,
                                 total_duplicates_suppressed,
                                 total_dead_ends_exhaustive,
                                 total_dead_ends_budget_limited,

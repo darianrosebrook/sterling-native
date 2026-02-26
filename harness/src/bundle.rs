@@ -169,12 +169,18 @@ pub enum BundleVerifyError {
     SearchGraphArtifactMissing,
     /// `search_graph.json` exists but report `mode` is not `"search"`.
     ModeSearchExpected { actual_mode: String },
+    /// `search_graph.json` exists but report has no `mode` field.
+    ModeMissing,
     /// `policy_snapshot_digest` in `search_graph.json` metadata does not match
     /// `policy_snapshot.json`'s `content_hash`.
     MetadataBindingPolicyMismatch { in_graph: String, in_policy: String },
+    /// `search_graph.json` metadata is missing the mandatory `policy_snapshot_digest` field.
+    MetadataBindingPolicyMissing,
     /// `world_id` in `search_graph.json` metadata does not match
     /// `verification_report.json`'s `world_id`.
     MetadataBindingWorldIdMismatch { in_graph: String, in_report: String },
+    /// `search_graph.json` metadata is missing the mandatory `world_id` field.
+    MetadataBindingWorldIdMissing,
     /// Canonical JSON error during verification.
     CanonError { detail: String },
 }
@@ -453,6 +459,7 @@ fn verify_mode_artifact_coherence(bundle: &ArtifactBundleV1) -> Result<(), Bundl
         (Some(m), true) if m != "search" => Err(BundleVerifyError::ModeSearchExpected {
             actual_mode: m.to_string(),
         }),
+        (None, true) => Err(BundleVerifyError::ModeMissing),
         _ => Ok(()),
     }
 }
@@ -485,20 +492,20 @@ fn verify_metadata_bindings(bundle: &ArtifactBundleV1) -> Result<(), BundleVerif
             }
         })?;
 
-    // Cross-verify policy_snapshot_digest
+    // Cross-verify policy_snapshot_digest (mandatory when search_graph.json exists)
     if let Some(policy_artifact) = bundle.artifacts.get("policy_snapshot.json") {
-        if let Some(graph_policy_digest) = graph
+        let graph_policy_digest = graph
             .get("metadata")
             .and_then(|m| m.get("policy_snapshot_digest"))
             .and_then(|v| v.as_str())
-        {
-            let policy_hex = binding_hex(&policy_artifact.content_hash);
-            if policy_hex != graph_policy_digest {
-                return Err(BundleVerifyError::MetadataBindingPolicyMismatch {
-                    in_graph: graph_policy_digest.to_string(),
-                    in_policy: policy_hex.to_string(),
-                });
-            }
+            .ok_or(BundleVerifyError::MetadataBindingPolicyMissing)?;
+
+        let policy_hex = binding_hex(&policy_artifact.content_hash);
+        if policy_hex != graph_policy_digest {
+            return Err(BundleVerifyError::MetadataBindingPolicyMismatch {
+                in_graph: graph_policy_digest.to_string(),
+                in_policy: policy_hex.to_string(),
+            });
         }
     }
 
@@ -514,13 +521,14 @@ fn verify_metadata_bindings(bundle: &ArtifactBundleV1) -> Result<(), BundleVerif
         let graph_world_id = graph
             .get("metadata")
             .and_then(|m| m.get("world_id"))
-            .and_then(|v| v.as_str());
+            .and_then(|v| v.as_str())
+            .ok_or(BundleVerifyError::MetadataBindingWorldIdMissing)?;
         let report_world_id = report.get("world_id").and_then(|v| v.as_str());
 
-        if let (Some(gw), Some(rw)) = (graph_world_id, report_world_id) {
-            if gw != rw {
+        if let Some(rw) = report_world_id {
+            if graph_world_id != rw {
                 return Err(BundleVerifyError::MetadataBindingWorldIdMismatch {
-                    in_graph: gw.to_string(),
+                    in_graph: graph_world_id.to_string(),
                     in_report: rw.to_string(),
                 });
             }
