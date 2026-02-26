@@ -174,6 +174,47 @@ acceptance:
     given: "a world enumerating an illegal candidate"
     when: "search() processes it"
     then: "returns Ok with WorldContractViolation termination and partial graph (not Err)"
+  # --- M3.0: Search Bundle Persistence ---
+  - id: SC1-M3.0-SEARCH-DIR-ROUNDTRIP
+    given: "a search bundle from run_search(RomeMiniSearch)"
+    when: "write_bundle_dir → read_bundle_dir round-trip"
+    then: "loaded bundle has identical digest, manifest, digest_basis, and all 5 artifacts (content, content_hash, normative)"
+  - id: SC1-M3.0-SEARCH-DIR-VERIFY
+    given: "a cleanly persisted search bundle directory"
+    when: "verify_bundle_dir() is called"
+    then: "passes without error"
+  - id: SC1-M3.0-SEARCH-LOADED-VERIFY
+    given: "a search bundle loaded from disk via read_bundle_dir()"
+    when: "verify_bundle() is called directly"
+    then: "passes including search-specific checks (graph digest binding, mode coherence, metadata bindings)"
+  - id: SC1-M3.0-SEARCH-GRAPH-CANONICAL-STABLE
+    given: "search_graph.json from a search bundle"
+    when: "persisted and reloaded"
+    then: "bytes are identical before write and after read"
+  - id: SC1-M3.0-SEARCH-TAMPER-GRAPH-BYTES
+    given: "a persisted search bundle with search_graph.json tampered (1 byte flip)"
+    when: "read_bundle_dir() is called"
+    then: "fails with ContentHashMismatch for search_graph.json"
+  - id: SC1-M3.0-SEARCH-TAMPER-REPORT-BYTES
+    given: "a persisted search bundle with verification_report.json tampered (1 byte flip)"
+    when: "read_bundle_dir() is called"
+    then: "fails with ContentHashMismatch for verification_report.json"
+  - id: SC1-M3.0-SEARCH-DIGEST-BINDING-MISMATCH
+    given: "a bundle with modified search_graph.json content but stale search_graph_digest in report"
+    when: "persisted, loaded, and verify_bundle() called"
+    then: "fails with SearchGraphDigestMismatch (not parse or hash error)"
+  - id: SC1-M3.0-SEARCH-MISSING-GRAPH-FILE
+    given: "a persisted search bundle with search_graph.json deleted from disk"
+    when: "read_bundle_dir() is called"
+    then: "fails with MissingArtifact for search_graph.json"
+  - id: SC1-M3.0-SEARCH-MISSING-GRAPH-DIGEST-FIELD
+    given: "a bundle with search_graph_digest removed from verification_report.json"
+    when: "persisted, loaded, and verify_bundle() called"
+    then: "fails with SearchGraphDigestMissing"
+  - id: SC1-M3.0-SEARCH-NO-PATH-LEAKAGE
+    given: "a search bundle persisted to a temp directory"
+    when: "normative surfaces are inspected"
+    then: "no absolute path fragments found in manifest, digest_basis, or normative artifact content"
 acceptance_criteria: []
 non_functional:
   perf:
@@ -317,3 +358,26 @@ milestones:
       - "BINDING/DIAGNOSTIC field-level comments in verification report construction"
       - "out_of_contract: UnsupportedPolicyMode pre-flight refusal produces no SearchGraphV1"
       - "out_of_contract: codebook_hash is diagnostic (not verified by verify_bundle)"
+  - id: M3.0
+    title: "Search bundle persistence round-trip: artifact closure for search evidence"
+    status: complete
+    scope: "Lock tests proving write/read/verify round-trip for search bundles; no production code changes"
+    evidence:
+      total_tests: 311
+      new_tests: 10
+      acceptance_ids_anchored: 10
+      commits:
+        - "3e53543 test(lock): add SEARCH-CORE-001 M3.0 search bundle persistence lock tests [SEARCH-CORE-001]"
+      files_created:
+        - "tests/lock/tests/sc1_m3_persistence.rs"
+    deliverables:
+      - "Round-trip idempotence: run_search → write_bundle_dir → read_bundle_dir preserves all 5 artifacts, digests, and derived projections"
+      - "Offline verification: verify_bundle_dir() passes on cleanly persisted search directory"
+      - "Loaded bundle re-verification: loaded search bundle passes verify_bundle() including graph digest binding, mode coherence, metadata bindings"
+      - "Canonical stability: search_graph.json bytes identical before write and after read"
+      - "Falsifier: tampered graph bytes → ContentHashMismatch at read boundary"
+      - "Falsifier: tampered report bytes → ContentHashMismatch at read boundary"
+      - "Falsifier: valid-but-wrong graph content → SearchGraphDigestMismatch (semantic binding failure)"
+      - "Falsifier: missing search_graph.json file → MissingArtifact"
+      - "Falsifier: missing search_graph_digest field → SearchGraphDigestMissing"
+      - "Hygiene: no path leakage in normative surfaces of persisted search bundles"
