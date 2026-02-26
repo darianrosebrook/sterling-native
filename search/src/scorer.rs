@@ -11,6 +11,8 @@ pub enum ScoreSourceV1 {
     Uniform,
     /// Model-based scorer identified by its digest.
     ModelDigest(ContentHash),
+    /// Scorer did not produce a score (panic or contract violation).
+    Unavailable,
 }
 
 /// A scored candidate with provenance.

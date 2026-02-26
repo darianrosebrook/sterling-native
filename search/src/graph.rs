@@ -78,6 +78,12 @@ pub enum CandidateOutcomeV1 {
     SkippedByDepthLimit,
     /// Skipped by policy (future extensibility).
     SkippedByPolicy,
+    /// Candidate was enumerated but not evaluated due to scorer failure.
+    ///
+    /// The accompanying score is a deterministic placeholder
+    /// (`bonus: 0, source: Unavailable`) and must not be interpreted
+    /// as a scoring result.
+    NotEvaluated,
 }
 
 /// Why a node was marked as a dead end.
@@ -271,6 +277,9 @@ fn outcome_to_json(o: &CandidateOutcomeV1) -> serde_json::Value {
         CandidateOutcomeV1::SkippedByPolicy => {
             serde_json::json!({"type": "skipped_by_policy"})
         }
+        CandidateOutcomeV1::NotEvaluated => {
+            serde_json::json!({"type": "not_evaluated"})
+        }
     }
 }
 
@@ -288,6 +297,7 @@ fn score_source_to_json(s: &crate::scorer::ScoreSourceV1) -> serde_json::Value {
         crate::scorer::ScoreSourceV1::ModelDigest(h) => {
             serde_json::json!({"model_digest": h.as_str()})
         }
+        crate::scorer::ScoreSourceV1::Unavailable => serde_json::json!("unavailable"),
     }
 }
 

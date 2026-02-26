@@ -187,11 +187,31 @@ fn scorer_panic_preserves_graph() {
             stage: PanicStageV1::ScoreCandidates,
         }
     );
-    // At least root node + one expansion event for the panic
+    // The expansion event must record the enumerated candidates with NotEvaluated outcome.
+    let last_exp = result.graph.expansions.last().unwrap();
     assert!(
-        !result.graph.expansions.is_empty(),
-        "graph must contain expansion events"
+        !last_exp.candidates.is_empty(),
+        "scorer panic must preserve enumerated candidates"
     );
+    for cr in &last_exp.candidates {
+        assert_eq!(
+            cr.outcome,
+            sterling_search::graph::CandidateOutcomeV1::NotEvaluated,
+            "all candidates must have NotEvaluated outcome"
+        );
+        assert_eq!(
+            cr.score.source,
+            sterling_search::scorer::ScoreSourceV1::Unavailable,
+            "all scores must have Unavailable source"
+        );
+    }
+    // Candidates must be in canonical (sorted) order.
+    for w in last_exp.candidates.windows(2) {
+        assert!(
+            w[0].action.canonical_hash() <= w[1].action.canonical_hash(),
+            "candidates must be in canonical hash order"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +337,28 @@ fn scorer_wrong_arity_preserves_graph() {
             assert_eq!(*actual, 1, "WrongArityScorer always returns 1");
         }
         other => panic!("expected ScorerContractViolation, got {other:?}"),
+    }
+    // Candidate identity must be preserved with NotEvaluated outcome.
+    let last_exp = result.graph.expansions.last().unwrap();
+    assert!(
+        !last_exp.candidates.is_empty(),
+        "arity violation must preserve enumerated candidates"
+    );
+    for cr in &last_exp.candidates {
+        assert_eq!(
+            cr.outcome,
+            sterling_search::graph::CandidateOutcomeV1::NotEvaluated,
+        );
+        assert_eq!(
+            cr.score.source,
+            sterling_search::scorer::ScoreSourceV1::Unavailable,
+        );
+    }
+    for w in last_exp.candidates.windows(2) {
+        assert!(
+            w[0].action.canonical_hash() <= w[1].action.canonical_hash(),
+            "candidates must be in canonical hash order"
+        );
     }
 }
 

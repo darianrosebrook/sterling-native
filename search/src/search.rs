@@ -16,7 +16,7 @@ use crate::graph::{
 };
 use crate::node::{SearchNodeV1, DOMAIN_SEARCH_NODE};
 use crate::policy::SearchPolicyV1;
-use crate::scorer::{CandidateScoreV1, ValueScorer};
+use crate::scorer::{CandidateScoreV1, ScoreSourceV1, ValueScorer};
 
 /// Result of a search execution.
 ///
@@ -42,6 +42,27 @@ impl SearchResult {
             TerminationReasonV1::GoalReached { .. }
         )
     }
+}
+
+/// Build candidate records for the post-sort, post-cap candidate list when
+/// the scorer failed (panic or arity mismatch). Each record carries a
+/// deterministic placeholder score and `NotEvaluated` outcome.
+fn build_not_evaluated_records(
+    candidates: &[crate::node::CandidateActionV1],
+) -> Vec<CandidateRecordV1> {
+    candidates
+        .iter()
+        .enumerate()
+        .map(|(i, c)| CandidateRecordV1 {
+            index: i as u64,
+            action: c.clone(),
+            score: CandidateScoreV1 {
+                bonus: 0,
+                source: ScoreSourceV1::Unavailable,
+            },
+            outcome: CandidateOutcomeV1::NotEvaluated,
+        })
+        .collect()
 }
 
 /// Run best-first search from the root state.
@@ -226,14 +247,14 @@ pub fn search(
         let candidate_scores = match scoring_output {
             Ok(cs) if cs.len() == candidates.len() => cs,
             Ok(cs) => {
-                // Scorer returned wrong arity — record expansion
+                // Scorer returned wrong arity — record expansion with candidate identity
                 let actual_len = cs.len() as u64;
                 expansions.push(ExpandEventV1 {
                     expansion_order: expansion_count,
                     node_id: current.node_id,
                     state_fingerprint: current_fp_hex,
                     frontier_pop_key: pop_key,
-                    candidates: Vec::new(),
+                    candidates: build_not_evaluated_records(&candidates),
                     candidates_truncated,
                     dead_end_reason: None,
                     notes,
@@ -245,13 +266,13 @@ pub fn search(
                 break;
             }
             Err(_) => {
-                // Scorer panicked — record expansion
+                // Scorer panicked — record expansion with candidate identity
                 expansions.push(ExpandEventV1 {
                     expansion_order: expansion_count,
                     node_id: current.node_id,
                     state_fingerprint: current_fp_hex,
                     frontier_pop_key: pop_key,
-                    candidates: Vec::new(),
+                    candidates: build_not_evaluated_records(&candidates),
                     candidates_truncated,
                     dead_end_reason: None,
                     notes,
