@@ -9,3 +9,12 @@ version = "0.0.1"
 [workspace.lints.clippy]
 all = "deny"
 pedantic = "warn"
+
+# Evidence preservation via catch_unwind requires panic=unwind.
+# Do NOT change to panic="abort" — this would silently disable
+# audit trail preservation on world/scorer panics.
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"
