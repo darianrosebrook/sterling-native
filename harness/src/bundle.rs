@@ -701,19 +701,17 @@ fn verify_candidate_scorer_consistency(bundle: &ArtifactBundleV1) -> Result<(), 
     if scorer_artifact.is_some() && !has_model_digests {
         let metadata = &graph["metadata"];
         let total_expansions = metadata["total_expansions"].as_u64().unwrap_or(0);
-        let term_type = metadata["termination_reason"]["type"]
-            .as_str()
-            .unwrap_or("unknown");
+        let term_reason = &metadata["termination_reason"];
+        let term_type = term_reason["type"].as_str().unwrap_or("unknown");
 
         let scorer_failure = term_type == "scorer_contract_violation"
             || (term_type == "internal_panic"
-                && metadata["termination_reason"]["stage"].as_str()
-                    == Some("score_candidates"));
+                && term_reason["stage"].as_str() == Some("score_candidates"));
 
         if total_expansions > 0 && !scorer_failure {
             return Err(BundleVerifyError::ScorerEvidenceMissing {
                 total_expansions,
-                termination_reason: term_type.to_string(),
+                termination_reason: term_reason.to_string(),
             });
         }
     }

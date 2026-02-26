@@ -440,15 +440,30 @@ fn scorer_outputs_deterministic_across_invocations() {
 
 #[test]
 fn table_scorer_root_goal_bundle_verifiable() {
-    // Simulate a root-is-goal search with a table scorer: scorer.json exists,
-    // but total_expansions==0 and no candidate has ModelDigest. This must
-    // verify successfully — the scorer artifact is legitimate evidence even
-    // though scoring never ran.
+    // Verifier-surface test: simulate a root-is-goal search with a table scorer.
+    // scorer.json exists, but total_expansions==0 and no candidate has ModelDigest.
+    // This must verify successfully — the scorer artifact is legitimate evidence
+    // even though scoring never ran.
+    //
+    // The synthetic graph is minimally coherent: root node summary present with
+    // is_goal=true, expansion_order=null, correct depth/f_cost. This avoids
+    // brittleness if future verifier tightening checks node summary coverage.
     let regime = regime_truncation();
     let scorer_input = build_scorer_for_regime(&regime);
     let bundle = run_search(&regime.world, &regime.policy, &scorer_input).unwrap();
 
     let modified_bundle = rebuild_with_modified_graph(&bundle, |graph_json| {
+        // Extract root fingerprint from original node_summaries (node_id 0).
+        let root_fp = graph_json["node_summaries"]
+            .as_array()
+            .and_then(|ns| {
+                ns.iter()
+                    .find(|n| n["node_id"].as_u64() == Some(0))
+                    .and_then(|n| n["state_fingerprint"].as_str())
+                    .map(std::string::ToString::to_string)
+            })
+            .expect("original graph must have root node summary");
+
         // Clear expansions and set total_expansions to 0.
         graph_json["expansions"] = serde_json::json!([]);
         graph_json["metadata"]["total_expansions"] = serde_json::json!(0);
@@ -456,11 +471,20 @@ fn table_scorer_root_goal_bundle_verifiable() {
         graph_json["metadata"]["total_duplicates_suppressed"] = serde_json::json!(0);
         graph_json["metadata"]["termination_reason"] =
             serde_json::json!({"node_id": 0, "type": "goal_reached"});
-        // Clear node_summaries to match.
-        graph_json["node_summaries"] = serde_json::json!([]);
+
+        // Keep root node summary, coherent with goal_reached at root.
+        graph_json["node_summaries"] = serde_json::json!([{
+            "dead_end_reason": null,
+            "depth": 0,
+            "expansion_order": null,
+            "f_cost": 0,
+            "is_goal": true,
+            "node_id": 0,
+            "parent_id": null,
+            "state_fingerprint": root_fp,
+        }]);
     });
 
-    // Bundle has scorer.json but no ModelDigest candidates — must still verify.
     assert!(
         modified_bundle.artifacts.contains_key("scorer.json"),
         "scorer.json must still be present"
@@ -474,11 +498,11 @@ fn table_scorer_root_goal_bundle_verifiable() {
 
 #[test]
 fn table_scorer_failure_shape_bundle_verifiable() {
-    // Simulate a scorer-failure bundle shape: scorer.json exists, at least
-    // one expansion recorded, but all candidate score sources are "unavailable"
-    // (no ModelDigest) and termination is scorer_contract_violation.
-    // This is the shape M2 evidence preservation produces when a TableScorer
-    // panics or returns wrong arity.
+    // Verifier-surface test: simulate the bundle shape M2 evidence preservation
+    // produces when a TableScorer panics or returns wrong arity.
+    // scorer.json exists, at least one expansion recorded, but all candidate
+    // score sources are "unavailable" (no ModelDigest) and termination is
+    // scorer_contract_violation.
     let regime = regime_truncation();
     let scorer_input = build_scorer_for_regime(&regime);
     let bundle = run_search(&regime.world, &regime.policy, &scorer_input).unwrap();
@@ -489,14 +513,15 @@ fn table_scorer_failure_shape_bundle_verifiable() {
             serde_json::json!({"actual": 0, "expected": 1, "type": "scorer_contract_violation"});
 
         // Replace all candidate score sources with "unavailable" and outcomes
-        // with "not_evaluated".
+        // with "not_evaluated", matching the shapes from score_source_to_json
+        // and outcome_to_json in search/src/graph.rs.
         if let Some(expansions) = graph_json["expansions"].as_array_mut() {
             for expansion in expansions {
                 if let Some(candidates) = expansion["candidates"].as_array_mut() {
                     for candidate in candidates {
                         candidate["score"]["bonus"] = serde_json::json!(0);
-                        candidate["score"]["source"] = serde_json::json!({"unavailable": true});
-                        candidate["outcome"] = serde_json::json!("not_evaluated");
+                        candidate["score"]["source"] = serde_json::json!("unavailable");
+                        candidate["outcome"] = serde_json::json!({"type": "not_evaluated"});
                     }
                 }
             }
