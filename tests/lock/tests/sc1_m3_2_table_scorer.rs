@@ -401,14 +401,13 @@ fn bundle_persistence_roundtrip_with_scorer() {
 }
 
 // ---------------------------------------------------------------------------
-// AC-M3.2-12: cross_proc_scorer_outputs_deterministic
+// AC-M3.2-12: scorer_outputs_deterministic_across_invocations
 // ---------------------------------------------------------------------------
 
 #[test]
-fn cross_proc_scorer_outputs_deterministic() {
+fn scorer_outputs_deterministic_across_invocations() {
     // Build scorer bundle twice in-process and verify identical output.
-    // (Full cross-process test would require a new binary; this verifies
-    // determinism holds across independent pipeline invocations.)
+    // This verifies determinism holds across independent pipeline invocations.
     let regime = regime_truncation();
     let scorer_input = build_scorer_for_regime(&regime);
 
@@ -433,4 +432,98 @@ fn cross_proc_scorer_outputs_deterministic() {
         scorer1.content, scorer2.content,
         "scorer artifact bytes must match across runs"
     );
+}
+
+// ---------------------------------------------------------------------------
+// AC-M3.2-13: table_scorer_root_goal_bundle_verifiable
+// ---------------------------------------------------------------------------
+
+#[test]
+fn table_scorer_root_goal_bundle_verifiable() {
+    // Simulate a root-is-goal search with a table scorer: scorer.json exists,
+    // but total_expansions==0 and no candidate has ModelDigest. This must
+    // verify successfully — the scorer artifact is legitimate evidence even
+    // though scoring never ran.
+    let regime = regime_truncation();
+    let scorer_input = build_scorer_for_regime(&regime);
+    let bundle = run_search(&regime.world, &regime.policy, &scorer_input).unwrap();
+
+    let modified_bundle = rebuild_with_modified_graph(&bundle, |graph_json| {
+        // Clear expansions and set total_expansions to 0.
+        graph_json["expansions"] = serde_json::json!([]);
+        graph_json["metadata"]["total_expansions"] = serde_json::json!(0);
+        graph_json["metadata"]["total_candidates_generated"] = serde_json::json!(0);
+        graph_json["metadata"]["total_duplicates_suppressed"] = serde_json::json!(0);
+        graph_json["metadata"]["termination_reason"] =
+            serde_json::json!({"node_id": 0, "type": "goal_reached"});
+        // Clear node_summaries to match.
+        graph_json["node_summaries"] = serde_json::json!([]);
+    });
+
+    // Bundle has scorer.json but no ModelDigest candidates — must still verify.
+    assert!(
+        modified_bundle.artifacts.contains_key("scorer.json"),
+        "scorer.json must still be present"
+    );
+    verify_bundle(&modified_bundle).unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// AC-M3.2-14: table_scorer_failure_shape_bundle_verifiable
+// ---------------------------------------------------------------------------
+
+#[test]
+fn table_scorer_failure_shape_bundle_verifiable() {
+    // Simulate a scorer-failure bundle shape: scorer.json exists, at least
+    // one expansion recorded, but all candidate score sources are "unavailable"
+    // (no ModelDigest) and termination is scorer_contract_violation.
+    // This is the shape M2 evidence preservation produces when a TableScorer
+    // panics or returns wrong arity.
+    let regime = regime_truncation();
+    let scorer_input = build_scorer_for_regime(&regime);
+    let bundle = run_search(&regime.world, &regime.policy, &scorer_input).unwrap();
+
+    let modified_bundle = rebuild_with_modified_graph(&bundle, |graph_json| {
+        // Change termination to scorer failure.
+        graph_json["metadata"]["termination_reason"] =
+            serde_json::json!({"actual": 0, "expected": 1, "type": "scorer_contract_violation"});
+
+        // Replace all candidate score sources with "unavailable" and outcomes
+        // with "not_evaluated".
+        if let Some(expansions) = graph_json["expansions"].as_array_mut() {
+            for expansion in expansions {
+                if let Some(candidates) = expansion["candidates"].as_array_mut() {
+                    for candidate in candidates {
+                        candidate["score"]["bonus"] = serde_json::json!(0);
+                        candidate["score"]["source"] = serde_json::json!({"unavailable": true});
+                        candidate["outcome"] = serde_json::json!("not_evaluated");
+                    }
+                }
+            }
+        }
+    });
+
+    // Bundle has scorer.json, has expansions, but no ModelDigest — must verify
+    // because termination is scorer-failure.
+    assert!(
+        modified_bundle.artifacts.contains_key("scorer.json"),
+        "scorer.json must still be present"
+    );
+
+    // Confirm there are expansions (this is not the zero-expansion case).
+    let graph: serde_json::Value = serde_json::from_slice(
+        &modified_bundle
+            .artifacts
+            .get("search_graph.json")
+            .unwrap()
+            .content,
+    )
+    .unwrap();
+    let total_expansions = graph["metadata"]["total_expansions"].as_u64().unwrap();
+    assert!(
+        total_expansions > 0,
+        "must have expansions to exercise the scorer-failure path"
+    );
+
+    verify_bundle(&modified_bundle).unwrap();
 }
