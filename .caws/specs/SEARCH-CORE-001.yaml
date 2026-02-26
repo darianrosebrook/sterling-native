@@ -191,6 +191,8 @@ contracts:
 out_of_contract:
   - "Evidence preservation guarantees exclude process-level abort classes: OOM abort, explicit std::process::abort(), external SIGKILL, panic=abort profile override"
   - "catch_unwind depends on panic=unwind; workspace Cargo.toml pins this for dev and release profiles"
+  - "UnsupportedPolicyMode pre-flight refusal returns Err(SearchError) with no SearchGraphV1; no search steps were taken so no graph evidence is produced"
+  - "codebook_hash in search verification report is diagnostic (not verified by verify_bundle); present for observability, does not participate in integrity proofs"
 milestones:
   - id: M1
     title: "Search Core: frontier, graph, scorer, best-first loop"

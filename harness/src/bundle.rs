@@ -195,6 +195,7 @@ pub enum BundleVerifyError {
 ///    `step_chain_digest` recomputed from `trace.bst1` match the values declared in the report.
 /// 8. If both `policy_snapshot.json` and `verification_report.json` exist: `policy_digest`
 ///    in the report matches `policy_snapshot.json`'s `content_hash`.
+/// 9. `codebook_hash` in the verification report is NOT verified (diagnostic field).
 ///
 /// # Errors
 ///
@@ -456,6 +457,17 @@ fn verify_mode_artifact_coherence(bundle: &ArtifactBundleV1) -> Result<(), Bundl
     }
 }
 
+/// Extract the raw hex portion of a `ContentHash` for graph-metadata binding comparisons.
+///
+/// Graph metadata stores raw hex (via `hex_digest()`), while verification reports
+/// and artifact `content_hash` fields store the full `sha256:hex` format (via `as_str()`).
+/// This helper normalizes the comparison for graph-metadata binding fields only.
+/// Report-level digest fields (e.g., `search_graph_digest`) use `as_str()` format
+/// and are compared directly against `content_hash.as_str()`.
+fn binding_hex(hash: &ContentHash) -> &str {
+    hash.hex_digest()
+}
+
 /// Cross-verify metadata bindings in `search_graph.json` against bundle artifacts.
 ///
 /// Checks:
@@ -480,9 +492,7 @@ fn verify_metadata_bindings(bundle: &ArtifactBundleV1) -> Result<(), BundleVerif
             .and_then(|m| m.get("policy_snapshot_digest"))
             .and_then(|v| v.as_str())
         {
-            // Graph metadata stores raw hex digest; content_hash stores "sha256:hex".
-            // Compare the hex portion.
-            let policy_hex = policy_artifact.content_hash.hex_digest();
+            let policy_hex = binding_hex(&policy_artifact.content_hash);
             if policy_hex != graph_policy_digest {
                 return Err(BundleVerifyError::MetadataBindingPolicyMismatch {
                     in_graph: graph_policy_digest.to_string(),

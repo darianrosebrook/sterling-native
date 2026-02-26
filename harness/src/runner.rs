@@ -160,6 +160,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
 
     let codebook_hash = build_codebook_hash(world).map_err(SearchRunError::RunError)?;
 
+    // Binding format: raw hex (no algorithm prefix). See bundle.rs::binding_hex().
     let bindings = MetadataBindings {
         world_id: WorldHarnessV1::world_id(world).to_string(),
         schema_descriptor: format!("{}:{}:{}", schema.id, schema.version, schema.hash),
@@ -243,11 +244,15 @@ fn build_search_verification_report(
     codebook_hash: &ContentHash,
 ) -> Result<Vec<u8>, RunError> {
     let report = serde_json::json!({
+        // DIAGNOSTIC: not verified by verify_bundle(); present for observability.
         "codebook_hash": codebook_hash.as_str(),
         "mode": "search",
+        // BINDING: verified against policy_snapshot.json content_hash.
         "policy_digest": policy_content_hash.as_str(),
         "schema_version": "verification_report.v1",
+        // BINDING: verified against search_graph.json content_hash.
         "search_graph_digest": search_graph_content_hash.as_str(),
+        // BINDING: cross-verified against search_graph.json metadata.world_id.
         "world_id": world_id,
     });
 
