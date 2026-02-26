@@ -132,7 +132,7 @@ if command -v node >/dev/null 2>&1; then
       const filePath = '$REL_PATH';
 
       // Root-level files (no directory component), claude's plan folder, and .caws/ are always allowed
-      if (!filePath.includes('/') filePath.includes('docs/ephemeral/') || filePath.startsWith('.caws/') || filePath.includes('.claude') ) {
+      if (!filePath.includes('/') || filePath.includes('docs/ephemeral/') || filePath.startsWith('.caws/') || filePath.includes('.claude')) {
         console.log('in_scope');
         process.exit(0);
       }
