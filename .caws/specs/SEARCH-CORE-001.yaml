@@ -279,6 +279,7 @@ out_of_contract:
   - "catch_unwind depends on panic=unwind; workspace Cargo.toml pins this for dev and release profiles"
   - "UnsupportedPolicyMode pre-flight refusal returns Err(SearchError) with no SearchGraphV1; no search steps were taken so no graph evidence is produced"
   - "codebook_hash in search verification report is diagnostic (not verified by verify_bundle); present for observability, does not participate in integrity proofs"
+  - "Search worlds may return empty program from WorldHarnessV1::program(); codebook_hash for search bundles is derived from an empty operator set and remains DIAGNOSTIC — it does not affect search ordering, verification, or evidence integrity"
 milestones:
   - id: M1
     title: "Search Core: frontier, graph, scorer, best-first loop"

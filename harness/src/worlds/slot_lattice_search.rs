@@ -42,22 +42,23 @@ const CONCEPT_VALUES: [Code32; 4] = [
 /// PADDING bytes for UNSET slot detection.
 const PADDING_BYTES: [u8; 4] = [0, 0, 0, 0];
 
-/// Compute the stable schema hash for the slot lattice schema artifact.
+/// Normative schema basis bytes for the slot lattice schema artifact.
 ///
-/// Uses the same canonical hashing as all other Sterling artifacts:
-/// `canonical_hash(DOMAIN_HARNESS_FIXTURE, canonical_json(schema_basis))`.
-/// The schema basis is a fixed JSON object that identifies this schema.
-/// Stable across all regimes (schema is config-independent).
+/// This is the canonical JSON representation of the schema identity.
+/// The hash is computed as `canonical_hash(DOMAIN_HARNESS_FIXTURE, SCHEMA_BASIS_BYTES)`.
+/// Config-independent: same hash for all regimes regardless of `active_slots` or values.
+///
+/// Changing this constant is a **schema version bump** — existing evidence bundles
+/// will have a different schema hash and cannot be compared against new ones.
+const SCHEMA_BASIS_BYTES: &[u8] =
+    br#"{"domain_id":"slot_lattice","schema_version":"slot_lattice_schema.v1","version":"1.0"}"#;
+
+/// Compute the stable schema hash for the slot lattice schema artifact.
 fn slot_lattice_schema_hash() -> String {
-    use sterling_kernel::proof::canon::canonical_json_bytes;
-    let basis = serde_json::json!({
-        "domain_id": "slot_lattice",
-        "schema_version": "slot_lattice_schema.v1",
-        "version": "1.0",
-    });
-    let bytes = canonical_json_bytes(&basis).expect("schema basis must be canonical");
-    let hash =
-        sterling_kernel::proof::hash::canonical_hash(crate::bundle::DOMAIN_HARNESS_FIXTURE, &bytes);
+    let hash = sterling_kernel::proof::hash::canonical_hash(
+        crate::bundle::DOMAIN_HARNESS_FIXTURE,
+        SCHEMA_BASIS_BYTES,
+    );
     hash.as_str().to_string()
 }
 
@@ -208,8 +209,9 @@ impl WorldHarnessV1 for SlotLatticeSearch {
         let zeros = vec![vec![0u32; 4]; MAX_SLOTS];
         let status_zeros = vec![0u8; MAX_SLOTS];
 
+        // active_slots is world-local config (held in SlotLatticeConfig), not part
+        // of the compiled payload surface. Only compiler-recognized fields here.
         let payload = serde_json::json!({
-            "active_slots": self.config.active_slots,
             "identity": zeros,
             "layer_count": 1,
             "slot_count": MAX_SLOTS,

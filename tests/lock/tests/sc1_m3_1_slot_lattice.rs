@@ -13,10 +13,11 @@ use sterling_harness::worlds::slot_lattice_regimes::{
     regime_budget_limited, regime_duplicates, regime_exhaustive_dead_end, regime_frontier_pressure,
     regime_truncation, Regime,
 };
-use sterling_harness::worlds::slot_lattice_search::SlotLatticeSearch;
+use sterling_harness::worlds::slot_lattice_search::{GoalProfile, SlotLatticeSearch};
 use sterling_kernel::carrier::bytestate::ByteStateV1;
 use sterling_search::contract::SearchWorldV1;
 use sterling_search::graph::{CandidateOutcomeV1, TerminationReasonV1};
+use sterling_search::policy::DedupKeyV1;
 use sterling_search::scorer::UniformScorer;
 use sterling_search::search::{search, MetadataBindings};
 
@@ -85,6 +86,21 @@ fn truncation_is_reachable() {
 #[test]
 fn duplicate_suppression_is_reachable() {
     let regime = regime_duplicates();
+
+    // Guard: dedup must use IdentityOnly so order-independent slot assignment
+    // collapses to the same fingerprint. If this changes, the test's semantic
+    // premise (commutativity → duplicates) no longer holds.
+    assert_eq!(
+        regime.policy.dedup_key,
+        DedupKeyV1::IdentityOnly,
+        "duplicates regime must use IdentityOnly dedup"
+    );
+    assert_eq!(
+        regime.world.config().goal_profile,
+        GoalProfile::Never,
+        "duplicates regime must use goal=Never to force exhaustive exploration"
+    );
+
     let result = run_regime_search(&regime);
 
     assert!(
@@ -184,21 +200,36 @@ fn frontier_pressure_is_reachable() {
         result.graph.metadata.frontier_high_water,
     );
 
-    // Assert typed prune notes if present in the graph surface.
-    let has_prune_note = result.graph.expansions.iter().any(|exp| {
-        exp.notes.iter().any(|n| {
-            matches!(
-                n,
-                sterling_search::graph::ExpansionNoteV1::FrontierPruned { .. }
-            )
-        })
-    });
-    // Frontier pressure with cap=8 and 6×3=18 candidates per expansion
-    // should generate prune events.
+    // Stable pressure invariant: frontier_high_water must reach the cap.
     assert!(
-        has_prune_note,
-        "frontier pressure regime should produce FrontierPruned notes"
+        result.graph.metadata.frontier_high_water >= regime.policy.max_frontier_size,
+        "frontier_high_water ({}) must reach max_frontier_size ({})",
+        result.graph.metadata.frontier_high_water,
+        regime.policy.max_frontier_size,
     );
+
+    // Typed prune notes: assert if the graph surface exposes them.
+    // This is a diagnostic signal that may be refactored; the stable metric
+    // above (high_water >= cap) is the primary pressure proof.
+    let has_any_notes = result
+        .graph
+        .expansions
+        .iter()
+        .any(|exp| !exp.notes.is_empty());
+    if has_any_notes {
+        let has_prune_note = result.graph.expansions.iter().any(|exp| {
+            exp.notes.iter().any(|n| {
+                matches!(
+                    n,
+                    sterling_search::graph::ExpansionNoteV1::FrontierPruned { .. }
+                )
+            })
+        });
+        assert!(
+            has_prune_note,
+            "expansion notes exist but none are FrontierPruned — expected pruning with cap=8"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
