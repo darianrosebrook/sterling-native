@@ -215,6 +215,51 @@ acceptance:
     given: "a search bundle persisted to a temp directory"
     when: "normative surfaces are inspected"
     then: "no absolute path fragments found in manifest, digest_basis, or normative artifact content"
+  # --- M3.1: Slot Lattice World (Second Search Topology) ---
+  - id: SC1-M3.1-TRUNCATION-REACHABLE
+    given: "regime_truncation (N=8, V=4, cap=5)"
+    when: "search is run with the regime's policy"
+    then: "first expansion has candidates_truncated == true and candidate count equals cap"
+  - id: SC1-M3.1-DUPLICATES-REACHABLE
+    given: "regime_duplicates (N=4, V=2, goal=Never)"
+    when: "search explores until budget/frontier exhaustion"
+    then: "total_duplicates_suppressed >= 1 and at least one DuplicateSuppressed outcome in graph"
+  - id: SC1-M3.1-EXHAUSTIVE-DEAD-END-REACHABLE
+    given: "regime_exhaustive_dead_end (N=4, V=3, trap=Slot0Eq(2))"
+    when: "search encounters a trapped state"
+    then: "total_dead_ends_exhaustive > 0 and at least one Exhaustive dead-end reason in expansions"
+  - id: SC1-M3.1-BUDGET-TERMINATION
+    given: "regime_budget_limited (N=6, V=3, max_expansions=3)"
+    when: "search is run"
+    then: "termination_reason == ExpansionBudgetExceeded and total_expansions == max_expansions"
+  - id: SC1-M3.1-FRONTIER-PRESSURE
+    given: "regime_frontier_pressure (N=6, V=3, max_frontier_size=8)"
+    when: "search is run"
+    then: "frontier_high_water >= 8 and FrontierPruned notes present in expansions"
+  - id: SC1-M3.1-DETERMINISM-N10
+    given: "regime_duplicates world with identical policy and scorer"
+    when: "search() is called 10 times in the same process"
+    then: "produces identical SearchGraphV1 canonical JSON bytes every time"
+  - id: SC1-M3.1-BUNDLE-VERIFY
+    given: "run_search(SlotLatticeSearch) for exhaustive dead-end regime"
+    when: "verify_bundle() is called"
+    then: "passes without error"
+  - id: SC1-M3.1-BUNDLE-PERSISTENCE
+    given: "a slot lattice search bundle"
+    when: "write_bundle_dir → read_bundle_dir → verify_bundle round-trip"
+    then: "all artifacts survive with identical content"
+  - id: SC1-M3.1-WORLD-ID-BINDS-CONFIG
+    given: "regime_truncation world"
+    when: "world_id() is inspected"
+    then: "equals 'slot_lattice:v1:n8:v4:trap_none:goal_all_nonzero' and matches graph metadata"
+  - id: SC1-M3.1-SCHEMA-DESCRIPTOR-STABLE
+    given: "all five regime constructors"
+    when: "schema_descriptor() is called on each"
+    then: "all return identical (id, version, hash) with real sha256 hash (not placeholder)"
+  - id: SC1-M3.1-ENUMERATION-DETERMINISTIC
+    given: "a SlotLatticeSearch world and fresh state"
+    when: "enumerate_candidates() is called twice"
+    then: "returns identical candidates in identical order"
 acceptance_criteria: []
 non_functional:
   perf:
@@ -381,3 +426,37 @@ milestones:
       - "Falsifier: missing search_graph.json file → MissingArtifact"
       - "Falsifier: missing search_graph_digest field → SearchGraphDigestMissing"
       - "Hygiene: no path leakage in normative surfaces of persisted search bundles"
+  - id: M3.1
+    title: "Slot Lattice World: second search topology with parameterized stress regimes"
+    status: complete
+    scope: "New search world with configurable stress axes; no changes to kernel, search loop, bundle, or runner"
+    evidence:
+      total_tests: 327
+      new_tests: 16
+      acceptance_ids_anchored: 11
+      commits:
+        - "de4b4ed feat(worlds): add SlotLatticeSearch world with regime constructors [SEARCH-CORE-001]"
+        - "ed42017 test(lock): add SEARCH-CORE-001 M3.1 slot lattice lock tests [SEARCH-CORE-001]"
+      files_created:
+        - "harness/src/worlds/slot_lattice_search.rs"
+        - "harness/src/worlds/slot_lattice_regimes.rs"
+        - "tests/lock/tests/sc1_m3_1_slot_lattice.rs"
+      files_modified:
+        - "harness/src/worlds/mod.rs"
+    deliverables:
+      - "SlotLatticeSearch: parameterized search world with N active slots × V values, configurable traps and goal profiles"
+      - "TrapRule and GoalProfile enums for deterministic stress axis control"
+      - "Fixed MAX_SLOTS=10 compiled layout with active_slots semantic control"
+      - "Stable world_id encoding: slot_lattice:v1:n{N}:v{V}:trap_{rule}:goal_{profile}"
+      - "Real schema descriptor hash via canonical_hash(DOMAIN_HARNESS_FIXTURE, canonical_json(basis))"
+      - "Five canonical regime constructors returning matched (world, policy, expectations) triples"
+      - "RegimeExpectations struct encoding minimum observable thresholds per stress axis"
+      - "Explicit policy construction in all regimes (no defaults drift)"
+      - "regime_truncation: N=8 V=4 cap=5 exercises candidate truncation"
+      - "regime_duplicates: N=4 V=2 goal=Never exercises duplicate suppression under combinatorial pressure"
+      - "regime_exhaustive_dead_end: trap=Slot0Eq(2) exercises exhaustive dead ends from trap states"
+      - "regime_budget_limited: max_expansions=3 exercises budget termination"
+      - "regime_frontier_pressure: max_frontier_size=8 exercises frontier pruning"
+      - "11 lock tests proving all stress axes are reachable with threshold assertions"
+      - "Bundle integrity: verify_bundle and write/read/verify round-trip for slot lattice bundles"
+      - "Determinism: 10 identical runs produce identical SearchGraphV1 canonical JSON bytes"
