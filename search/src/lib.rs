@@ -29,3 +29,6 @@ pub mod node;
 pub mod policy;
 pub mod scorer;
 pub mod search;
+// Dead code allowed: tape types are consumed by tape_writer/reader/render (added in subsequent commits).
+#[allow(dead_code)]
+pub mod tape;

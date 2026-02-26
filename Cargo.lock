@@ -671,6 +671,7 @@ version = "0.0.1"
 dependencies = [
  "hex",
  "serde_json",
+ "sha2",
  "sterling-kernel",
 ]
 
