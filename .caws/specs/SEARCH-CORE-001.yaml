@@ -465,14 +465,19 @@ milestones:
     title: "Table Scorer as Auditable Bundle Artifact"
     status: complete
     scope: "Non-uniform scorer as normative in-bundle artifact with fail-closed provenance checks"
+    # Post-closeout hardening: replaced unconditional ScorerArtifactUnused with
+    # conditional ScorerEvidenceMissing (allows root-goal and scorer-failure shapes),
+    # added scorer key validation, renamed cross-proc misnomer.
     evidence:
-      total_tests: 345
-      new_tests: 18
-      acceptance_ids_anchored: 12
+      total_tests: 347
+      new_tests: 20
+      acceptance_ids_anchored: 14
       commits:
         - "fa0c64b feat(scorer): add TableScorer, ScorerArtifactV1, scorer_digest metadata bindings [SEARCH-CORE-001]"
         - "c4428d6 feat(bundle): verify scorer digest and candidate score-source coherence [SEARCH-CORE-001]"
         - "3c38ad8 test(lock): add M3.2 scorer lock tests with concrete reorder and advisory proofs [SEARCH-CORE-001]"
+        - "26bf610 fix(bundle): make scorer evidence invariant conditional on expansions and termination reason [SEARCH-CORE-001]"
+        - "713baea test(lock): add root-goal/failure-shape no-model-digest coverage and rename invocation determinism test [SEARCH-CORE-001]"
       files_created:
         - "tests/lock/tests/sc1_m3_2_table_scorer.rs"
       files_modified:
@@ -521,18 +526,24 @@ milestones:
         test: bundle_persistence_roundtrip_with_scorer
         description: "write/read/verify round-trip preserves all 6 scorer bundle artifacts identically"
       - id: AC-M3.2-12
-        test: cross_proc_scorer_outputs_deterministic
-        description: "Independent pipeline invocations produce identical bundle digests and scorer artifacts"
+        test: scorer_outputs_deterministic_across_invocations
+        description: "Independent in-process pipeline invocations produce identical bundle digests and scorer artifacts"
+      - id: AC-M3.2-13
+        test: table_scorer_root_goal_bundle_verifiable
+        description: "scorer.json with zero expansions (root-is-goal) verifies without requiring ModelDigest candidates"
+      - id: AC-M3.2-14
+        test: table_scorer_failure_shape_bundle_verifiable
+        description: "scorer.json with scorer-failure termination and Unavailable sources verifies (M2 evidence preservation)"
     deliverables:
       - "TableScorer: BTreeMap<String, i64> scorer with injected digest, canonical JSON serialization"
       - "ScorerArtifactV1: atomic canonical bytes + content_hash + hex_digest for bundle inclusion"
       - "ScorerInputV1 enum: Uniform | Table{scorer, artifact} preventing invalid states"
-      - "build_table_scorer_input() helper: single-call serialize + hash + wire from BTreeMap"
+      - "build_table_scorer_input() helper: single-call serialize + hash + wire, validates keys as sha256 ContentHash"
       - "scorer.json as 6th normative artifact with schema envelope (scorer.v1, kind=table, entries=sorted)"
       - "scorer_digest in SearchGraphMetadata and MetadataBindings (None for Uniform, Some for Table)"
       - "scorer_digest in verification_report.json (conditional on Table mode)"
       - "ScoreSourceV1::ModelDigest(ContentHash) provenance tag on table-scored candidates"
       - "Fail-closed coherence: report ↔ scorer artifact ↔ graph metadata ↔ candidate ModelDigest all bound"
-      - "7 new BundleVerifyError variants for scorer coherence failures"
+      - "Conditional scorer evidence: ScorerEvidenceMissing replaces ScorerArtifactUnused (allows root-goal and scorer-failure shapes)"
       - "Advisory-only invariant: scorer reorders but cannot add/remove candidates"
       - "Back-compat: Uniform runs remain 5-artifact bundles with no scorer fields"
