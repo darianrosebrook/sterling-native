@@ -148,9 +148,7 @@ pub fn build_table_scorer_input(
         match ContentHash::parse(key) {
             Some(hash) if hash.algorithm() == "sha256" => {}
             _ => {
-                return Err(SearchRunError::InvalidScorerTableKey {
-                    key: key.clone(),
-                });
+                return Err(SearchRunError::InvalidScorerTableKey { key: key.clone() });
             }
         }
     }
