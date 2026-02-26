@@ -461,3 +461,78 @@ milestones:
       - "11 lock tests proving all stress axes are reachable with threshold assertions"
       - "Bundle integrity: verify_bundle and write/read/verify round-trip for slot lattice bundles"
       - "Determinism: 10 identical runs produce identical SearchGraphV1 canonical JSON bytes"
+  - id: M3.2
+    title: "Table Scorer as Auditable Bundle Artifact"
+    status: complete
+    scope: "Non-uniform scorer as normative in-bundle artifact with fail-closed provenance checks"
+    evidence:
+      total_tests: 345
+      new_tests: 18
+      acceptance_ids_anchored: 12
+      commits:
+        - "fa0c64b feat(scorer): add TableScorer, ScorerArtifactV1, scorer_digest metadata bindings [SEARCH-CORE-001]"
+        - "c4428d6 feat(bundle): verify scorer digest and candidate score-source coherence [SEARCH-CORE-001]"
+        - "3c38ad8 test(lock): add M3.2 scorer lock tests with concrete reorder and advisory proofs [SEARCH-CORE-001]"
+      files_created:
+        - "tests/lock/tests/sc1_m3_2_table_scorer.rs"
+      files_modified:
+        - "search/src/scorer.rs"
+        - "search/src/graph.rs"
+        - "search/src/search.rs"
+        - "harness/src/runner.rs"
+        - "harness/src/bundle.rs"
+        - "tests/lock/tests/sc1_m3_1_slot_lattice.rs"
+        - "tests/lock/tests/sc1_search_determinism.rs"
+        - "tests/lock/tests/sc1_m2_hardening.rs"
+        - "tests/lock/tests/sc1_m3_persistence.rs"
+        - "tests/lock/src/bin/search_fixture.rs"
+    acceptance_criteria:
+      - id: AC-M3.2-01
+        test: table_scorer_reorders_candidates_concretely
+        description: "Boosted candidate (bonus=100) becomes first post-score candidate in first expansion"
+      - id: AC-M3.2-02
+        test: table_scorer_deterministic_n10
+        description: "10 runs with same scorer artifact produce identical search_graph.json bytes"
+      - id: AC-M3.2-03
+        test: advisory_only_candidate_set_preserved
+        description: "Uniform vs table scorer produce identical first-expansion candidate sets (order may differ)"
+      - id: AC-M3.2-04
+        test: scorer_artifact_in_bundle
+        description: "scorer.json present in bundle, normative, bytes match input artifact, 6 total artifacts"
+      - id: AC-M3.2-05
+        test: scorer_digest_in_report
+        description: "verification_report.json has scorer_digest matching scorer.json content_hash"
+      - id: AC-M3.2-06
+        test: scorer_digest_in_graph_metadata
+        description: "search_graph.json metadata has scorer_digest matching scorer.json content_hash hex"
+      - id: AC-M3.2-07
+        test: verify_bundle_passes_with_scorer
+        description: "verify_bundle() succeeds on valid 6-artifact scorer bundle"
+      - id: AC-M3.2-08
+        test: scorer_tamper_detected
+        description: "Tampered scorer.json triggers ScorerDigestMismatch on verification"
+      - id: AC-M3.2-09
+        test: score_source_digest_mismatch_detected
+        description: "Candidate ModelDigest mismatch vs bound digest triggers CandidateScoreSourceScorerMismatch"
+      - id: AC-M3.2-10
+        test: uniform_scorer_no_scorer_artifact
+        description: "Uniform scorer bundle has 5 artifacts, no scorer.json, passes verification"
+      - id: AC-M3.2-11
+        test: bundle_persistence_roundtrip_with_scorer
+        description: "write/read/verify round-trip preserves all 6 scorer bundle artifacts identically"
+      - id: AC-M3.2-12
+        test: cross_proc_scorer_outputs_deterministic
+        description: "Independent pipeline invocations produce identical bundle digests and scorer artifacts"
+    deliverables:
+      - "TableScorer: BTreeMap<String, i64> scorer with injected digest, canonical JSON serialization"
+      - "ScorerArtifactV1: atomic canonical bytes + content_hash + hex_digest for bundle inclusion"
+      - "ScorerInputV1 enum: Uniform | Table{scorer, artifact} preventing invalid states"
+      - "build_table_scorer_input() helper: single-call serialize + hash + wire from BTreeMap"
+      - "scorer.json as 6th normative artifact with schema envelope (scorer.v1, kind=table, entries=sorted)"
+      - "scorer_digest in SearchGraphMetadata and MetadataBindings (None for Uniform, Some for Table)"
+      - "scorer_digest in verification_report.json (conditional on Table mode)"
+      - "ScoreSourceV1::ModelDigest(ContentHash) provenance tag on table-scored candidates"
+      - "Fail-closed coherence: report ↔ scorer artifact ↔ graph metadata ↔ candidate ModelDigest all bound"
+      - "7 new BundleVerifyError variants for scorer coherence failures"
+      - "Advisory-only invariant: scorer reorders but cannot add/remove candidates"
+      - "Back-compat: Uniform runs remain 5-artifact bundles with no scorer fields"
