@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "937c84ce1ffb23fb",
-  "entry_count": 105,
+  "aggregate_hash": "918f4fd43e8b8225",
+  "entry_count": 106,
   "entries": [
     {
       "path": "docs/README.md",
@@ -1014,6 +1014,15 @@
           "target": "docs/reference/v1/canonical/module_interdependencies_v1.md"
         }
       ]
+    },
+    {
+      "path": "docs/reference/v1/canonical/search_complexity.md",
+      "title": "Search Complexity Reference (v1)",
+      "authority": null,
+      "status": null,
+      "scope": null,
+      "content_hash": "6b91df1d833457e3",
+      "links": []
     },
     {
       "path": "docs/reference/v1/canonical/semantic_realization_convergence.md",
