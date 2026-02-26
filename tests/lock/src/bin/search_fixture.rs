@@ -6,16 +6,15 @@
 //! Output: key=value lines (see source for format).
 
 use sterling_harness::bundle::DOMAIN_BUNDLE_ARTIFACT;
-use sterling_harness::runner::run_search;
+use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_kernel::proof::hash::canonical_hash;
 use sterling_search::policy::SearchPolicyV1;
-use sterling_search::scorer::UniformScorer;
 
 fn main() {
     let policy = SearchPolicyV1::default();
-    let scorer = UniformScorer;
-    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).expect("search run failed");
+    let bundle =
+        run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).expect("search run failed");
 
     // Extract verification report.
     let report = bundle

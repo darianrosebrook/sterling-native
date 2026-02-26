@@ -8,7 +8,7 @@
 use sterling_harness::bundle::{verify_bundle, ArtifactBundleV1};
 use sterling_harness::bundle_dir::{read_bundle_dir, verify_bundle_dir, write_bundle_dir};
 use sterling_harness::contract::WorldHarnessV1;
-use sterling_harness::runner::run_search;
+use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::slot_lattice_regimes::{
     regime_budget_limited, regime_duplicates, regime_exhaustive_dead_end, regime_frontier_pressure,
     regime_truncation, Regime,
@@ -31,6 +31,7 @@ fn bindings_for(regime: &Regime) -> MetadataBindings {
         registry_digest: "test_registry_digest".into(),
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
+        scorer_digest: None,
     }
 }
 
@@ -52,7 +53,7 @@ fn run_regime_search(regime: &Regime) -> sterling_search::search::SearchResult {
 
 /// Run search through the full bundle pipeline for a regime.
 fn run_regime_bundle(regime: &Regime) -> ArtifactBundleV1 {
-    run_search(&regime.world, &regime.policy, &UniformScorer).unwrap()
+    run_search(&regime.world, &regime.policy, &ScorerInputV1::Uniform).unwrap()
 }
 
 // ---------------------------------------------------------------------------

@@ -9,17 +9,15 @@ use sterling_harness::bundle::{build_bundle, verify_bundle, ArtifactBundleV1, Bu
 use sterling_harness::bundle_dir::{
     read_bundle_dir, verify_bundle_dir, write_bundle_dir, BundleDirReadError, BundleDirVerifyError,
 };
-use sterling_harness::runner::run_search;
+use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_kernel::proof::canon::canonical_json_bytes;
 use sterling_search::policy::SearchPolicyV1;
-use sterling_search::scorer::UniformScorer;
 
 /// Produce a search bundle via `run_search(RomeMiniSearch)`.
 fn search_bundle() -> ArtifactBundleV1 {
     let policy = SearchPolicyV1::default();
-    let scorer = UniformScorer;
-    run_search(&RomeMiniSearch, &policy, &scorer).expect("search run failed")
+    run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).expect("search run failed")
 }
 
 // ---------------------------------------------------------------------------

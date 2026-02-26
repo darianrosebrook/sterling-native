@@ -135,6 +135,8 @@ pub struct SearchGraphMetadata {
     pub policy_snapshot_digest: String,
     pub search_policy_digest: String,
     pub root_state_fingerprint: String,
+    /// Scorer artifact digest (Table mode only; `None` for Uniform).
+    pub scorer_digest: Option<String>,
 
     // Counters
     pub total_expansions: u64,
@@ -340,7 +342,7 @@ fn node_summary_to_json(n: &SearchGraphNodeSummaryV1) -> serde_json::Value {
 }
 
 fn metadata_to_json(m: &SearchGraphMetadata) -> serde_json::Value {
-    serde_json::json!({
+    let mut obj = serde_json::json!({
         "dedup_key": dedup_key_str(m.dedup_key),
         "frontier_high_water": m.frontier_high_water,
         "policy_snapshot_digest": m.policy_snapshot_digest,
@@ -356,7 +358,13 @@ fn metadata_to_json(m: &SearchGraphMetadata) -> serde_json::Value {
         "total_duplicates_suppressed": m.total_duplicates_suppressed,
         "total_expansions": m.total_expansions,
         "world_id": m.world_id,
-    })
+    });
+
+    if let Some(ref digest) = m.scorer_digest {
+        obj["scorer_digest"] = serde_json::json!(digest);
+    }
+
+    obj
 }
 
 fn dedup_key_str(k: DedupKeyV1) -> &'static str {
@@ -431,6 +439,7 @@ mod tests {
                 policy_snapshot_digest: "def456".into(),
                 search_policy_digest: "ghi789".into(),
                 root_state_fingerprint: "root_fp".into(),
+                scorer_digest: None,
                 total_expansions: 0,
                 total_candidates_generated: 0,
                 total_duplicates_suppressed: 0,

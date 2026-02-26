@@ -23,9 +23,11 @@ use crate::policy::{
     PolicyViolation,
 };
 
+use std::collections::BTreeMap;
+
 use sterling_search::contract::SearchWorldV1;
 use sterling_search::policy::SearchPolicyV1;
-use sterling_search::scorer::ValueScorer;
+use sterling_search::scorer::{TableScorer, ValueScorer};
 use sterling_search::search::MetadataBindings;
 
 use sterling_kernel::carrier::bytetrace::{
@@ -88,6 +90,73 @@ pub enum SearchRunError {
     },
 }
 
+/// A scorer artifact ready for inclusion in a bundle.
+///
+/// Built by `build_table_scorer_input()` from a score table.
+/// Contains the canonical JSON bytes and their content hash.
+#[derive(Debug, Clone)]
+pub struct ScorerArtifactV1 {
+    /// Canonical JSON bytes of the scorer table.
+    pub bytes: Vec<u8>,
+    /// `canonical_hash(DOMAIN_BUNDLE_ARTIFACT, bytes)`.
+    pub content_hash: ContentHash,
+    /// Hex digest portion of `content_hash`.
+    pub hex_digest: String,
+}
+
+/// Atomic scorer input: scorer behavior + artifact are inseparable.
+///
+/// Invalid states (e.g., `TableScorer` without artifact) are unrepresentable.
+#[derive(Debug, Clone)]
+pub enum ScorerInputV1 {
+    /// Uniform scoring (bonus=0 for all candidates). No scorer artifact.
+    Uniform,
+    /// Table scoring with a bundled artifact.
+    Table {
+        /// The scorer implementation.
+        scorer: TableScorer,
+        /// The artifact for bundle inclusion.
+        artifact: ScorerArtifactV1,
+    },
+}
+
+/// Build a `ScorerInputV1::Table` from a score table.
+///
+/// Performs canonical JSON serialization and domain hashing once,
+/// then wires both the scorer and artifact from the same bytes/hash.
+///
+/// # Errors
+///
+/// Returns `SearchRunError::CanonFailed` if serialization fails.
+pub fn build_table_scorer_input(
+    table: BTreeMap<String, i64>,
+) -> Result<ScorerInputV1, SearchRunError> {
+    // Build a temporary scorer to generate canonical bytes.
+    // Use a placeholder digest — we'll replace it after hashing.
+    let placeholder = ContentHash::parse(
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )
+    .expect("valid placeholder hash");
+    let temp_scorer = TableScorer::new(table.clone(), placeholder);
+    let bytes = temp_scorer
+        .to_canonical_json_bytes()
+        .map_err(|e| SearchRunError::CanonFailed {
+            detail: format!("{e:?}"),
+        })?;
+
+    let content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &bytes);
+    let hex_digest = content_hash.hex_digest().to_string();
+
+    let scorer = TableScorer::new(table, content_hash.clone());
+    let artifact = ScorerArtifactV1 {
+        bytes,
+        content_hash,
+        hex_digest,
+    };
+
+    Ok(ScorerInputV1::Table { scorer, artifact })
+}
+
 /// Run a search world through the search pipeline, producing a bundle.
 ///
 /// The world must implement both [`SearchWorldV1`] and [`WorldHarnessV1`].
@@ -100,8 +169,9 @@ pub enum SearchRunError {
 /// 3. `search(root_state, world, policy, scorer)` → `SearchResult`
 /// 4. Assemble bundle with `search_graph.json` (normative)
 ///
-/// The bundle includes all standard linear artifacts plus:
-/// - `search_graph.json` (normative) — the complete search audit trail
+/// For `ScorerInputV1::Table`, the bundle includes 6 artifacts (adding
+/// `scorer.json` as normative). For `ScorerInputV1::Uniform`, the bundle
+/// remains at 5 artifacts with no scorer fields.
 ///
 /// # Errors
 ///
@@ -109,7 +179,7 @@ pub enum SearchRunError {
 pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
     world: &W,
     search_policy: &SearchPolicyV1,
-    scorer: &dyn ValueScorer,
+    scorer_input: &ScorerInputV1,
 ) -> Result<ArtifactBundleV1, SearchRunError> {
     // World ID coherence check: both traits must agree.
     let search_wid = SearchWorldV1::world_id(world);
@@ -160,6 +230,12 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
 
     let codebook_hash = build_codebook_hash(world).map_err(SearchRunError::RunError)?;
 
+    // Extract scorer digest for metadata bindings (Table mode only).
+    let scorer_digest_hex = match scorer_input {
+        ScorerInputV1::Uniform => None,
+        ScorerInputV1::Table { artifact, .. } => Some(artifact.hex_digest.clone()),
+    };
+
     // Binding format: raw hex (no algorithm prefix). See bundle.rs::binding_hex().
     let bindings = MetadataBindings {
         world_id: WorldHarnessV1::world_id(world).to_string(),
@@ -167,15 +243,21 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         registry_digest: registry_digest.hex_digest().to_string(),
         policy_snapshot_digest: policy_content_hash.hex_digest().to_string(),
         search_policy_digest: search_policy_digest.hex_digest().to_string(),
+        scorer_digest: scorer_digest_hex.clone(),
     };
 
     // Phase 3: run search.
+    let scorer_ref: &dyn ValueScorer = match scorer_input {
+        ScorerInputV1::Uniform => &sterling_search::scorer::UniformScorer,
+        ScorerInputV1::Table { scorer, .. } => scorer,
+    };
+
     let search_result = sterling_search::search::search(
         compilation.state.clone(),
         world,
         &registry,
         search_policy,
-        scorer,
+        scorer_ref,
         &bindings,
     )
     .map_err(SearchRunError::SearchError)?;
@@ -194,15 +276,24 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
 
     // Build verification report for search.
     let search_graph_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &search_graph_bytes);
+
+    let scorer_digest_for_report = match scorer_input {
+        ScorerInputV1::Uniform => None,
+        ScorerInputV1::Table { artifact, .. } => {
+            Some(artifact.content_hash.as_str().to_string())
+        }
+    };
+
     let verification_report = build_search_verification_report(
         WorldHarnessV1::world_id(world),
         &policy_content_hash,
         &search_graph_content_hash,
         &codebook_hash,
+        scorer_digest_for_report.as_deref(),
     )
     .map_err(SearchRunError::RunError)?;
 
-    let artifacts = vec![
+    let mut artifacts = vec![
         ("fixture.json".into(), fixture_json, true),
         (
             "compilation_manifest.json".into(),
@@ -213,6 +304,11 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         ("search_graph.json".into(), search_graph_bytes, true),
         ("verification_report.json".into(), verification_report, true),
     ];
+
+    // Include scorer artifact for Table mode (normative).
+    if let ScorerInputV1::Table { artifact, .. } = scorer_input {
+        artifacts.push(("scorer.json".into(), artifact.bytes.clone(), true));
+    }
 
     build_bundle(artifacts).map_err(SearchRunError::BundleFailed)
 }
@@ -242,8 +338,9 @@ fn build_search_verification_report(
     policy_content_hash: &ContentHash,
     search_graph_content_hash: &ContentHash,
     codebook_hash: &ContentHash,
+    scorer_digest: Option<&str>,
 ) -> Result<Vec<u8>, RunError> {
-    let report = serde_json::json!({
+    let mut report = serde_json::json!({
         // DIAGNOSTIC: not verified by verify_bundle(); present for observability.
         "codebook_hash": codebook_hash.as_str(),
         "mode": "search",
@@ -255,6 +352,11 @@ fn build_search_verification_report(
         // BINDING: cross-verified against search_graph.json metadata.world_id.
         "world_id": world_id,
     });
+
+    // BINDING: verified against scorer.json content_hash (Table mode only).
+    if let Some(digest) = scorer_digest {
+        report["scorer_digest"] = serde_json::json!(digest);
+    }
 
     canonical_json_bytes(&report).map_err(|e| RunError::CanonFailed {
         detail: format!("{e:?}"),
@@ -686,8 +788,7 @@ mod tests {
     #[test]
     fn run_search_produces_bundle() {
         let policy = SearchPolicyV1::default();
-        let scorer = sterling_search::scorer::UniformScorer;
-        let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+        let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
         assert!(bundle.artifacts.contains_key("fixture.json"));
         assert!(bundle.artifacts.contains_key("compilation_manifest.json"));
         assert!(bundle.artifacts.contains_key("policy_snapshot.json"));
@@ -699,8 +800,7 @@ mod tests {
     #[test]
     fn run_search_graph_is_normative() {
         let policy = SearchPolicyV1::default();
-        let scorer = sterling_search::scorer::UniformScorer;
-        let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+        let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
         let graph = bundle.artifacts.get("search_graph.json").unwrap();
         assert!(graph.normative, "search_graph.json should be normative");
     }
@@ -708,8 +808,7 @@ mod tests {
     #[test]
     fn run_search_verification_report_contains_search_graph_digest() {
         let policy = SearchPolicyV1::default();
-        let scorer = sterling_search::scorer::UniformScorer;
-        let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+        let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
 
         let report = bundle.artifacts.get("verification_report.json").unwrap();
         let json: serde_json::Value = serde_json::from_slice(&report.content).unwrap();
@@ -725,16 +824,14 @@ mod tests {
     fn run_search_verify_bundle_passes() {
         use crate::bundle::verify_bundle;
         let policy = SearchPolicyV1::default();
-        let scorer = sterling_search::scorer::UniformScorer;
-        let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+        let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
         verify_bundle(&bundle).unwrap();
     }
 
     #[test]
     fn run_search_finds_goal() {
         let policy = SearchPolicyV1::default();
-        let scorer = sterling_search::scorer::UniformScorer;
-        let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+        let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
 
         let report = bundle.artifacts.get("verification_report.json").unwrap();
         let json: serde_json::Value = serde_json::from_slice(&report.content).unwrap();

@@ -567,6 +567,8 @@ pub struct MetadataBindings {
     pub registry_digest: String,
     pub policy_snapshot_digest: String,
     pub search_policy_digest: String,
+    /// Scorer artifact digest (Table mode only; `None` for Uniform).
+    pub scorer_digest: Option<String>,
 }
 
 /// Reconstruct the path from root to a goal node.
@@ -644,6 +646,7 @@ fn build_graph(
             policy_snapshot_digest: bindings.policy_snapshot_digest.clone(),
             search_policy_digest: bindings.search_policy_digest.clone(),
             root_state_fingerprint: root_fp_hex.to_string(),
+            scorer_digest: bindings.scorer_digest.clone(),
             total_expansions,
             total_candidates_generated,
             total_duplicates_suppressed,

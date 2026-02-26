@@ -8,7 +8,7 @@
 
 use lock_tests::bundle_test_helpers::rebuild_with_modified_graph;
 use sterling_harness::bundle::{build_bundle, verify_bundle, BundleVerifyError};
-use sterling_harness::runner::run_search;
+use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_kernel::carrier::bytestate::ByteStateV1;
 use sterling_kernel::carrier::code32::Code32;
@@ -32,6 +32,7 @@ fn default_bindings() -> MetadataBindings {
         registry_digest: "test_registry_digest".into(),
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
+        scorer_digest: None,
     }
 }
 
@@ -473,8 +474,7 @@ fn termination_details_are_deterministic() {
 fn search_graph_digest_mandatory_in_search_bundle() {
     // Build a valid search bundle, then mutate the report to remove search_graph_digest
     let policy = SearchPolicyV1::default();
-    let scorer = UniformScorer;
-    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+    let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
 
     // Reconstruct bundle with modified report (search_graph_digest removed)
     let report_artifact = bundle.artifacts.get("verification_report.json").unwrap();
@@ -514,8 +514,7 @@ fn search_graph_digest_mandatory_in_search_bundle() {
 #[test]
 fn mode_search_requires_search_graph_artifact() {
     let policy = SearchPolicyV1::default();
-    let scorer = UniformScorer;
-    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+    let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
 
     // Rebuild bundle without search_graph.json
     let artifacts: Vec<(String, Vec<u8>, bool)> = bundle
@@ -540,8 +539,7 @@ fn mode_search_requires_search_graph_artifact() {
 #[test]
 fn search_graph_requires_mode_search() {
     let policy = SearchPolicyV1::default();
-    let scorer = UniformScorer;
-    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+    let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
 
     // Modify report to say mode="linear" instead of "search"
     let report_artifact = bundle.artifacts.get("verification_report.json").unwrap();
@@ -577,8 +575,7 @@ fn search_graph_requires_mode_search() {
 #[test]
 fn metadata_binding_policy_digest_mismatch_detected() {
     let policy = SearchPolicyV1::default();
-    let scorer = UniformScorer;
-    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+    let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
 
     let modified_bundle = rebuild_with_modified_graph(&bundle, |graph_json| {
         graph_json["metadata"]["policy_snapshot_digest"] =
@@ -599,8 +596,7 @@ fn metadata_binding_policy_digest_mismatch_detected() {
 #[test]
 fn metadata_binding_world_id_mismatch_detected() {
     let policy = SearchPolicyV1::default();
-    let scorer = UniformScorer;
-    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+    let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
 
     let modified_bundle = rebuild_with_modified_graph(&bundle, |graph_json| {
         graph_json["metadata"]["world_id"] = serde_json::json!("wrong_world");
@@ -623,9 +619,8 @@ fn metadata_binding_world_id_mismatch_detected() {
 #[test]
 fn run_search_generic_single_world_compiles_and_runs() {
     let policy = SearchPolicyV1::default();
-    let scorer = UniformScorer;
     // This test verifies the generic signature compiles with a single world arg.
-    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+    let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
     assert_eq!(bundle.artifacts.len(), 5);
     verify_bundle(&bundle).unwrap();
 }
@@ -688,6 +683,7 @@ fn frontier_invariant_stage_serializes_in_json() {
             registry_digest: "0".repeat(64),
             policy_snapshot_digest: "0".repeat(64),
             search_policy_digest: "0".repeat(64),
+            scorer_digest: None,
             total_expansions: 0,
             total_candidates_generated: 0,
             total_duplicates_suppressed: 0,

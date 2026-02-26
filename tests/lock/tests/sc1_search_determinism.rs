@@ -4,7 +4,7 @@
 
 use sterling_harness::bundle::verify_bundle;
 use sterling_harness::contract::WorldHarnessV1;
-use sterling_harness::runner::run_search;
+use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_kernel::carrier::bytestate::ByteStateV1;
 use sterling_kernel::carrier::code32::Code32;
@@ -23,6 +23,7 @@ fn default_bindings() -> MetadataBindings {
         registry_digest: "test_registry_digest".into(),
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
+        scorer_digest: None,
     }
 }
 
@@ -81,8 +82,7 @@ fn search_determinism_inproc_n10() {
 #[test]
 fn graph_in_bundle_normative_and_verifiable() {
     let policy = SearchPolicyV1::default();
-    let scorer = UniformScorer;
-    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+    let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
 
     let graph = bundle
         .artifacts
@@ -100,8 +100,7 @@ fn graph_in_bundle_normative_and_verifiable() {
 #[test]
 fn graph_metadata_has_snapshot_bindings() {
     let policy = SearchPolicyV1::default();
-    let scorer = UniformScorer;
-    let bundle = run_search(&RomeMiniSearch, &policy, &scorer).unwrap();
+    let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
 
     let graph = bundle.artifacts.get("search_graph.json").unwrap();
     let json: serde_json::Value = serde_json::from_slice(&graph.content).unwrap();
@@ -211,6 +210,7 @@ fn loop_detection_terminates_without_infinite_expansion() {
         registry_digest: "test".into(),
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
+        scorer_digest: None,
     };
 
     let result = search(
@@ -275,6 +275,7 @@ fn exhaustive_dead_end_tagged_correctly() {
         registry_digest: "test".into(),
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
+        scorer_digest: None,
     };
 
     let result = search(
@@ -319,6 +320,7 @@ fn expansion_budget_overflow() {
         registry_digest: "test".into(),
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
+        scorer_digest: None,
     };
 
     let result = search(
@@ -380,6 +382,7 @@ fn illegal_candidate_triggers_world_contract_violation() {
         registry_digest: "test".into(),
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
+        scorer_digest: None,
     };
 
     // WorldContractViolation is now a soft termination — returns Ok with graph evidence
