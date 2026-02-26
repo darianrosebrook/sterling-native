@@ -1,7 +1,7 @@
 id: SEARCH-CORE-001
 type: feature
-title: "Search Core: Frontier, SearchNodeV1, SearchGraphV1, ValueScorer, best-first search with deterministic audit trail (M1)"
-status: complete
+title: "Search Core: Frontier, SearchNodeV1, SearchGraphV1, ValueScorer, best-first search with deterministic audit trail"
+status: in_progress
 risk_tier: 2
 mode: development
 created_at: "2026-02-25T23:00:00.000Z"
@@ -105,6 +105,75 @@ acceptance:
     given: "a SearchPolicyV1 selecting DedupKeyV1::FullState or PruneVisitedPolicyV1::ReleaseVisited"
     when: "search() is called"
     then: "fails deterministically with explicit SearchError, no silent fallback"
+  # --- M2: Search Hardening ---
+  - id: SC1-M2-SCORER-PANIC-PRESERVES-GRAPH
+    given: "a scorer that panics in score_candidates()"
+    when: "search() catches the panic via catch_unwind"
+    then: "returns Ok(SearchResult) with InternalPanic{ScoreCandidates} and partial graph"
+  - id: SC1-M2-ENUMERATE-PANIC-PRESERVES-GRAPH
+    given: "a world that panics in enumerate_candidates()"
+    when: "search() catches the panic"
+    then: "returns Ok with InternalPanic{EnumerateCandidates} and partial expansion event"
+  - id: SC1-M2-IS-GOAL-PANIC-PRESERVES-GRAPH
+    given: "a world that panics in is_goal() on root or expansion"
+    when: "search() catches the panic"
+    then: "returns Ok with InternalPanic{IsGoalRoot|IsGoalExpansion} and partial graph"
+  - id: SC1-M2-SCORER-CONTRACT-VIOLATION-PRESERVES-GRAPH
+    given: "a scorer returning wrong arity"
+    when: "search() detects the mismatch"
+    then: "returns Ok with ScorerContractViolation{expected,actual} and partial graph"
+  - id: SC1-M2-IS-GOAL-REACHED-HELPER
+    given: "SearchResult from a goal-found or non-goal search"
+    when: "is_goal_reached() is called"
+    then: "returns true only for GoalReached termination"
+  - id: SC1-M2-PREFLIGHT-UNSUPPORTED-MODE-ERR-NO-GRAPH
+    given: "a reserved policy option (FullState dedup)"
+    when: "search() is called"
+    then: "returns Err(UnsupportedPolicyMode) with no SearchGraphV1"
+  - id: SC1-M2-TERMINATION-DETAILS-DETERMINISTIC
+    given: "identical inputs producing a panic termination"
+    when: "search() is called twice"
+    then: "SearchGraphV1 canonical JSON bytes are identical"
+  - id: SC1-M2-SEARCH-GRAPH-DIGEST-MANDATORY
+    given: "a search bundle with search_graph_digest removed from report"
+    when: "verify_bundle() is called"
+    then: "returns SearchGraphDigestMissing error"
+  - id: SC1-M2-MODE-COHERENCE-SEARCH-NO-GRAPH
+    given: "mode=search in report but no search_graph.json artifact"
+    when: "verify_bundle() is called"
+    then: "returns SearchGraphArtifactMissing error"
+  - id: SC1-M2-MODE-COHERENCE-GRAPH-NO-SEARCH
+    given: "search_graph.json present but mode=linear in report"
+    when: "verify_bundle() is called"
+    then: "returns ModeSearchExpected error"
+  - id: SC1-M2-METADATA-BINDING-POLICY-DIGEST
+    given: "search_graph.json with wrong policy_snapshot_digest"
+    when: "verify_bundle() is called"
+    then: "returns MetadataBindingPolicyMismatch error"
+  - id: SC1-M2-METADATA-BINDING-WORLD-ID
+    given: "search_graph.json with wrong world_id vs report"
+    when: "verify_bundle() is called"
+    then: "returns MetadataBindingWorldIdMismatch error"
+  - id: SC1-M2-RUN-SEARCH-GENERIC-SINGLE-WORLD
+    given: "run_search generic signature"
+    when: "called with a single RomeMiniSearch world"
+    then: "compiles, runs, and produces valid bundle with 5 artifacts"
+  - id: SC1-M2-CANDIDATE-DOMAIN-SEPARATION
+    given: "identical input bytes"
+    when: "hashed with DOMAIN_SEARCH_CANDIDATE vs DOMAIN_SEARCH_NODE"
+    then: "produce different ContentHash values"
+  - id: SC1-M2-CANDIDATE-CONSTRUCTOR-DETERMINISTIC
+    given: "identical op_code and op_args"
+    when: "CandidateActionV1::new() called twice"
+    then: "produces identical CandidateActionV1 with matching canonical_hash"
+  - id: SC1-M2-PANIC-PROFILE-UNWIND-ENFORCED
+    given: "workspace compiled with dev or release profile"
+    when: "std::panic::catch_unwind is called around a panic!()"
+    then: "the panic is caught (not aborted)"
+  - id: SC1-M2-WORLD-CONTRACT-VIOLATION-RETURNS-OK
+    given: "a world enumerating an illegal candidate"
+    when: "search() processes it"
+    then: "returns Ok with WorldContractViolation termination and partial graph (not Err)"
 acceptance_criteria: []
 non_functional:
   perf:
@@ -115,7 +184,13 @@ non_functional:
 contracts:
   - type: architecture
     path: .claude/plans/snappy-booping-mccarthy.md
-    description: "SEARCH-CORE-001 implementation plan with type definitions, invariants, and execution order"
+    description: "SEARCH-CORE-001 M1 implementation plan with type definitions, invariants, and execution order"
+  - type: architecture
+    path: .claude/plans/scalable-petting-sloth.md
+    description: "SEARCH-CORE-001 M2 hardening plan: evidence preservation, symmetric verification, generic wiring, canonicalization"
+out_of_contract:
+  - "Evidence preservation guarantees exclude process-level abort classes: OOM abort, explicit std::process::abort(), external SIGKILL, panic=abort profile override"
+  - "catch_unwind depends on panic=unwind; workspace Cargo.toml pins this for dev and release profiles"
 milestones:
   - id: M1
     title: "Search Core: frontier, graph, scorer, best-first loop"
@@ -162,3 +237,46 @@ milestones:
       - "Lock tests: determinism (in-proc N=10), cross-proc (4 variants), graph completeness"
       - "Edge-case tests: loop detection, dead-end semantics, budget overflow, legality, pruning, provenance"
       - "Multi-spec acceptance lint (tools/lint_acceptance_ids.py)"
+  - id: M2
+    title: "Search Hardening: evidence preservation, symmetric verification, generic wiring, canonicalization"
+    status: complete
+    evidence:
+      total_tests: 299
+      new_tests: 18
+      acceptance_ids_anchored: 17
+      commits:
+        - "67522e4 feat(search): centralize CandidateAction canonicalization with domain separation [SEARCH-CORE-001]"
+        - "61eaa20 feat(search): evidence preservation — always return SearchGraphV1 [SEARCH-CORE-001]"
+        - "2fe17ff chore(build): pin panic=unwind in workspace profiles [SEARCH-CORE-001]"
+        - "0f4083a feat(harness): generic run_search with world_id coherence check [SEARCH-CORE-001]"
+        - "f9be262 feat(harness): symmetric bundle verification with closed bindings [SEARCH-CORE-001]"
+        - "68a3bc7 test(lock): add SEARCH-CORE-001 M2 hardening lock tests [SEARCH-CORE-001]"
+      files_created:
+        - "tests/lock/tests/sc1_m2_hardening.rs"
+      files_modified:
+        - "search/src/node.rs"
+        - "search/src/error.rs"
+        - "search/src/graph.rs"
+        - "search/src/search.rs"
+        - "search/src/scorer.rs"
+        - "harness/src/bundle.rs"
+        - "harness/src/runner.rs"
+        - "harness/src/worlds/rome_mini_search.rs"
+        - "tests/lock/tests/sc1_search_determinism.rs"
+        - "tests/lock/src/bin/search_fixture.rs"
+        - "Cargo.toml"
+    deliverables:
+      - "Evidence preservation: search() always returns Ok(SearchResult) with SearchGraphV1 for all runtime terminations"
+      - "catch_unwind on world.enumerate_candidates(), world.is_goal(), scorer.score_candidates()"
+      - "TerminationReasonV1 new variants: ScorerContractViolation, InternalPanic, FrontierInvariantViolation"
+      - "PanicStageV1 enum: EnumerateCandidates, ScoreCandidates, IsGoalRoot, IsGoalExpansion"
+      - "SearchError reduced to UnsupportedPolicyMode only (pre-flight refusal)"
+      - "WorldContractViolation now returns Ok with partial graph instead of Err"
+      - "Generic run_search<W: SearchWorldV1 + WorldHarnessV1> (no split-brain)"
+      - "World ID coherence check at run_search entry"
+      - "DOMAIN_SEARCH_CANDIDATE domain separation from DOMAIN_SEARCH_NODE"
+      - "CandidateActionV1::new() constructor with pub(crate) canonical_hash"
+      - "Mandatory search_graph_digest in bundle verification"
+      - "Mode↔artifact coherence: bidirectional enforcement"
+      - "MetadataBindings cross-verification: policy_snapshot_digest and world_id"
+      - "Workspace panic=unwind pinned in dev and release profiles"
