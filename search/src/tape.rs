@@ -469,7 +469,7 @@ pub struct TapeTerminationV1 {
 }
 
 /// Output from a completed tape write.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TapeOutput {
     /// Complete tape bytes (magic through footer).
     pub bytes: Vec<u8>,
