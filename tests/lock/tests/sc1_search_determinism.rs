@@ -11,7 +11,7 @@ use sterling_kernel::carrier::code32::Code32;
 use sterling_kernel::carrier::registry::RegistryV1;
 use sterling_kernel::operators::apply::{set_slot_args, OP_SET_SLOT};
 use sterling_search::contract::SearchWorldV1;
-use sterling_search::node::{candidate_canonical_hash, CandidateActionV1};
+use sterling_search::node::CandidateActionV1;
 use sterling_search::policy::SearchPolicyV1;
 use sterling_search::scorer::UniformScorer;
 use sterling_search::search::{reconstruct_path, search, MetadataBindings};
@@ -188,12 +188,7 @@ impl SearchWorldV1 for CycleWorld {
         // Always propose SET_SLOT(0, 0, Code32::new(1,0,0)) — same value as initial padding
         // This creates a state that's already visited after the first expansion.
         let op_args = set_slot_args(0, 0, Code32::new(1, 0, 0));
-        let canonical_hash = candidate_canonical_hash(OP_SET_SLOT, &op_args);
-        vec![CandidateActionV1 {
-            op_code: OP_SET_SLOT,
-            op_args,
-            canonical_hash,
-        }]
+        vec![CandidateActionV1::new(OP_SET_SLOT, op_args)]
     }
 
     fn is_goal(&self, _state: &ByteStateV1) -> bool {
@@ -365,12 +360,7 @@ impl SearchWorldV1 for IllegalCandidateWorld {
     ) -> Vec<CandidateActionV1> {
         let illegal_code = Code32::new(99, 99, 99);
         let op_args = vec![0u8; 12];
-        let canonical_hash = candidate_canonical_hash(illegal_code, &op_args);
-        vec![CandidateActionV1 {
-            op_code: illegal_code,
-            op_args,
-            canonical_hash,
-        }]
+        vec![CandidateActionV1::new(illegal_code, op_args)]
     }
 
     fn is_goal(&self, _state: &ByteStateV1) -> bool {

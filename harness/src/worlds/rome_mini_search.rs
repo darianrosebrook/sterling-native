@@ -13,7 +13,7 @@ use sterling_kernel::carrier::registry::RegistryV1;
 use sterling_kernel::operators::apply::{set_slot_args, OP_SET_SLOT};
 
 use sterling_search::contract::SearchWorldV1;
-use sterling_search::node::{candidate_canonical_hash, CandidateActionV1};
+use sterling_search::node::CandidateActionV1;
 
 use crate::contract::{FixtureDimensions, ProgramStep, WorldHarnessError, WorldHarnessV1};
 use sterling_kernel::carrier::bytestate::SchemaDescriptor;
@@ -126,12 +126,7 @@ impl SearchWorldV1 for RomeMiniSearch {
             for &value in &values {
                 #[allow(clippy::cast_possible_truncation)]
                 let op_args = set_slot_args(0, slot as u32, value);
-                let canonical_hash = candidate_canonical_hash(OP_SET_SLOT, &op_args);
-                candidates.push(CandidateActionV1 {
-                    op_code: OP_SET_SLOT,
-                    op_args,
-                    canonical_hash,
-                });
+                candidates.push(CandidateActionV1::new(OP_SET_SLOT, op_args));
             }
         }
 

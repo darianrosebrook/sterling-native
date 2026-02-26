@@ -86,22 +86,8 @@ mod tests {
         let scorer = UniformScorer;
         let node = dummy_node();
         let candidates = vec![
-            CandidateActionV1 {
-                op_code: Code32::new(1, 1, 1),
-                op_args: vec![0u8; 12],
-                canonical_hash: crate::node::candidate_canonical_hash(
-                    Code32::new(1, 1, 1),
-                    &[0u8; 12],
-                ),
-            },
-            CandidateActionV1 {
-                op_code: Code32::new(2, 1, 1),
-                op_args: vec![0u8; 12],
-                canonical_hash: crate::node::candidate_canonical_hash(
-                    Code32::new(2, 1, 1),
-                    &[0u8; 12],
-                ),
-            },
+            CandidateActionV1::new(Code32::new(1, 1, 1), vec![0u8; 12]),
+            CandidateActionV1::new(Code32::new(2, 1, 1), vec![0u8; 12]),
         ];
 
         let result = scorer.score_candidates(&node, &candidates);

@@ -7,6 +7,10 @@ use sterling_kernel::proof::hash::ContentHash;
 /// Domain prefix for search node fingerprints.
 pub const DOMAIN_SEARCH_NODE: &[u8] = b"STERLING::SEARCH_NODE::V1\0";
 
+/// Domain prefix for candidate action content hashing.
+/// Distinct from `DOMAIN_SEARCH_NODE` to prevent cross-domain collisions.
+pub const DOMAIN_SEARCH_CANDIDATE: &[u8] = b"STERLING::SEARCH_CANDIDATE::V1\0";
+
 /// An immutable search node in the frontier.
 ///
 /// Ordering for frontier extraction uses `(f_cost, depth, creation_order)`
@@ -46,14 +50,41 @@ impl SearchNodeV1 {
 ///
 /// Candidates are sorted by `canonical_hash` for deterministic enumeration
 /// before scorer bias is applied.
+///
+/// Construct via [`CandidateActionV1::new`] — the `canonical_hash` is computed
+/// internally to prevent callers from supplying incorrect hashes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CandidateActionV1 {
     /// The operator code to apply.
     pub op_code: Code32,
-    /// Serialized operator arguments.
+    /// Serialized operator arguments (must be kernel-canonical bytes).
     pub op_args: Vec<u8>,
     /// Content-addressed hash of `(op_code, op_args)` for dedup and ordering.
-    pub canonical_hash: ContentHash,
+    /// Computed by [`CandidateActionV1::new`]; not directly settable outside this crate.
+    pub(crate) canonical_hash: ContentHash,
+}
+
+impl CandidateActionV1 {
+    /// Construct a candidate action, computing the canonical hash from `op_code` and `op_args`.
+    ///
+    /// `op_args` must be kernel-canonical bytes (operator ABI encoding). Worlds must
+    /// not pass ad-hoc structured serialization — use the operator's canonical arg
+    /// encoder (e.g., `set_slot_args`).
+    #[must_use]
+    pub fn new(op_code: Code32, op_args: Vec<u8>) -> Self {
+        let canonical_hash = candidate_canonical_hash(op_code, &op_args);
+        Self {
+            op_code,
+            op_args,
+            canonical_hash,
+        }
+    }
+
+    /// Read-only access to the canonical hash.
+    #[must_use]
+    pub fn canonical_hash(&self) -> &ContentHash {
+        &self.canonical_hash
+    }
 }
 
 impl PartialOrd for CandidateActionV1 {
@@ -70,13 +101,13 @@ impl Ord for CandidateActionV1 {
 
 /// Compute the canonical hash for a candidate action.
 ///
-/// Hash = `canonical_hash(DOMAIN_SEARCH_NODE, op_code_le_bytes || op_args)`.
+/// Hash = `canonical_hash(DOMAIN_SEARCH_CANDIDATE, op_code_le_bytes || op_args)`.
 #[must_use]
 pub fn candidate_canonical_hash(op_code: Code32, op_args: &[u8]) -> ContentHash {
     let mut data = Vec::with_capacity(4 + op_args.len());
     data.extend_from_slice(&op_code.to_le_bytes());
     data.extend_from_slice(op_args);
-    sterling_kernel::proof::hash::canonical_hash(DOMAIN_SEARCH_NODE, &data)
+    sterling_kernel::proof::hash::canonical_hash(DOMAIN_SEARCH_CANDIDATE, &data)
 }
 
 /// The frontier ordering key: `(f_cost, depth, creation_order)`.
@@ -173,16 +204,8 @@ mod tests {
         let code_b = Code32::new(2, 1, 1);
         let args = vec![0u8; 12];
 
-        let ca = CandidateActionV1 {
-            op_code: code_a,
-            op_args: args.clone(),
-            canonical_hash: candidate_canonical_hash(code_a, &args),
-        };
-        let cb = CandidateActionV1 {
-            op_code: code_b,
-            op_args: args.clone(),
-            canonical_hash: candidate_canonical_hash(code_b, &args),
-        };
+        let ca = CandidateActionV1::new(code_a, args.clone());
+        let cb = CandidateActionV1::new(code_b, args.clone());
 
         let mut candidates = [cb.clone(), ca.clone()];
         candidates.sort();
@@ -192,6 +215,25 @@ mod tests {
                 .canonical_hash
                 .cmp(&candidates[1].canonical_hash),
             std::cmp::Ordering::Less
+        );
+    }
+
+    #[test]
+    fn domain_separation_candidate_vs_node() {
+        let code = Code32::new(1, 1, 1);
+        let args = vec![0u8; 12];
+        let candidate_hash = candidate_canonical_hash(code, &args);
+
+        // Same input bytes through the node domain must differ
+        let mut data = Vec::with_capacity(4 + args.len());
+        data.extend_from_slice(&code.to_le_bytes());
+        data.extend_from_slice(&args);
+        let node_hash = sterling_kernel::proof::hash::canonical_hash(DOMAIN_SEARCH_NODE, &data);
+
+        assert_ne!(
+            candidate_hash.as_str(),
+            node_hash.as_str(),
+            "DOMAIN_SEARCH_CANDIDATE and DOMAIN_SEARCH_NODE must produce different hashes for same input"
         );
     }
 
