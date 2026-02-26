@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use sterling_benchmarks::{build_table_scorer_for_regime, prepare_search_setup, run_search_only};
 use sterling_harness::runner::{run_search, ScorerInputV1};
@@ -9,12 +9,12 @@ use sterling_harness::worlds::slot_lattice_regimes::{
 use sterling_search::scorer::UniformScorer;
 
 // ---------------------------------------------------------------------------
-// Engine throughput: search() only (no compilation/bundling)
+// search() total: includes expansion loop + post-loop build_graph().
+// NOT loop-only — build_graph's O(N×E) node summary construction is included.
 // ---------------------------------------------------------------------------
 
-fn bench_search_engine(c: &mut Criterion) {
-    let mut group = c.benchmark_group("search_engine");
-    // Increase sample size for fast regimes, decrease for slow ones.
+fn bench_search_fn_total(c: &mut Criterion) {
+    let mut group = c.benchmark_group("search_fn_total");
     group.sample_size(50);
 
     let regimes: Vec<(&str, Regime)> = vec![
@@ -32,7 +32,14 @@ fn bench_search_engine(c: &mut Criterion) {
             BenchmarkId::new(format!("{name}/uniform"), ""),
             &(),
             |b, ()| {
-                b.iter(|| run_search_only(&setup_u, &regime.world, &regime.policy, &UniformScorer));
+                b.iter(|| {
+                    black_box(run_search_only(
+                        &setup_u,
+                        &regime.world,
+                        &regime.policy,
+                        &UniformScorer,
+                    ))
+                });
             },
         );
 
@@ -47,7 +54,14 @@ fn bench_search_engine(c: &mut Criterion) {
             BenchmarkId::new(format!("{name}/table"), ""),
             &(),
             |b, ()| {
-                b.iter(|| run_search_only(&setup_t, &regime.world, &regime.policy, scorer_ref));
+                b.iter(|| {
+                    black_box(run_search_only(
+                        &setup_t,
+                        &regime.world,
+                        &regime.policy,
+                        scorer_ref,
+                    ))
+                });
             },
         );
     }
@@ -55,11 +69,11 @@ fn bench_search_engine(c: &mut Criterion) {
 }
 
 // ---------------------------------------------------------------------------
-// Artifact throughput: run_search() end-to-end (compile + search + bundle)
+// run_search() end-to-end: compile + search + graph serialization + bundle build
 // ---------------------------------------------------------------------------
 
 fn bench_run_search_artifact(c: &mut Criterion) {
-    let mut group = c.benchmark_group("artifact_throughput");
+    let mut group = c.benchmark_group("run_search_e2e");
     group.sample_size(20);
 
     let regimes: Vec<(&str, Regime)> = vec![
@@ -71,26 +85,29 @@ fn bench_run_search_artifact(c: &mut Criterion) {
     ];
 
     for (name, regime) in &regimes {
-        // Uniform scorer: full pipeline
         group.bench_with_input(
             BenchmarkId::new(format!("{name}/uniform"), ""),
             &(),
             |b, ()| {
                 b.iter(|| {
-                    run_search(&regime.world, &regime.policy, &ScorerInputV1::Uniform)
-                        .expect("run_search");
+                    black_box(
+                        run_search(&regime.world, &regime.policy, &ScorerInputV1::Uniform)
+                            .expect("run_search"),
+                    )
                 });
             },
         );
 
-        // Table scorer: full pipeline
         let table_input = build_table_scorer_for_regime(regime);
         group.bench_with_input(
             BenchmarkId::new(format!("{name}/table"), ""),
             &(),
             |b, ()| {
                 b.iter(|| {
-                    run_search(&regime.world, &regime.policy, &table_input).expect("run_search");
+                    black_box(
+                        run_search(&regime.world, &regime.policy, &table_input)
+                            .expect("run_search"),
+                    )
                 });
             },
         );
@@ -98,5 +115,5 @@ fn bench_run_search_artifact(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_search_engine, bench_run_search_artifact);
+criterion_group!(benches, bench_search_fn_total, bench_run_search_artifact);
 criterion_main!(benches);

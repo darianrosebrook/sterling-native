@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["kernel", "search", "harness", "tests/lock", "benchmarks"]
+default-members = ["kernel", "search", "harness", "tests/lock"]
 
 [workspace.package]
 edition = "2021"

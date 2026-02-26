@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 
 use sterling_kernel::carrier::bytestate::ByteStateV1;
 use sterling_kernel::carrier::code32::Code32;
@@ -58,10 +58,11 @@ fn bench_frontier(c: &mut Criterion) {
                 |nodes| {
                     let mut frontier = BestFirstFrontier::new();
                     for node in nodes {
-                        frontier.push(node);
+                        black_box(frontier.push(node));
                     }
-                    // Pop all
-                    while frontier.pop().is_some() {}
+                    while let Some(node) = frontier.pop() {
+                        black_box(node);
+                    }
                 },
                 BatchSize::SmallInput,
             );
@@ -83,7 +84,7 @@ fn bench_scorer_uniform(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
             b.iter_batched(
                 || make_candidates(n),
-                |candidates| scorer.score_candidates(&node, &candidates),
+                |candidates| black_box(scorer.score_candidates(&node, &candidates)),
                 BatchSize::SmallInput,
             );
         });
@@ -120,7 +121,7 @@ fn bench_scorer_table(c: &mut Criterion) {
 
             b.iter_batched(
                 || candidates.clone(),
-                |cands| scorer.score_candidates(&node, &cands),
+                |cands| black_box(scorer.score_candidates(&node, &cands)),
                 BatchSize::SmallInput,
             );
         });
@@ -140,8 +141,12 @@ fn bench_apply_fingerprint(c: &mut Criterion) {
     c.bench_function("apply_fingerprint", |b| {
         b.iter(|| {
             let (new_state, _record) =
-                apply(&state, op_code, &op_args).expect("apply should succeed");
-            canonical_hash(DOMAIN_SEARCH_NODE, &new_state.identity_bytes())
+                apply(black_box(&state), black_box(op_code), black_box(&op_args))
+                    .expect("apply should succeed");
+            black_box(canonical_hash(
+                DOMAIN_SEARCH_NODE,
+                &new_state.identity_bytes(),
+            ))
         });
     });
 }
@@ -174,7 +179,7 @@ fn bench_graph_serialization(c: &mut Criterion) {
             BenchmarkId::new(*name, expansions),
             &result.graph,
             |b, graph| {
-                b.iter(|| graph.to_canonical_json_bytes().expect("serialization"));
+                b.iter(|| black_box(graph.to_canonical_json_bytes().expect("serialization")));
             },
         );
     }
