@@ -147,11 +147,35 @@ pub struct SearchGraphMetadata {
 /// Why the search terminated.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TerminationReasonV1 {
+    /// Search found a goal state.
     GoalReached { node_id: u64 },
+    /// Frontier emptied without finding a goal.
     FrontierExhausted,
+    /// `max_expansions` budget was hit.
     ExpansionBudgetExceeded,
+    /// `max_depth` budget was hit for all candidates.
     DepthBudgetExceeded,
+    /// A candidate's `op_code` was not in the registry (INV-SC-02).
     WorldContractViolation,
+    /// Scorer returned wrong number of scores.
+    ScorerContractViolation { expected: u64, actual: u64 },
+    /// A panic was caught in a world or scorer callback.
+    InternalPanic { stage: PanicStageV1 },
+    /// An internal search-loop invariant was violated without panicking.
+    FrontierInvariantViolation,
+}
+
+/// Stage at which a panic was caught.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanicStageV1 {
+    /// `SearchWorldV1::enumerate_candidates()` panicked.
+    EnumerateCandidates,
+    /// `ValueScorer::score_candidates()` panicked.
+    ScoreCandidates,
+    /// `SearchWorldV1::is_goal()` panicked on the root node.
+    IsGoalRoot,
+    /// `SearchWorldV1::is_goal()` panicked during expansion.
+    IsGoalExpansion,
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +371,24 @@ fn termination_reason_to_json(r: &TerminationReasonV1) -> serde_json::Value {
         TerminationReasonV1::WorldContractViolation => {
             serde_json::json!({"type": "world_contract_violation"})
         }
+        TerminationReasonV1::ScorerContractViolation { expected, actual } => {
+            serde_json::json!({"actual": actual, "expected": expected, "type": "scorer_contract_violation"})
+        }
+        TerminationReasonV1::InternalPanic { stage } => {
+            serde_json::json!({"stage": panic_stage_str(*stage), "type": "internal_panic"})
+        }
+        TerminationReasonV1::FrontierInvariantViolation => {
+            serde_json::json!({"type": "frontier_invariant_violation"})
+        }
+    }
+}
+
+fn panic_stage_str(s: PanicStageV1) -> &'static str {
+    match s {
+        PanicStageV1::EnumerateCandidates => "enumerate_candidates",
+        PanicStageV1::ScoreCandidates => "score_candidates",
+        PanicStageV1::IsGoalRoot => "is_goal_root",
+        PanicStageV1::IsGoalExpansion => "is_goal_expansion",
     }
 }
 
@@ -395,5 +437,23 @@ mod tests {
 
         let exhausted = termination_reason_to_json(&TerminationReasonV1::FrontierExhausted);
         assert_eq!(exhausted["type"], "frontier_exhausted");
+
+        let scorer = termination_reason_to_json(&TerminationReasonV1::ScorerContractViolation {
+            expected: 5,
+            actual: 3,
+        });
+        assert_eq!(scorer["type"], "scorer_contract_violation");
+        assert_eq!(scorer["expected"], 5);
+        assert_eq!(scorer["actual"], 3);
+
+        let panic = termination_reason_to_json(&TerminationReasonV1::InternalPanic {
+            stage: PanicStageV1::EnumerateCandidates,
+        });
+        assert_eq!(panic["type"], "internal_panic");
+        assert_eq!(panic["stage"], "enumerate_candidates");
+
+        let frontier_inv =
+            termination_reason_to_json(&TerminationReasonV1::FrontierInvariantViolation);
+        assert_eq!(frontier_inv["type"], "frontier_invariant_violation");
     }
 }

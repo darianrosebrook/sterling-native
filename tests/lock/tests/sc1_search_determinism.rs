@@ -382,7 +382,8 @@ fn illegal_candidate_triggers_world_contract_violation() {
         search_policy_digest: "test".into(),
     };
 
-    let err = search(
+    // WorldContractViolation is now a soft termination — returns Ok with graph evidence
+    let result = search(
         root_state(),
         &IllegalCandidateWorld,
         &registry,
@@ -390,14 +391,21 @@ fn illegal_candidate_triggers_world_contract_violation() {
         &scorer,
         &bindings,
     )
-    .unwrap_err();
+    .expect("search should return Ok even for contract violations");
 
     assert!(
-        matches!(
-            err,
-            sterling_search::error::SearchError::WorldContractViolation { .. }
-        ),
-        "expected WorldContractViolation, got {err:?}"
+        !result.is_goal_reached(),
+        "illegal candidate world should not reach goal"
+    );
+    assert_eq!(
+        result.graph.metadata.termination_reason,
+        sterling_search::graph::TerminationReasonV1::WorldContractViolation,
+        "expected WorldContractViolation termination reason"
+    );
+    // Graph must contain the partial expansion with the illegal candidate recorded
+    assert!(
+        !result.graph.expansions.is_empty(),
+        "evidence graph must contain at least one expansion"
     );
 }
 

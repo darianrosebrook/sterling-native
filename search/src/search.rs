@@ -1,5 +1,7 @@
 //! Search entry point and expansion loop.
 
+use std::panic::{catch_unwind, AssertUnwindSafe};
+
 use sterling_kernel::carrier::registry::RegistryV1;
 use sterling_kernel::operators::apply;
 use sterling_kernel::proof::hash::canonical_hash;
@@ -9,14 +11,18 @@ use crate::error::SearchError;
 use crate::frontier::BestFirstFrontier;
 use crate::graph::{
     ApplyFailureKindV1, CandidateOutcomeV1, CandidateRecordV1, DeadEndReasonV1, ExpandEventV1,
-    ExpansionNoteV1, FrontierPopKeyV1, SearchGraphMetadata, SearchGraphNodeSummaryV1,
-    SearchGraphV1, TerminationReasonV1,
+    ExpansionNoteV1, FrontierPopKeyV1, PanicStageV1, SearchGraphMetadata,
+    SearchGraphNodeSummaryV1, SearchGraphV1, TerminationReasonV1,
 };
 use crate::node::{SearchNodeV1, DOMAIN_SEARCH_NODE};
 use crate::policy::SearchPolicyV1;
 use crate::scorer::{CandidateScoreV1, ValueScorer};
 
-/// Result of a successful search.
+/// Result of a search execution.
+///
+/// Always contains a complete `SearchGraphV1` audit trail regardless of how
+/// the search terminated. Check [`SearchResult::is_goal_reached`] or inspect
+/// `graph.metadata.termination_reason` to determine the outcome.
 #[derive(Debug)]
 pub struct SearchResult {
     /// The goal node (if found).
@@ -27,16 +33,29 @@ pub struct SearchResult {
     pub nodes: Vec<SearchNodeV1>,
 }
 
+impl SearchResult {
+    /// Returns `true` if the search terminated because a goal was reached.
+    #[must_use]
+    pub fn is_goal_reached(&self) -> bool {
+        matches!(
+            self.graph.metadata.termination_reason,
+            TerminationReasonV1::GoalReached { .. }
+        )
+    }
+}
+
 /// Run best-first search from the root state.
+///
+/// All runtime terminations (including contract violations, caught panics, and
+/// budget exhaustion) return `Ok(SearchResult)` with the audit trail preserved.
+/// The `termination_reason` field in the graph metadata indicates why the search
+/// stopped.
 ///
 /// # Errors
 ///
-/// Returns [`SearchError::UnsupportedPolicyMode`] if reserved policy options are selected.
-/// Returns [`SearchError::WorldContractViolation`] if a world produces an illegal candidate.
-///
-/// # Panics
-///
-/// Panics if the scorer returns a different number of scores than candidates.
+/// Returns [`SearchError::UnsupportedPolicyMode`] only for pre-flight policy
+/// validation failures. No `SearchGraphV1` is produced in this case because
+/// no search steps were taken.
 #[allow(clippy::too_many_lines)]
 pub fn search(
     root_state: sterling_kernel::carrier::bytestate::ByteStateV1,
@@ -47,7 +66,7 @@ pub fn search(
     // Snapshot bindings for graph metadata
     metadata_bindings: &MetadataBindings,
 ) -> Result<SearchResult, SearchError> {
-    // INV-SC-10: validate M1 policy constraints
+    // INV-SC-10: validate M1 policy constraints (pre-flight only)
     policy.validate_m1()?;
 
     let mut frontier = BestFirstFrontier::new();
@@ -79,27 +98,55 @@ pub fn search(
 
     let root_fp_hex = root_fp.hex_digest().to_string();
 
-    // Check if root is already a goal
-    if world.is_goal(&root_node.state) {
-        all_nodes.push(root_node.clone());
-        let graph = build_graph(
-            expansions,
-            &all_nodes,
-            TerminationReasonV1::GoalReached { node_id: 0 },
-            frontier.high_water(),
-            total_candidates_generated,
-            total_duplicates_suppressed,
-            total_dead_ends_exhaustive,
-            total_dead_ends_budget_limited,
-            metadata_bindings,
-            &root_fp_hex,
-            policy,
-        );
-        return Ok(SearchResult {
-            goal_node: Some(all_nodes[0].clone()),
-            graph,
-            nodes: all_nodes,
-        });
+    // Check if root is already a goal (with panic protection)
+    let root_is_goal = catch_unwind(AssertUnwindSafe(|| world.is_goal(&root_node.state)));
+    match root_is_goal {
+        Ok(true) => {
+            all_nodes.push(root_node.clone());
+            let graph = build_graph(
+                expansions,
+                &all_nodes,
+                TerminationReasonV1::GoalReached { node_id: 0 },
+                frontier.high_water(),
+                total_candidates_generated,
+                total_duplicates_suppressed,
+                total_dead_ends_exhaustive,
+                total_dead_ends_budget_limited,
+                metadata_bindings,
+                &root_fp_hex,
+                policy,
+            );
+            return Ok(SearchResult {
+                goal_node: Some(all_nodes[0].clone()),
+                graph,
+                nodes: all_nodes,
+            });
+        }
+        Err(_) => {
+            // is_goal panicked on root — preserve evidence
+            all_nodes.push(root_node);
+            let graph = build_graph(
+                expansions,
+                &all_nodes,
+                TerminationReasonV1::InternalPanic {
+                    stage: PanicStageV1::IsGoalRoot,
+                },
+                frontier.high_water(),
+                total_candidates_generated,
+                total_duplicates_suppressed,
+                total_dead_ends_exhaustive,
+                total_dead_ends_budget_limited,
+                metadata_bindings,
+                &root_fp_hex,
+                policy,
+            );
+            return Ok(SearchResult {
+                goal_node: None,
+                graph,
+                nodes: all_nodes,
+            });
+        }
+        Ok(false) => {} // continue normally
     }
 
     all_nodes.push(root_node.clone());
@@ -121,10 +168,10 @@ pub fn search(
             break;
         }
 
-        // Pop best node
-        // Safety: we checked `!frontier.is_empty()` above
+        // Pop best node — frontier was checked non-empty above
         let Some(current) = frontier.pop() else {
-            unreachable!("frontier was checked non-empty")
+            termination_reason = TerminationReasonV1::FrontierInvariantViolation;
+            break;
         };
         let current_fp_hex = current.state_fingerprint.hex_digest().to_string();
         let pop_key = FrontierPopKeyV1 {
@@ -133,8 +180,28 @@ pub fn search(
             creation_order: current.creation_order,
         };
 
-        // Enumerate candidates from world
-        let mut candidates = world.enumerate_candidates(&current.state, registry);
+        // Enumerate candidates from world (with panic protection)
+        let candidates_result = catch_unwind(AssertUnwindSafe(|| {
+            world.enumerate_candidates(&current.state, registry)
+        }));
+
+        let Ok(mut candidates) = candidates_result else {
+            // enumerate_candidates panicked — record partial expand event
+            expansions.push(ExpandEventV1 {
+                expansion_order: expansion_count,
+                node_id: current.node_id,
+                state_fingerprint: current_fp_hex,
+                frontier_pop_key: pop_key,
+                candidates: Vec::new(),
+                candidates_truncated: false,
+                dead_end_reason: None,
+                notes: Vec::new(),
+            });
+            termination_reason = TerminationReasonV1::InternalPanic {
+                stage: PanicStageV1::EnumerateCandidates,
+            };
+            break;
+        };
 
         // Sort by canonical_hash for deterministic enumeration (INV-SC-01)
         candidates.sort();
@@ -150,13 +217,51 @@ pub fn search(
             });
         }
 
-        // Score candidates
-        let candidate_scores = scorer.score_candidates(&current, &candidates);
-        assert_eq!(
-            candidate_scores.len(),
-            candidates.len(),
-            "scorer must return one score per candidate"
-        );
+        // Score candidates (with panic protection)
+        #[allow(clippy::similar_names)]
+        let scoring_output = catch_unwind(AssertUnwindSafe(|| {
+            scorer.score_candidates(&current, &candidates)
+        }));
+
+        let candidate_scores = match scoring_output {
+            Ok(cs) if cs.len() == candidates.len() => cs,
+            Ok(cs) => {
+                // Scorer returned wrong arity — record expansion
+                let actual_len = cs.len() as u64;
+                expansions.push(ExpandEventV1 {
+                    expansion_order: expansion_count,
+                    node_id: current.node_id,
+                    state_fingerprint: current_fp_hex,
+                    frontier_pop_key: pop_key,
+                    candidates: Vec::new(),
+                    candidates_truncated,
+                    dead_end_reason: None,
+                    notes,
+                });
+                termination_reason = TerminationReasonV1::ScorerContractViolation {
+                    expected: candidates.len() as u64,
+                    actual: actual_len,
+                };
+                break;
+            }
+            Err(_) => {
+                // Scorer panicked — record expansion
+                expansions.push(ExpandEventV1 {
+                    expansion_order: expansion_count,
+                    node_id: current.node_id,
+                    state_fingerprint: current_fp_hex,
+                    frontier_pop_key: pop_key,
+                    candidates: Vec::new(),
+                    candidates_truncated,
+                    dead_end_reason: None,
+                    notes,
+                });
+                termination_reason = TerminationReasonV1::InternalPanic {
+                    stage: PanicStageV1::ScoreCandidates,
+                };
+                break;
+            }
+        };
 
         // Build scored + sorted candidate list for expansion
         // Sort by (-bonus, canonical_hash) for deterministic expansion order
@@ -182,6 +287,7 @@ pub fn search(
         let mut children_created = 0u64;
         let mut found_goal = false;
         let mut goal_node_id = 0u64;
+        let mut contract_violation = false;
 
         for (sorted_idx, &(_orig_idx, candidate, score)) in scored_candidates.iter().enumerate() {
             // INV-SC-02: check candidate legality
@@ -192,39 +298,8 @@ pub fn search(
                     score: score.clone(),
                     outcome: CandidateOutcomeV1::IllegalOperator,
                 });
-
-                // Record the expansion event before terminating
-                expansions.push(ExpandEventV1 {
-                    expansion_order: expansion_count,
-                    node_id: current.node_id,
-                    state_fingerprint: current_fp_hex.clone(),
-                    frontier_pop_key: pop_key,
-                    candidates: candidate_records,
-                    candidates_truncated,
-                    dead_end_reason: None,
-                    notes,
-                });
-                // Build and drop the graph — it's not returned in the error
-                // but building it validates invariants and exercises the code path.
-                let _graph = build_graph(
-                    expansions,
-                    &all_nodes,
-                    TerminationReasonV1::WorldContractViolation,
-                    frontier.high_water(),
-                    total_candidates_generated,
-                    total_duplicates_suppressed,
-                    total_dead_ends_exhaustive,
-                    total_dead_ends_budget_limited,
-                    metadata_bindings,
-                    &root_fp_hex,
-                    policy,
-                );
-                return Err(SearchError::WorldContractViolation {
-                    detail: format!(
-                        "candidate op_code {} not in registry",
-                        hex::encode(candidate.op_code.to_le_bytes())
-                    ),
-                });
+                contract_violation = true;
+                break; // exit candidate loop
             }
 
             // Check depth limit
@@ -306,10 +381,56 @@ pub fn search(
                         },
                     });
 
-                    // Check goal before pushing to frontier
-                    if world.is_goal(&child.state) {
-                        found_goal = true;
-                        goal_node_id = child_node_id;
+                    // Check goal before pushing to frontier (with panic protection)
+                    let is_goal_result =
+                        catch_unwind(AssertUnwindSafe(|| world.is_goal(&child.state)));
+                    match is_goal_result {
+                        Ok(true) => {
+                            found_goal = true;
+                            goal_node_id = child_node_id;
+                        }
+                        Ok(false) => {}
+                        Err(_) => {
+                            // is_goal panicked during expansion — record and terminate
+                            all_nodes.push(child.clone());
+                            frontier.push(child);
+
+                            // Record expansion event before terminating
+                            expansions.push(ExpandEventV1 {
+                                expansion_order: expansion_count,
+                                node_id: current.node_id,
+                                state_fingerprint: current_fp_hex.clone(),
+                                frontier_pop_key: pop_key,
+                                candidates: candidate_records,
+                                candidates_truncated,
+                                dead_end_reason: None,
+                                notes,
+                            });
+
+                            termination_reason = TerminationReasonV1::InternalPanic {
+                                stage: PanicStageV1::IsGoalExpansion,
+                            };
+                            // Use a nested return to exit both for-loop and main loop
+                            let goal_node = None;
+                            let graph = build_graph(
+                                expansions,
+                                &all_nodes,
+                                termination_reason,
+                                frontier.high_water(),
+                                total_candidates_generated + candidates.len() as u64,
+                                total_duplicates_suppressed,
+                                total_dead_ends_exhaustive,
+                                total_dead_ends_budget_limited,
+                                metadata_bindings,
+                                &root_fp_hex,
+                                policy,
+                            );
+                            return Ok(SearchResult {
+                                goal_node,
+                                graph,
+                                nodes: all_nodes,
+                            });
+                        }
                     }
 
                     all_nodes.push(child.clone());
@@ -317,6 +438,22 @@ pub fn search(
                     children_created += 1;
                 }
             }
+        }
+
+        // If WorldContractViolation, record expansion and terminate
+        if contract_violation {
+            expansions.push(ExpandEventV1 {
+                expansion_order: expansion_count,
+                node_id: current.node_id,
+                state_fingerprint: current_fp_hex,
+                frontier_pop_key: pop_key,
+                candidates: candidate_records,
+                candidates_truncated,
+                dead_end_reason: None,
+                notes,
+            });
+            termination_reason = TerminationReasonV1::WorldContractViolation;
+            break;
         }
 
         // Dead-end detection (INV-SC-07)
