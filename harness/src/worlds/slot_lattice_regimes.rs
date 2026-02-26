@@ -178,6 +178,41 @@ pub fn regime_budget_limited() -> Regime {
     }
 }
 
+/// **Scale baseline** regime — the spec target.
+///
+/// N=10, V=4 → state space = 4^10 = 1,048,576 unique assignments.
+/// `max_expansions=1000` forces budget termination well before exhaustion.
+/// Frontier cap is not binding (10,000) so this measures unconstrained
+/// search behavior at the spec target scale.
+///
+/// This is the regime for `search_1000_nodes_p95_ms: 500`.
+/// "1000 nodes" means 1000 frontier pops (expansions), not 1000 graph vertices.
+#[must_use]
+pub fn regime_scale_1000() -> Regime {
+    let config = SlotLatticeConfig {
+        active_slots: 10,
+        values_per_slot: 4,
+        trap_rule: TrapRule::None,
+        goal_profile: GoalProfile::Never,
+    };
+    Regime {
+        world: SlotLatticeSearch::new(config),
+        policy: explicit_policy(
+            1000,   // max_expansions: the spec target
+            10_000, // max_frontier_size: not binding (unconstrained baseline)
+            100,    // max_depth: not binding at this scale
+            100,    // max_candidates_per_node: no truncation
+        ),
+        expectations: RegimeExpectations {
+            expects_truncation: false,
+            min_duplicates_suppressed: 0,
+            expects_exhaustive_dead_end: false,
+            min_frontier_high_water: 100, // wide branching → large frontier
+            expects_goal_reached: false,
+        },
+    }
+}
+
 /// **Frontier pressure** stress regime.
 ///
 /// N=6, V=3 → wide branching. `max_frontier_size=8` forces pruning.

@@ -27,7 +27,7 @@ use sterling_benchmarks::{build_table_scorer_for_regime, prepare_search_setup, r
 use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::slot_lattice_regimes::{
     regime_budget_limited, regime_duplicates, regime_exhaustive_dead_end, regime_frontier_pressure,
-    regime_truncation, Regime,
+    regime_scale_1000, regime_truncation, Regime,
 };
 use sterling_kernel::proof::canon::canonical_json_bytes;
 use sterling_kernel::proof::hash::canonical_hash;
@@ -408,6 +408,10 @@ fn main() {
         RegimeSpec {
             name: "frontier_pressure",
             regime: regime_frontier_pressure(),
+        },
+        RegimeSpec {
+            name: "scale_1000",
+            regime: regime_scale_1000(),
         },
     ];
 

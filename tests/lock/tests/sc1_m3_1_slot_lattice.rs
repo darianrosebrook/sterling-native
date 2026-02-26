@@ -11,7 +11,7 @@ use sterling_harness::contract::WorldHarnessV1;
 use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::slot_lattice_regimes::{
     regime_budget_limited, regime_duplicates, regime_exhaustive_dead_end, regime_frontier_pressure,
-    regime_truncation, Regime,
+    regime_scale_1000, regime_truncation, Regime,
 };
 use sterling_harness::worlds::slot_lattice_search::{GoalProfile, SlotLatticeSearch};
 use sterling_kernel::carrier::bytestate::ByteStateV1;
@@ -349,6 +349,7 @@ fn schema_descriptor_is_real_and_stable() {
         regime_exhaustive_dead_end(),
         regime_budget_limited(),
         regime_frontier_pressure(),
+        regime_scale_1000(),
     ];
 
     let first_sd = regimes[0].world.schema_descriptor();
@@ -392,4 +393,37 @@ fn enumeration_is_deterministic() {
 
     assert_eq!(c1, c2, "enumerate_candidates must be deterministic");
     assert!(!c1.is_empty(), "initial state should have candidates");
+}
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE: SC1-SCALE-1000-BUDGET-TERMINATION
+// Spec target: search_1000_nodes_p95_ms: 500
+// "1000 nodes" = 1000 frontier pops (expansions), not graph vertices.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn scale_1000_hits_expansion_budget() {
+    let regime = regime_scale_1000();
+    let result = run_regime_search(&regime);
+
+    // Must hit exactly 1000 expansions (the spec target).
+    assert_eq!(
+        result.graph.metadata.total_expansions, 1000,
+        "scale_1000 regime must reach exactly 1000 expansions"
+    );
+
+    // Must terminate from budget, not goal or frontier exhaustion.
+    assert_eq!(
+        result.graph.metadata.termination_reason,
+        TerminationReasonV1::ExpansionBudgetExceeded,
+        "scale_1000 must terminate via ExpansionBudgetExceeded"
+    );
+
+    // Sanity: frontier grew meaningfully (wide branching at N=10, V=4).
+    assert!(
+        result.graph.metadata.frontier_high_water >= regime.expectations.min_frontier_high_water,
+        "frontier_high_water ({}) should be >= {} for wide branching",
+        result.graph.metadata.frontier_high_water,
+        regime.expectations.min_frontier_high_water,
+    );
 }
