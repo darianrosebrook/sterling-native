@@ -203,8 +203,13 @@ pub enum BundleVerifyError {
         candidate_digest: String,
         bound_digest: String,
     },
-    /// `scorer.json` artifact exists but no candidate record references `ModelDigest`.
-    ScorerArtifactUnused,
+    /// `scorer.json` artifact exists, the search completed normally with expansions,
+    /// but no candidate record references `ModelDigest`. Allowed when
+    /// `total_expansions == 0` (root-is-goal) or termination is scorer-failure.
+    ScorerEvidenceMissing {
+        total_expansions: u64,
+        termination_reason: String,
+    },
     /// Canonical JSON error during verification.
     CanonError { detail: String },
 }
@@ -656,8 +661,10 @@ fn verify_metadata_scorer_binding(bundle: &ArtifactBundleV1) -> Result<(), Bundl
 ///
 /// Fail-closed invariants:
 /// - If any candidate has `ModelDigest`, report/metadata/artifact scorer digests must exist.
-/// - If scorer artifact exists, at least one candidate must have `ModelDigest`.
 /// - Every `ModelDigest(d)` must equal the bound scorer digest.
+/// - If scorer artifact exists and no candidate references `ModelDigest`, allow only when
+///   `total_expansions == 0` (root-is-goal) or termination is scorer-failure
+///   (`scorer_contract_violation` or `internal_panic { stage: score_candidates }`).
 fn verify_candidate_scorer_consistency(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError> {
     let Some(graph_artifact) = bundle.artifacts.get("search_graph.json") else {
         return Ok(());
@@ -689,9 +696,26 @@ fn verify_candidate_scorer_consistency(bundle: &ArtifactBundleV1) -> Result<(), 
 
     let has_model_digests = !model_digests.is_empty();
 
-    // If scorer artifact exists but no candidate references it → dead evidence.
+    // If scorer artifact exists but no candidate references it, check whether
+    // the absence is structurally justified (root-is-goal or scorer failure).
     if scorer_artifact.is_some() && !has_model_digests {
-        return Err(BundleVerifyError::ScorerArtifactUnused);
+        let metadata = &graph["metadata"];
+        let total_expansions = metadata["total_expansions"].as_u64().unwrap_or(0);
+        let term_type = metadata["termination_reason"]["type"]
+            .as_str()
+            .unwrap_or("unknown");
+
+        let scorer_failure = term_type == "scorer_contract_violation"
+            || (term_type == "internal_panic"
+                && metadata["termination_reason"]["stage"].as_str()
+                    == Some("score_candidates"));
+
+        if total_expansions > 0 && !scorer_failure {
+            return Err(BundleVerifyError::ScorerEvidenceMissing {
+                total_expansions,
+                termination_reason: term_type.to_string(),
+            });
+        }
     }
 
     // If candidates reference ModelDigest, scorer artifact must exist.

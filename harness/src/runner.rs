@@ -88,6 +88,8 @@ pub enum SearchRunError {
         search_world_id: String,
         harness_world_id: String,
     },
+    /// A scorer table key is not a valid `ContentHash` or uses an unsupported algorithm.
+    InvalidScorerTableKey { key: String },
 }
 
 /// A scorer artifact ready for inclusion in a bundle.
@@ -125,9 +127,15 @@ pub enum ScorerInputV1 {
 /// Performs canonical JSON serialization and domain hashing once,
 /// then wires both the scorer and artifact from the same bytes/hash.
 ///
+/// Every key must be a valid `ContentHash` with the `sha256` algorithm.
+/// Invalid or non-`sha256` keys are rejected at build time with
+/// [`SearchRunError::InvalidScorerTableKey`].
+///
 /// # Errors
 ///
-/// Returns `SearchRunError::CanonFailed` if serialization fails.
+/// Returns [`SearchRunError::InvalidScorerTableKey`] if any key is not a
+/// valid `sha256:` content hash.
+/// Returns [`SearchRunError::CanonFailed`] if serialization fails.
 ///
 /// # Panics
 ///
@@ -135,6 +143,18 @@ pub enum ScorerInputV1 {
 pub fn build_table_scorer_input(
     table: BTreeMap<String, i64>,
 ) -> Result<ScorerInputV1, SearchRunError> {
+    // Validate all keys are valid sha256 ContentHash values.
+    for key in table.keys() {
+        match ContentHash::parse(key) {
+            Some(hash) if hash.algorithm() == "sha256" => {}
+            _ => {
+                return Err(SearchRunError::InvalidScorerTableKey {
+                    key: key.clone(),
+                });
+            }
+        }
+    }
+
     // Build a temporary scorer to generate canonical bytes.
     // Use a placeholder digest — we'll replace it after hashing.
     let placeholder = ContentHash::parse(
