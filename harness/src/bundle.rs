@@ -184,6 +184,21 @@ pub enum BundleVerifyError {
     /// `verification_report.json` is missing the mandatory `world_id` field
     /// when `search_graph.json` is present.
     ReportWorldIdMissing,
+    /// Report declares `scorer_digest` but `scorer.json` artifact is missing.
+    ScorerArtifactMissing,
+    /// `scorer.json` recomputed content hash does not match report `scorer_digest`.
+    ScorerDigestMismatch { declared: String, recomputed: String },
+    /// `scorer.json` artifact exists but report is missing `scorer_digest`.
+    ScorerDigestMissing,
+    /// `scorer_digest` in `search_graph.json` metadata does not match
+    /// `scorer.json`'s `content_hash`.
+    MetadataBindingScorerMismatch { in_graph: String, in_scorer: String },
+    /// `search_graph.json` metadata has `scorer_digest` but `scorer.json` is absent.
+    MetadataBindingScorerMissing,
+    /// A candidate score source `ModelDigest` does not match the bound scorer digest.
+    CandidateScoreSourceScorerMismatch { candidate_digest: String, bound_digest: String },
+    /// `scorer.json` artifact exists but no candidate record references `ModelDigest`.
+    ScorerArtifactUnused,
     /// Canonical JSON error during verification.
     CanonError { detail: String },
 }
@@ -285,6 +300,15 @@ pub fn verify_bundle(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError>
 
     // Step 12: Cross-verify metadata bindings in search_graph.json.
     verify_metadata_bindings(bundle)?;
+
+    // Step 13: Scorer digest binding (report ↔ scorer.json).
+    verify_scorer_digest_binding(bundle)?;
+
+    // Step 14: Scorer digest in graph metadata ↔ scorer.json.
+    verify_metadata_scorer_binding(bundle)?;
+
+    // Step 15: Candidate score source consistency with scorer artifact.
+    verify_candidate_scorer_consistency(bundle)?;
 
     Ok(())
 }
@@ -536,6 +560,155 @@ fn verify_metadata_bindings(bundle: &ArtifactBundleV1) -> Result<(), BundleVerif
                 in_graph: graph_world_id.to_string(),
                 in_report: report_world_id.to_string(),
             });
+        }
+    }
+
+    Ok(())
+}
+
+/// Verify scorer digest binding between report and scorer artifact.
+///
+/// Fail-closed invariants:
+/// - If report has `scorer_digest`, `scorer.json` artifact must exist and match.
+/// - If `scorer.json` exists, report `scorer_digest` is mandatory and must match.
+fn verify_scorer_digest_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError> {
+    let report_artifact = bundle.artifacts.get("verification_report.json");
+    let scorer_artifact = bundle.artifacts.get("scorer.json");
+
+    // Neither exists → nothing to check (Uniform mode).
+    let (Some(report_art), scorer_opt) = (report_artifact, scorer_artifact) else {
+        return Ok(());
+    };
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&report_art.content).map_err(|e| {
+            BundleVerifyError::ReportParseError {
+                detail: format!("{e:?}"),
+            }
+        })?;
+
+    let report_scorer_digest = report.get("scorer_digest").and_then(|v| v.as_str());
+
+    match (report_scorer_digest, scorer_opt) {
+        // Report claims scorer_digest but no scorer artifact.
+        (Some(_), None) => Err(BundleVerifyError::ScorerArtifactMissing),
+        // Scorer artifact exists but report has no scorer_digest.
+        (None, Some(_)) => Err(BundleVerifyError::ScorerDigestMissing),
+        // Both exist: verify hash match.
+        (Some(declared), Some(scorer_art)) => {
+            if scorer_art.content_hash.as_str() != declared {
+                return Err(BundleVerifyError::ScorerDigestMismatch {
+                    declared: declared.to_string(),
+                    recomputed: scorer_art.content_hash.as_str().to_string(),
+                });
+            }
+            Ok(())
+        }
+        // Neither report digest nor artifact: Uniform mode, nothing to check.
+        (None, None) => Ok(()),
+    }
+}
+
+/// Cross-verify scorer_digest in `search_graph.json` metadata against `scorer.json`.
+fn verify_metadata_scorer_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError> {
+    let Some(graph_artifact) = bundle.artifacts.get("search_graph.json") else {
+        return Ok(());
+    };
+
+    let graph: serde_json::Value =
+        serde_json::from_slice(&graph_artifact.content).map_err(|e| {
+            BundleVerifyError::CanonError {
+                detail: format!("{e:?}"),
+            }
+        })?;
+
+    let graph_scorer_digest = graph
+        .get("metadata")
+        .and_then(|m| m.get("scorer_digest"))
+        .and_then(|v| v.as_str());
+    let scorer_artifact = bundle.artifacts.get("scorer.json");
+
+    match (graph_scorer_digest, scorer_artifact) {
+        // Metadata claims scorer_digest but no scorer artifact.
+        (Some(_), None) => Err(BundleVerifyError::MetadataBindingScorerMissing),
+        // Scorer artifact exists: metadata must have scorer_digest.
+        (None, Some(_)) => Err(BundleVerifyError::MetadataBindingScorerMissing),
+        // Both exist: verify match.
+        (Some(in_graph), Some(scorer_art)) => {
+            let scorer_hex = binding_hex(&scorer_art.content_hash);
+            if scorer_hex != in_graph {
+                return Err(BundleVerifyError::MetadataBindingScorerMismatch {
+                    in_graph: in_graph.to_string(),
+                    in_scorer: scorer_hex.to_string(),
+                });
+            }
+            Ok(())
+        }
+        // Neither: Uniform mode.
+        (None, None) => Ok(()),
+    }
+}
+
+/// Scan `search_graph.json` candidate records for score source consistency.
+///
+/// Fail-closed invariants:
+/// - If any candidate has `ModelDigest`, report/metadata/artifact scorer digests must exist.
+/// - If scorer artifact exists, at least one candidate must have `ModelDigest`.
+/// - Every `ModelDigest(d)` must equal the bound scorer digest.
+fn verify_candidate_scorer_consistency(
+    bundle: &ArtifactBundleV1,
+) -> Result<(), BundleVerifyError> {
+    let Some(graph_artifact) = bundle.artifacts.get("search_graph.json") else {
+        return Ok(());
+    };
+    let scorer_artifact = bundle.artifacts.get("scorer.json");
+
+    let graph: serde_json::Value =
+        serde_json::from_slice(&graph_artifact.content).map_err(|e| {
+            BundleVerifyError::CanonError {
+                detail: format!("{e:?}"),
+            }
+        })?;
+
+    // Collect all model_digest references from candidate score sources.
+    let mut model_digests: Vec<String> = Vec::new();
+    if let Some(expansions) = graph.get("expansions").and_then(|v| v.as_array()) {
+        for expansion in expansions {
+            if let Some(candidates) = expansion.get("candidates").and_then(|v| v.as_array()) {
+                for candidate in candidates {
+                    if let Some(source) = candidate.get("score").and_then(|s| s.get("source")) {
+                        if let Some(digest) = source.get("model_digest").and_then(|v| v.as_str())
+                        {
+                            model_digests.push(digest.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let has_model_digests = !model_digests.is_empty();
+
+    // If scorer artifact exists but no candidate references it → dead evidence.
+    if scorer_artifact.is_some() && !has_model_digests {
+        return Err(BundleVerifyError::ScorerArtifactUnused);
+    }
+
+    // If candidates reference ModelDigest, scorer artifact must exist.
+    if has_model_digests && scorer_artifact.is_none() {
+        return Err(BundleVerifyError::ScorerArtifactMissing);
+    }
+
+    // Verify all ModelDigest values match the bound scorer artifact's content_hash.
+    if let Some(scorer_art) = scorer_artifact {
+        let bound_digest = scorer_art.content_hash.as_str();
+        for candidate_digest in &model_digests {
+            if candidate_digest != bound_digest {
+                return Err(BundleVerifyError::CandidateScoreSourceScorerMismatch {
+                    candidate_digest: candidate_digest.clone(),
+                    bound_digest: bound_digest.to_string(),
+                });
+            }
         }
     }
 
