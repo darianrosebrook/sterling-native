@@ -6,9 +6,8 @@
 
 #![allow(clippy::unnecessary_literal_bound)]
 
-use sterling_harness::bundle::{
-    build_bundle, verify_bundle, BundleVerifyError, DOMAIN_BUNDLE_ARTIFACT,
-};
+use lock_tests::bundle_test_helpers::rebuild_with_modified_graph;
+use sterling_harness::bundle::{build_bundle, verify_bundle, BundleVerifyError};
 use sterling_harness::runner::run_search;
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_kernel::carrier::bytestate::ByteStateV1;
@@ -569,45 +568,6 @@ fn search_graph_requires_mode_search() {
         matches!(err, BundleVerifyError::ModeSearchExpected { .. }),
         "expected ModeSearchExpected, got {err:?}"
     );
-}
-
-/// Modify the `search_graph.json` in a bundle and rebuild with consistent
-/// `search_graph_digest` in the report, so that digest-binding checks pass
-/// and only the metadata-binding check under test fires.
-fn rebuild_with_modified_graph(
-    bundle: &sterling_harness::bundle::ArtifactBundleV1,
-    modify: impl FnOnce(&mut serde_json::Value),
-) -> sterling_harness::bundle::ArtifactBundleV1 {
-    let graph_artifact = bundle.artifacts.get("search_graph.json").unwrap();
-    let mut graph_json: serde_json::Value =
-        serde_json::from_slice(&graph_artifact.content).unwrap();
-    modify(&mut graph_json);
-    let modified_graph_bytes = canonical_json_bytes(&graph_json).unwrap();
-
-    // Recompute the content hash for the modified graph.
-    let new_graph_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &modified_graph_bytes);
-
-    // Update the report's search_graph_digest to match the modified graph.
-    let report_artifact = bundle.artifacts.get("verification_report.json").unwrap();
-    let mut report_json: serde_json::Value =
-        serde_json::from_slice(&report_artifact.content).unwrap();
-    report_json["search_graph_digest"] = serde_json::json!(new_graph_hash.as_str());
-    let modified_report_bytes = canonical_json_bytes(&report_json).unwrap();
-
-    let artifacts: Vec<(String, Vec<u8>, bool)> = bundle
-        .artifacts
-        .values()
-        .map(|a| {
-            if a.name == "search_graph.json" {
-                (a.name.clone(), modified_graph_bytes.clone(), a.normative)
-            } else if a.name == "verification_report.json" {
-                (a.name.clone(), modified_report_bytes.clone(), a.normative)
-            } else {
-                (a.name.clone(), a.content.clone(), a.normative)
-            }
-        })
-        .collect();
-    build_bundle(artifacts).unwrap()
 }
 
 // ---------------------------------------------------------------------------
