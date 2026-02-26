@@ -19,6 +19,8 @@ scope:
     - search/*
     - harness/
     - tests/lock/
+    - benchmarks/
+    - Cargo.toml
     - .github/workflows/
     - tools/
   out:

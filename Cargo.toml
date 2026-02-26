@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["kernel", "search", "harness", "tests/lock"]
+members = ["kernel", "search", "harness", "tests/lock", "benchmarks"]
 
 [workspace.package]
 edition = "2021"
@@ -18,3 +18,9 @@ panic = "unwind"
 
 [profile.release]
 panic = "unwind"
+
+# Benchmark profile: consistent across machines for meaningful regression detection.
+# Note: panic setting is inherited from release profile (unwind).
+[profile.bench]
+codegen-units = 1
+lto = "thin"
