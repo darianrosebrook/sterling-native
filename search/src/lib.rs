@@ -35,4 +35,6 @@ pub mod tape;
 #[allow(dead_code)]
 pub mod tape_reader;
 #[allow(dead_code)]
+pub mod tape_render;
+#[allow(dead_code)]
 pub mod tape_writer;

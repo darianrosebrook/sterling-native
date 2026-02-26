@@ -80,6 +80,20 @@ impl CandidateActionV1 {
         }
     }
 
+    /// Reconstruct from pre-computed parts (tape deserialization).
+    ///
+    /// The caller is responsible for providing the correct canonical hash.
+    /// This is used by the tape renderer to avoid recomputing the hash
+    /// from the tape's stored value.
+    #[must_use]
+    pub fn from_parts(op_code: Code32, op_args: Vec<u8>, canonical_hash: ContentHash) -> Self {
+        Self {
+            op_code,
+            op_args,
+            canonical_hash,
+        }
+    }
+
     /// Read-only access to the canonical hash.
     #[must_use]
     pub fn canonical_hash(&self) -> &ContentHash {
