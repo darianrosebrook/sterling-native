@@ -769,3 +769,110 @@ fn panic_profile_unwind_enforced() {
         "catch_unwind must catch panics (panic=unwind required)"
     );
 }
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE: SC1-M2-NO-PANIC-MACROS-CORE-LOOP
+// ---------------------------------------------------------------------------
+
+/// Forbidden patterns in production code of the search core loop.
+const FORBIDDEN_PANIC_PATTERNS: &[&str] = &[
+    ".unwrap()",
+    ".expect(",
+    "panic!(",
+    "unreachable!(",
+    "todo!(",
+    "unimplemented!(",
+    "assert!(",
+    "debug_assert!(",
+    "assert_eq!(",
+    "assert_ne!(",
+];
+
+/// Resolve the workspace root from `CARGO_MANIFEST_DIR` of the lock-tests crate.
+fn workspace_root() -> &'static std::path::Path {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    manifest_dir
+        .parent()
+        .expect("tests/ exists")
+        .parent()
+        .expect("workspace root exists")
+}
+
+/// Scan a source file for forbidden panic patterns, skipping `#[cfg(test)]`
+/// module blocks via brace-depth tracking and skipping comment lines.
+fn scan_for_panic_patterns(path: &std::path::Path) -> Vec<(String, usize, String)> {
+    let content = std::fs::read_to_string(path).expect("file must be readable");
+    let mut violations = Vec::new();
+    let mut brace_depth: usize = 0;
+    let mut skip_depth: Option<usize> = None;
+    let mut cfg_test_pending = false;
+
+    for (line_no, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+
+        // Track #[cfg(test)] — skip the next module block.
+        if trimmed.contains("#[cfg(test)]") {
+            cfg_test_pending = true;
+            continue;
+        }
+
+        // Count braces for depth tracking.
+        let opens = line.chars().filter(|&c| c == '{').count();
+        let closes = line.chars().filter(|&c| c == '}').count();
+
+        // If cfg_test_pending and we see an opening brace, start skipping.
+        if cfg_test_pending && opens > 0 {
+            skip_depth = Some(brace_depth);
+            cfg_test_pending = false;
+        }
+
+        brace_depth = brace_depth.saturating_add(opens);
+        brace_depth = brace_depth.saturating_sub(closes);
+
+        // If we're inside a #[cfg(test)] block, skip until depth returns.
+        if let Some(depth) = skip_depth {
+            if brace_depth <= depth {
+                skip_depth = None;
+            }
+            continue;
+        }
+
+        // Skip comment lines.
+        if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*') {
+            continue;
+        }
+
+        // Check for forbidden patterns.
+        for pattern in FORBIDDEN_PANIC_PATTERNS {
+            if trimmed.contains(pattern) {
+                violations.push((path.display().to_string(), line_no + 1, line.to_string()));
+            }
+        }
+    }
+
+    violations
+}
+
+#[test]
+fn no_panic_macros_in_core_loop() {
+    let root = workspace_root();
+    let files = [
+        root.join("search/src/search.rs"),
+        root.join("search/src/frontier.rs"),
+    ];
+
+    let mut all_violations = Vec::new();
+    for file in &files {
+        all_violations.extend(scan_for_panic_patterns(file));
+    }
+
+    if !all_violations.is_empty() {
+        use std::fmt::Write;
+        let mut msg =
+            String::from("Forbidden panic patterns in search core loop production code:\n");
+        for (file, line, content) in &all_violations {
+            let _ = writeln!(msg, "  {file}:{line}: {content}");
+        }
+        panic!("{msg}");
+    }
+}
