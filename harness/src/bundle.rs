@@ -118,7 +118,15 @@ pub fn build_bundle(
     for input in artifacts {
         let input = input.into();
         let content_hash = match input.precomputed_hash {
-            Some(h) => h,
+            Some(h) => {
+                debug_assert_eq!(
+                    h,
+                    canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &input.content),
+                    "precomputed_hash for '{}' does not match recomputed hash",
+                    input.name,
+                );
+                h
+            }
             None => canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &input.content),
         };
         artifact_map.insert(

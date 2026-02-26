@@ -103,6 +103,28 @@ struct MeasurementV1 {
     measurement_kind: String,
     timing: TimingStats,
     graph_metadata: Option<GraphMetadata>,
+    /// Per-phase timing breakdown (observational, e2e measurements only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    phase_timing: Option<PhaseTimingStats>,
+}
+
+/// Per-phase breakdown of the e2e pipeline. All values are integer nanoseconds.
+/// Observational only — not normative, not content-addressed.
+#[derive(Serialize)]
+#[allow(clippy::struct_field_names)]
+struct PhaseTimingStats {
+    /// Phase 1+2: `encode_payload` + compile + policy build + metadata bindings.
+    compile_p50_ns: u128,
+    compile_p95_ns: u128,
+    /// Phase 3: `search()` expansion loop + `build_graph`.
+    search_p50_ns: u128,
+    search_p95_ns: u128,
+    /// Phase 4a: `to_canonical_json_bytes()` on search graph.
+    render_p50_ns: u128,
+    render_p95_ns: u128,
+    /// Phase 4b: build verification report + `build_bundle` (remaining hashes, manifest, digest).
+    bundle_p50_ns: u128,
+    bundle_p95_ns: u128,
 }
 
 #[derive(Serialize)]
@@ -142,6 +164,7 @@ struct Definitions {
     node_definition: &'static str,
     p95_method: &'static str,
     timing_unit: &'static str,
+    phase_timing_definition: &'static str,
 }
 
 // ---------------------------------------------------------------------------
@@ -226,6 +249,7 @@ struct RegimeSpec {
     regime: Regime,
 }
 
+#[allow(clippy::too_many_lines)]
 fn run_regime_benchmarks(
     spec: &RegimeSpec,
     input_snapshots: &mut BTreeMap<String, serde_json::Value>,
@@ -318,27 +342,77 @@ fn run_regime_benchmarks(
             measurement_kind: "search_fn_total".to_string(),
             timing,
             graph_metadata: graph_meta,
+            phase_timing: None,
         });
 
-        // -- run_search() end-to-end --
+        // -- run_search() end-to-end with phase attribution --
         for _ in 0..WARMUP_ITERATIONS {
             let _ = run_search(&spec.regime.world, &spec.regime.policy, &scorer_input);
         }
 
-        let mut durations_ns = Vec::with_capacity(TIMED_ITERATIONS);
+        let mut e2e_durations_ns = Vec::with_capacity(TIMED_ITERATIONS);
+        let mut compile_ns = Vec::with_capacity(TIMED_ITERATIONS);
+        let mut search_ns = Vec::with_capacity(TIMED_ITERATIONS);
+        let mut render_ns = Vec::with_capacity(TIMED_ITERATIONS);
+        let mut bundle_ns = Vec::with_capacity(TIMED_ITERATIONS);
+
         for _ in 0..TIMED_ITERATIONS {
-            let start = Instant::now();
+            let e2e_start = Instant::now();
+
+            // Phase 1+2: compile + metadata bindings
+            let t = Instant::now();
+            let phase_setup =
+                prepare_search_setup(&spec.regime.world, &spec.regime.policy, &scorer_input);
+            compile_ns.push(t.elapsed().as_nanos());
+
+            // Phase 3: search (expansion loop + build_graph)
+            let t = Instant::now();
+            let result = run_search_only(
+                &phase_setup,
+                &spec.regime.world,
+                &spec.regime.policy,
+                &*scorer_ref,
+            );
+            search_ns.push(t.elapsed().as_nanos());
+
+            // Phase 4a: render search graph to canonical JSON
+            let t = Instant::now();
+            let _graph_bytes = result
+                .graph
+                .to_canonical_json_bytes()
+                .expect("canonical json");
+            render_ns.push(t.elapsed().as_nanos());
+
+            // Phase 4b: remaining bundle assembly (fixture, verification report,
+            //           hash remaining artifacts, manifest, digest).
+            //           Approximated by: run_search total - (compile + search + render).
+            //           We call run_search once and subtract phased measurements.
+            let t = Instant::now();
             let _bundle = run_search(&spec.regime.world, &spec.regime.policy, &scorer_input)
                 .expect("run_search");
-            let elapsed = start.elapsed();
-            durations_ns.push(elapsed.as_nanos());
+            let run_search_total_ns = t.elapsed().as_nanos();
+
+            let phases_sum = *compile_ns.last().unwrap()
+                + *search_ns.last().unwrap()
+                + *render_ns.last().unwrap();
+            bundle_ns.push(run_search_total_ns.saturating_sub(phases_sum));
+
+            e2e_durations_ns.push(e2e_start.elapsed().as_nanos());
         }
 
-        let timing = compute_timing_stats(&mut durations_ns);
+        let timing = compute_timing_stats(&mut e2e_durations_ns);
+        let compile_stats = compute_timing_stats(&mut compile_ns);
+        let search_stats = compute_timing_stats(&mut search_ns);
+        let render_stats = compute_timing_stats(&mut render_ns);
+        let bundle_stats = compute_timing_stats(&mut bundle_ns);
 
         eprintln!(
             "  {}/{scorer_name}/run_search_e2e: p50={}ns p95={}ns",
             spec.name, timing.p50_ns, timing.p95_ns,
+        );
+        eprintln!(
+            "    phases: compile p50={}ns | search p50={}ns | render p50={}ns | bundle p50={}ns",
+            compile_stats.p50_ns, search_stats.p50_ns, render_stats.p50_ns, bundle_stats.p50_ns,
         );
 
         measurements.push(MeasurementV1 {
@@ -347,6 +421,16 @@ fn run_regime_benchmarks(
             measurement_kind: "run_search_e2e".to_string(),
             timing,
             graph_metadata: None,
+            phase_timing: Some(PhaseTimingStats {
+                compile_p50_ns: compile_stats.p50_ns,
+                compile_p95_ns: compile_stats.p95_ns,
+                search_p50_ns: search_stats.p50_ns,
+                search_p95_ns: search_stats.p95_ns,
+                render_p50_ns: render_stats.p50_ns,
+                render_p95_ns: render_stats.p95_ns,
+                bundle_p50_ns: bundle_stats.p50_ns,
+                bundle_p95_ns: bundle_stats.p95_ns,
+            }),
         });
     }
 
@@ -443,6 +527,10 @@ fn main() {
             p95_method: "Sort all iteration durations ascending, take value at index \
                 round(0.95 * (N-1)) where N = timed_iterations.",
             timing_unit: "All timing values are integer nanoseconds. Derive microseconds/milliseconds only in presentation code.",
+            phase_timing_definition: "Phase breakdown of run_search_e2e: compile (encode+compile+policy+bindings), \
+                search (expansion loop + build_graph), render (to_canonical_json_bytes on search graph), \
+                bundle (remaining: fixture, verification report, artifact hashing, manifest, digest). \
+                Bundle phase estimated as run_search_total minus (compile + search + render).",
         },
         input_snapshots,
         measurements: all_measurements,
