@@ -128,6 +128,10 @@ pub enum ScorerInputV1 {
 /// # Errors
 ///
 /// Returns `SearchRunError::CanonFailed` if serialization fails.
+///
+/// # Panics
+///
+/// Panics if the internal placeholder hash literal is malformed (compile-time invariant).
 pub fn build_table_scorer_input(
     table: BTreeMap<String, i64>,
 ) -> Result<ScorerInputV1, SearchRunError> {
@@ -176,6 +180,7 @@ pub fn build_table_scorer_input(
 /// # Errors
 ///
 /// Returns [`SearchRunError`] at any pipeline step.
+#[allow(clippy::too_many_lines)]
 pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
     world: &W,
     search_policy: &SearchPolicyV1,
@@ -279,9 +284,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
 
     let scorer_digest_for_report = match scorer_input {
         ScorerInputV1::Uniform => None,
-        ScorerInputV1::Table { artifact, .. } => {
-            Some(artifact.content_hash.as_str().to_string())
-        }
+        ScorerInputV1::Table { artifact, .. } => Some(artifact.content_hash.as_str().to_string()),
     };
 
     let verification_report = build_search_verification_report(

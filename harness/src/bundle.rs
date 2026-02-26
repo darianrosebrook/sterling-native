@@ -187,7 +187,10 @@ pub enum BundleVerifyError {
     /// Report declares `scorer_digest` but `scorer.json` artifact is missing.
     ScorerArtifactMissing,
     /// `scorer.json` recomputed content hash does not match report `scorer_digest`.
-    ScorerDigestMismatch { declared: String, recomputed: String },
+    ScorerDigestMismatch {
+        declared: String,
+        recomputed: String,
+    },
     /// `scorer.json` artifact exists but report is missing `scorer_digest`.
     ScorerDigestMissing,
     /// `scorer_digest` in `search_graph.json` metadata does not match
@@ -196,7 +199,10 @@ pub enum BundleVerifyError {
     /// `search_graph.json` metadata has `scorer_digest` but `scorer.json` is absent.
     MetadataBindingScorerMissing,
     /// A candidate score source `ModelDigest` does not match the bound scorer digest.
-    CandidateScoreSourceScorerMismatch { candidate_digest: String, bound_digest: String },
+    CandidateScoreSourceScorerMismatch {
+        candidate_digest: String,
+        bound_digest: String,
+    },
     /// `scorer.json` artifact exists but no candidate record references `ModelDigest`.
     ScorerArtifactUnused,
     /// Canonical JSON error during verification.
@@ -580,12 +586,11 @@ fn verify_scorer_digest_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleV
         return Ok(());
     };
 
-    let report: serde_json::Value =
-        serde_json::from_slice(&report_art.content).map_err(|e| {
-            BundleVerifyError::ReportParseError {
-                detail: format!("{e:?}"),
-            }
-        })?;
+    let report: serde_json::Value = serde_json::from_slice(&report_art.content).map_err(|e| {
+        BundleVerifyError::ReportParseError {
+            detail: format!("{e:?}"),
+        }
+    })?;
 
     let report_scorer_digest = report.get("scorer_digest").and_then(|v| v.as_str());
 
@@ -609,7 +614,7 @@ fn verify_scorer_digest_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleV
     }
 }
 
-/// Cross-verify scorer_digest in `search_graph.json` metadata against `scorer.json`.
+/// Cross-verify `scorer_digest` in `search_graph.json` metadata against `scorer.json`.
 fn verify_metadata_scorer_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError> {
     let Some(graph_artifact) = bundle.artifacts.get("search_graph.json") else {
         return Ok(());
@@ -629,10 +634,8 @@ fn verify_metadata_scorer_binding(bundle: &ArtifactBundleV1) -> Result<(), Bundl
     let scorer_artifact = bundle.artifacts.get("scorer.json");
 
     match (graph_scorer_digest, scorer_artifact) {
-        // Metadata claims scorer_digest but no scorer artifact.
-        (Some(_), None) => Err(BundleVerifyError::MetadataBindingScorerMissing),
-        // Scorer artifact exists: metadata must have scorer_digest.
-        (None, Some(_)) => Err(BundleVerifyError::MetadataBindingScorerMissing),
+        // One side present without the other → fail-closed.
+        (Some(_), None) | (None, Some(_)) => Err(BundleVerifyError::MetadataBindingScorerMissing),
         // Both exist: verify match.
         (Some(in_graph), Some(scorer_art)) => {
             let scorer_hex = binding_hex(&scorer_art.content_hash);
@@ -655,9 +658,7 @@ fn verify_metadata_scorer_binding(bundle: &ArtifactBundleV1) -> Result<(), Bundl
 /// - If any candidate has `ModelDigest`, report/metadata/artifact scorer digests must exist.
 /// - If scorer artifact exists, at least one candidate must have `ModelDigest`.
 /// - Every `ModelDigest(d)` must equal the bound scorer digest.
-fn verify_candidate_scorer_consistency(
-    bundle: &ArtifactBundleV1,
-) -> Result<(), BundleVerifyError> {
+fn verify_candidate_scorer_consistency(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError> {
     let Some(graph_artifact) = bundle.artifacts.get("search_graph.json") else {
         return Ok(());
     };
@@ -677,8 +678,7 @@ fn verify_candidate_scorer_consistency(
             if let Some(candidates) = expansion.get("candidates").and_then(|v| v.as_array()) {
                 for candidate in candidates {
                     if let Some(source) = candidate.get("score").and_then(|s| s.get("source")) {
-                        if let Some(digest) = source.get("model_digest").and_then(|v| v.as_str())
-                        {
+                        if let Some(digest) = source.get("model_digest").and_then(|v| v.as_str()) {
                             model_digests.push(digest.to_string());
                         }
                     }

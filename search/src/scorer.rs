@@ -99,7 +99,11 @@ impl TableScorer {
     /// Serialize the table to canonical JSON bytes for artifact generation.
     ///
     /// Schema envelope: `{"schema_version":"scorer.v1","kind":"table","entries":[...]}`
-    /// where entries are sorted by key (BTreeMap order).
+    /// where entries are sorted by key (`BTreeMap` order).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`sterling_kernel::proof::canon::CanonError`] if serialization fails.
     pub fn to_canonical_json_bytes(
         &self,
     ) -> Result<Vec<u8>, sterling_kernel::proof::canon::CanonError> {
