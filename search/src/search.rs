@@ -1,5 +1,6 @@
 //! Search entry point and expansion loop.
 
+use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use sterling_kernel::carrier::registry::RegistryV1;
@@ -92,6 +93,7 @@ pub fn search(
 
     let mut frontier = BestFirstFrontier::new();
     let mut expansions: Vec<ExpandEventV1> = Vec::new();
+    let mut expansion_index: HashMap<u64, usize> = HashMap::new();
     let mut all_nodes: Vec<SearchNodeV1> = Vec::new();
     let mut next_node_id: u64 = 0;
     let mut next_creation_order: u64 = 0;
@@ -126,6 +128,7 @@ pub fn search(
             all_nodes.push(root_node.clone());
             let graph = build_graph(
                 expansions,
+                &expansion_index,
                 &all_nodes,
                 TerminationReasonV1::GoalReached { node_id: 0 },
                 frontier.high_water(),
@@ -148,6 +151,7 @@ pub fn search(
             all_nodes.push(root_node);
             let graph = build_graph(
                 expansions,
+                &expansion_index,
                 &all_nodes,
                 TerminationReasonV1::InternalPanic {
                     stage: PanicStageV1::IsGoalRoot,
@@ -220,6 +224,10 @@ pub fn search(
                 dead_end_reason: None,
                 notes: Vec::new(),
             });
+            // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
+            expansion_index
+                .entry(current.node_id)
+                .or_insert(expansions.len() - 1);
             termination_reason = TerminationReasonV1::InternalPanic {
                 stage: PanicStageV1::EnumerateCandidates,
             };
@@ -262,6 +270,10 @@ pub fn search(
                     dead_end_reason: None,
                     notes,
                 });
+                // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
+                expansion_index
+                    .entry(current.node_id)
+                    .or_insert(expansions.len() - 1);
                 termination_reason = TerminationReasonV1::ScorerContractViolation {
                     expected: candidates.len() as u64,
                     actual: actual_len,
@@ -281,6 +293,10 @@ pub fn search(
                     dead_end_reason: None,
                     notes,
                 });
+                // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
+                expansion_index
+                    .entry(current.node_id)
+                    .or_insert(expansions.len() - 1);
                 termination_reason = TerminationReasonV1::InternalPanic {
                     stage: PanicStageV1::ScoreCandidates,
                 };
@@ -431,6 +447,10 @@ pub fn search(
                                 dead_end_reason: None,
                                 notes,
                             });
+                            // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
+                            expansion_index
+                                .entry(current.node_id)
+                                .or_insert(expansions.len() - 1);
 
                             termination_reason = TerminationReasonV1::InternalPanic {
                                 stage: PanicStageV1::IsGoalExpansion,
@@ -439,6 +459,7 @@ pub fn search(
                             let goal_node = None;
                             let graph = build_graph(
                                 expansions,
+                                &expansion_index,
                                 &all_nodes,
                                 termination_reason,
                                 frontier.high_water(),
@@ -477,6 +498,10 @@ pub fn search(
                 dead_end_reason: None,
                 notes,
             });
+            // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
+            expansion_index
+                .entry(current.node_id)
+                .or_insert(expansions.len() - 1);
             termination_reason = TerminationReasonV1::WorldContractViolation;
             break;
         }
@@ -520,6 +545,10 @@ pub fn search(
             dead_end_reason,
             notes,
         });
+        // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
+        expansion_index
+            .entry(current.node_id)
+            .or_insert(expansions.len() - 1);
         expansion_count += 1;
 
         // If goal was found, terminate
@@ -540,6 +569,7 @@ pub fn search(
 
     let graph = build_graph(
         expansions,
+        &expansion_index,
         &all_nodes,
         termination_reason,
         frontier.high_water(),
@@ -592,6 +622,7 @@ pub fn reconstruct_path(nodes: &[SearchNodeV1], goal_node_id: u64) -> Vec<u64> {
 #[allow(clippy::too_many_arguments)]
 fn build_graph(
     expansions: Vec<ExpandEventV1>,
+    expansion_index: &HashMap<u64, usize>,
     all_nodes: &[SearchNodeV1],
     termination_reason: TerminationReasonV1,
     frontier_high_water: u64,
@@ -606,17 +637,13 @@ fn build_graph(
     let total_expansions = expansions.len() as u64;
 
     // Build node summaries sorted by node_id ascending (INV-SC-09)
+    // O(N) via expansion_index lookup instead of O(N×E) linear scan.
     let mut node_summaries: Vec<SearchGraphNodeSummaryV1> = all_nodes
         .iter()
         .map(|n| {
-            let expansion_order = expansions
-                .iter()
-                .find(|e| e.node_id == n.node_id)
-                .map(|e| e.expansion_order);
-            let dead_end_reason = expansions
-                .iter()
-                .find(|e| e.node_id == n.node_id)
-                .and_then(|e| e.dead_end_reason);
+            let exp = expansion_index.get(&n.node_id).map(|&idx| &expansions[idx]);
+            let expansion_order = exp.map(|e| e.expansion_order);
+            let dead_end_reason = exp.and_then(|e| e.dead_end_reason);
             let is_goal = matches!(
                 &termination_reason,
                 TerminationReasonV1::GoalReached { node_id } if *node_id == n.node_id
