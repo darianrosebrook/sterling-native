@@ -181,6 +181,9 @@ pub enum BundleVerifyError {
     MetadataBindingWorldIdMismatch { in_graph: String, in_report: String },
     /// `search_graph.json` metadata is missing the mandatory `world_id` field.
     MetadataBindingWorldIdMissing,
+    /// `verification_report.json` is missing the mandatory `world_id` field
+    /// when `search_graph.json` is present.
+    ReportWorldIdMissing,
     /// Canonical JSON error during verification.
     CanonError { detail: String },
 }
@@ -523,15 +526,16 @@ fn verify_metadata_bindings(bundle: &ArtifactBundleV1) -> Result<(), BundleVerif
             .and_then(|m| m.get("world_id"))
             .and_then(|v| v.as_str())
             .ok_or(BundleVerifyError::MetadataBindingWorldIdMissing)?;
-        let report_world_id = report.get("world_id").and_then(|v| v.as_str());
+        let report_world_id = report
+            .get("world_id")
+            .and_then(|v| v.as_str())
+            .ok_or(BundleVerifyError::ReportWorldIdMissing)?;
 
-        if let Some(rw) = report_world_id {
-            if graph_world_id != rw {
-                return Err(BundleVerifyError::MetadataBindingWorldIdMismatch {
-                    in_graph: graph_world_id.to_string(),
-                    in_report: rw.to_string(),
-                });
-            }
+        if graph_world_id != report_world_id {
+            return Err(BundleVerifyError::MetadataBindingWorldIdMismatch {
+                in_graph: graph_world_id.to_string(),
+                in_report: report_world_id.to_string(),
+            });
         }
     }
 

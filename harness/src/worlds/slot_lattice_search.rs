@@ -112,7 +112,8 @@ impl SlotLatticeSearch {
     ///
     /// # Panics
     ///
-    /// Panics if `active_slots > MAX_SLOTS` or `values_per_slot > 4` or `values_per_slot == 0`.
+    /// Panics if `active_slots > MAX_SLOTS`, `values_per_slot` not in `1..=4`,
+    /// or trap/goal value indices are out of range for `CONCEPT_VALUES`.
     #[must_use]
     pub fn new(config: SlotLatticeConfig) -> Self {
         assert!(
@@ -126,6 +127,22 @@ impl SlotLatticeSearch {
             "values_per_slot must be 1..=4, got {}",
             config.values_per_slot,
         );
+        if let TrapRule::Slot0Eq(v) = &config.trap_rule {
+            assert!(
+                (*v as usize) < CONCEPT_VALUES.len(),
+                "TrapRule::Slot0Eq index {} out of range for CONCEPT_VALUES (len {})",
+                v,
+                CONCEPT_VALUES.len(),
+            );
+        }
+        if let GoalProfile::AllNonzeroExceptSlot0Eq(v) = &config.goal_profile {
+            assert!(
+                (*v as usize) < CONCEPT_VALUES.len(),
+                "GoalProfile::AllNonzeroExceptSlot0Eq index {} out of range for CONCEPT_VALUES (len {})",
+                v,
+                CONCEPT_VALUES.len(),
+            );
+        }
 
         let trap_str = match &config.trap_rule {
             TrapRule::None => "none".to_string(),
