@@ -4,22 +4,29 @@ This project uses CAWS (Coding Agent Working Standard) for quality-assured AI-as
 
 ## Build & Test
 
-
 ```bash
-# Install dependencies
-npm install
+# Run tests (all crates, lib + bin + integration test targets)
+cargo test --workspace
 
-# Run tests
-npm test
+# Run tests including lock tests with cross-proc binaries
+cargo test --workspace --lib --bins --tests
 
 # Lint
-npm run lint
-
-# Type check (if TypeScript)
-npm run typecheck
+cargo clippy --workspace --all-targets -- -D warnings
 
 # Run all quality gates
 caws validate
+```
+
+**Do NOT use `cargo test --workspace --all-targets`.** The `--all-targets` flag
+includes bench targets, which pulls in Criterion + plotters in debug mode. That
+adds ~13 minutes of compilation for zero tests. The benchmarks crate is
+intentionally excluded from `default-members` in the workspace `Cargo.toml`.
+Use `--lib --bins --tests` if you need explicit target selection.
+
+To run benchmarks specifically:
+```bash
+cargo bench -p sterling-benchmarks
 ```
 
 ## How to present results summaries
