@@ -1,0 +1,100 @@
+id: TAPE-002
+type: feature
+title: 'M4: Tape as Verified Bundle Artifact'
+status: in_progress
+risk_tier: 2
+mode: development
+created_at: '2026-02-27T18:14:13.347Z'
+updated_at: '2026-02-27T18:14:13.348Z'
+parent_spec: SC-001
+parent_milestone: M4
+blast_radius:
+  modules:
+    - harness/runner
+    - harness/bundle
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - harness/
+    - search/
+    - tests/lock/
+    - benchmarks/
+    - Cargo.toml
+    - .caws/specs/
+  out:
+    - kernel/
+    - ml/
+    - reference/v1_impl/
+change_budget:
+  max_files: 15
+  max_loc: 1200
+invariants:
+  - "INV-SC-M4-01: run_search() always produces a tape via search_with_tape(); tape bytes are included as a normative bundle artifact"
+  - "INV-SC-M4-02: Tape chain hash integrity is verified by verify_bundle() when search_tape.stap is present; tampered tape fails verification"
+  - "INV-SC-M4-03: Tape header bindings match corresponding authoritative artifact fields (not report)"
+  - "INV-SC-M4-04: Tape-rendered SearchGraphV1 canonical JSON bytes are identical to search_graph.json artifact bytes (Cert profile only)"
+  - "INV-SC-M4-05: Cert/strict verification profile requires tape presence; base profile accepts tape-absent bundles from prior milestones"
+acceptance:
+  - id: SC1-M4-TAPE-IN-BUNDLE
+    given: "a bundle from run_search()"
+    when: "bundle artifacts are inspected"
+    then: "search_tape.stap is present, normative, and its content_hash matches the bundle manifest"
+  - id: SC1-M4-TAPE-DIGEST-IN-REPORT
+    given: "a bundle from run_search()"
+    when: "verification_report.json is inspected"
+    then: "tape_digest field is present and matches search_tape.stap content_hash"
+  - id: SC1-M4-TAPE-CHAIN-VERIFIED
+    given: "a valid search bundle with search_tape.stap"
+    when: "verify_bundle() is called"
+    then: "tape is parsed and chain hash integrity verified; tampered tape bytes fail with TapeParseFailed"
+  - id: SC1-M4-TAPE-HEADER-BINDING
+    given: "a valid search bundle with tape"
+    when: "verify_bundle() is called"
+    then: "tape header fields match authoritative artifact/graph metadata fields"
+  - id: SC1-M4-TAPE-GRAPH-EQUIVALENCE
+    given: "a valid search bundle with tape and search_graph.json"
+    when: "verify_bundle_with_profile(Cert) renders tape → SearchGraphV1"
+    then: "canonical JSON bytes are identical to bundle's search_graph.json content"
+  - id: SC1-M4-TAPE-TAMPER-BODY-REJECTED
+    given: "a valid bundle with search_tape.stap tampered (record byte flip, bundle rebuilt)"
+    when: "verify_bundle() is called"
+    then: "fails with tape parse error"
+  - id: SC1-M4-TAPE-TAMPER-HEADER-REJECTED
+    given: "a valid bundle with search_tape.stap tampered (header binding field, bundle rebuilt)"
+    when: "verify_bundle() is called"
+    then: "fails with TapeHeaderBindingMismatch"
+  - id: SC1-M4-CERT-REQUIRES-TAPE
+    given: "a search bundle without search_tape.stap"
+    when: "verify_bundle_with_profile(Cert) is called"
+    then: "fails with TapeMissing error"
+  - id: SC1-M4-BASE-ACCEPTS-NO-TAPE
+    given: "a search bundle without search_tape.stap (pre-M4 compatible)"
+    when: "verify_bundle() is called with base profile"
+    then: "passes without error (backward compatible)"
+  - id: SC1-M4-BUNDLE-PERSISTENCE-WITH-TAPE
+    given: "a search bundle with tape"
+    when: "write_bundle_dir → read_bundle_dir → verify_bundle round-trip"
+    then: "tape artifact survives with identical bytes, chain hash, and content_hash"
+  - id: SC1-M4-TAPE-DETERMINISM-N10
+    given: "identical search inputs"
+    when: "run_search() called 10 times"
+    then: "all 10 bundles have identical search_tape.stap bytes"
+  - id: SC1-M4-ARTIFACT-COUNT-UNIFORM
+    given: "run_search() with UniformScorer"
+    when: "bundle artifact count inspected"
+    then: "6 artifacts (fixture, compilation_manifest, policy_snapshot, search_graph, search_tape, verification_report)"
+  - id: SC1-M4-ARTIFACT-COUNT-TABLE
+    given: "run_search() with TableScorer"
+    when: "bundle artifact count inspected"
+    then: "7 artifacts (adds scorer.json)"
+acceptance_criteria: []
+non_functional:
+  perf: {}
+  security:
+    - "search crate has zero harness dependencies"
+contracts:
+  - type: architecture
+    path: .claude/plans/staged-conjuring-toast.md
+    description: "SC-001 M4 implementation plan: tape as verified bundle artifact with VerificationProfile"
