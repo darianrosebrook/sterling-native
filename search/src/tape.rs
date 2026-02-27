@@ -695,6 +695,25 @@ mod tests {
         );
     }
 
+    /// Lock INV-TO-01 + INV-TO-03: short sha256 digests are accepted by
+    /// `ContentHash::parse()` but rejected by the tape path with a tape-local
+    /// error (`InvalidHexDigest`), not a kernel error type.
+    #[test]
+    fn short_sha256_accepted_by_parse_rejected_by_tape() {
+        // parse() accepts short sha256 digests (permissive).
+        let short = ContentHash::parse("sha256:abcdef0123456789").unwrap();
+        assert_eq!(short.algorithm(), "sha256");
+
+        // raw_sha256() returns None (no cache for short digests).
+        assert!(short.raw_sha256().is_none());
+
+        // Tape path rejects with tape-local error, not kernel ContentHashError.
+        assert_eq!(
+            content_hash_to_raw(&short),
+            Err(TapeWriteError::InvalidHexDigest)
+        );
+    }
+
     #[test]
     #[allow(clippy::cast_possible_truncation)]
     fn tag_constants_are_distinct() {

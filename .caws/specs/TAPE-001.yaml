@@ -1,11 +1,11 @@
 id: TAPE-001
-type: feature
+type: chore
 title: >-
   Tape Writer Hot-Path Optimization: eliminate avoidable work during search
   recording
 status: in_progress
 risk_tier: 2
-mode: development
+mode: chore
 created_at: '2026-02-27T03:03:20.350Z'
 updated_at: '2026-02-27T03:03:20.351Z'
 blast_radius:
@@ -74,6 +74,14 @@ acceptance:
     given: "policy with max_expansions=u64::MAX"
     when: "estimate_tape_capacity() is called"
     then: "returns fallback (4096), not OOM"
+non_functional:
+  performance: "Reduce tape overhead by >=20% at scale_1000 (measured via auditable_report bench)"
+  security: "Pre-allocation clamped to 256 MB; no untrusted-size allocations"
+  accessibility: "N/A (internal optimization, no UI)"
+contracts:
+  - type: project_setup
+    path: .caws/specs/TAPE-001.yaml
+    description: "Internal perf optimization; no external API contracts. Invariants defined in spec."
 change_budget:
   max_files: 8
   max_loc: 300

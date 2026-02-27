@@ -37,7 +37,8 @@ pub struct TapeWriter {
 
 /// Hard cap on tape buffer pre-allocation (256 MB).
 /// Prevents untrusted policy values from causing OOM.
-const MAX_PREALLOC_BYTES: usize = 256 * 1024 * 1024;
+/// Single source of truth — reused by `estimate_tape_capacity()` in search.rs.
+pub(crate) const MAX_PREALLOC_BYTES: usize = 256 * 1024 * 1024;
 
 impl TapeWriter {
     /// Create a new writer, writing magic + version + header.
