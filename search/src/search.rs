@@ -18,6 +18,10 @@ use crate::graph::{
 use crate::node::{SearchNodeV1, DOMAIN_SEARCH_NODE};
 use crate::policy::SearchPolicyV1;
 use crate::scorer::{CandidateScoreV1, ScoreSourceV1, ValueScorer};
+use crate::tape::{
+    content_hash_to_raw, ExpansionView, NodeCreationView, TapeOutput, TapeSink, TerminationView,
+};
+use crate::tape_writer::TapeWriter;
 
 /// Result of a search execution.
 ///
@@ -78,15 +82,106 @@ fn build_not_evaluated_records(
 /// Returns [`SearchError::UnsupportedPolicyMode`] only for pre-flight policy
 /// validation failures. No `SearchGraphV1` is produced in this case because
 /// no search steps were taken.
-#[allow(clippy::too_many_lines)]
 pub fn search(
     root_state: sterling_kernel::carrier::bytestate::ByteStateV1,
     world: &dyn SearchWorldV1,
     registry: &RegistryV1,
     policy: &SearchPolicyV1,
     scorer: &dyn ValueScorer,
-    // Snapshot bindings for graph metadata
     metadata_bindings: &MetadataBindings,
+) -> Result<SearchResult, SearchError> {
+    search_impl(
+        root_state,
+        world,
+        registry,
+        policy,
+        scorer,
+        metadata_bindings,
+        None,
+    )
+}
+
+/// Run best-first search with streaming tape output.
+///
+/// Returns both the search result and the completed tape bytes.
+/// The tape's `render_graph()` output must be byte-identical to
+/// `result.graph.to_canonical_json_bytes()`.
+///
+/// # Errors
+///
+/// Returns [`SearchError::TapeWrite`] if tape serialization fails.
+/// Returns [`SearchError::UnsupportedPolicyMode`] for pre-flight failures.
+pub fn search_with_tape(
+    root_state: sterling_kernel::carrier::bytestate::ByteStateV1,
+    world: &dyn SearchWorldV1,
+    registry: &RegistryV1,
+    policy: &SearchPolicyV1,
+    scorer: &dyn ValueScorer,
+    metadata_bindings: &MetadataBindings,
+) -> Result<(SearchResult, TapeOutput), SearchError> {
+    // Build tape header
+    let root_fp = canonical_hash(DOMAIN_SEARCH_NODE, &root_state.identity_bytes());
+    let header_bytes = build_tape_header(metadata_bindings, root_fp.hex_digest(), policy)?;
+
+    let mut writer = TapeWriter::new(&header_bytes);
+    let result = search_impl(
+        root_state,
+        world,
+        registry,
+        policy,
+        scorer,
+        metadata_bindings,
+        Some(&mut writer),
+    )?;
+    let tape_output = writer.finish().map_err(SearchError::TapeWrite)?;
+    Ok((result, tape_output))
+}
+
+/// Build canonical JSON header bytes for the tape.
+fn build_tape_header(
+    bindings: &MetadataBindings,
+    root_fp_hex: &str,
+    policy: &SearchPolicyV1,
+) -> Result<Vec<u8>, crate::tape::TapeWriteError> {
+    let dedup_key = match policy.dedup_key {
+        crate::policy::DedupKeyV1::IdentityOnly => "identity_only",
+        crate::policy::DedupKeyV1::FullState => "full_state",
+    };
+    let prune_visited = match policy.prune_visited_policy {
+        crate::policy::PruneVisitedPolicyV1::KeepVisited => "keep_visited",
+        crate::policy::PruneVisitedPolicyV1::ReleaseVisited => "release_visited",
+    };
+
+    let mut obj = serde_json::json!({
+        "dedup_key": dedup_key,
+        "policy_snapshot_digest": bindings.policy_snapshot_digest,
+        "prune_visited_policy": prune_visited,
+        "registry_digest": bindings.registry_digest,
+        "root_state_fingerprint": root_fp_hex,
+        "schema_descriptor": bindings.schema_descriptor,
+        "schema_version": "search_tape.v1",
+        "search_policy_digest": bindings.search_policy_digest,
+        "world_id": bindings.world_id,
+    });
+
+    if let Some(ref digest) = bindings.scorer_digest {
+        obj["scorer_digest"] = serde_json::json!(digest);
+    }
+
+    // Canonical JSON (sorted keys, compact)
+    sterling_kernel::proof::canon::canonical_json_bytes(&obj)
+        .map_err(|e| crate::tape::TapeWriteError::CanonError(e.to_string()))
+}
+
+#[allow(clippy::too_many_lines)]
+fn search_impl(
+    root_state: sterling_kernel::carrier::bytestate::ByteStateV1,
+    world: &dyn SearchWorldV1,
+    registry: &RegistryV1,
+    policy: &SearchPolicyV1,
+    scorer: &dyn ValueScorer,
+    metadata_bindings: &MetadataBindings,
+    mut tape_sink: Option<&mut dyn TapeSink>,
 ) -> Result<SearchResult, SearchError> {
     // INV-SC-10: validate M1 policy constraints (pre-flight only)
     policy.validate_m1()?;
@@ -125,6 +220,25 @@ pub fn search(
     let root_is_goal = catch_unwind(AssertUnwindSafe(|| world.is_goal(&root_node.state)));
     match root_is_goal {
         Ok(true) => {
+            // Emit root node creation + termination to tape
+            if let Some(sink) = &mut tape_sink {
+                let fp_raw = content_hash_to_raw(&root_node.state_fingerprint)?;
+                sink.on_node_created(&NodeCreationView {
+                    node_id: root_node.node_id,
+                    parent_id: None,
+                    state_fingerprint_raw: fp_raw,
+                    depth: root_node.depth,
+                    f_cost: root_node.f_cost(),
+                    creation_order: root_node.creation_order,
+                    node: &root_node,
+                })
+                .map_err(SearchError::TapeWrite)?;
+                sink.on_termination(&TerminationView {
+                    termination_reason: TerminationReasonV1::GoalReached { node_id: 0 },
+                    frontier_high_water: frontier.high_water(),
+                })
+                .map_err(SearchError::TapeWrite)?;
+            }
             all_nodes.push(root_node.clone());
             let graph = build_graph(
                 expansions,
@@ -148,6 +262,26 @@ pub fn search(
         }
         Err(_) => {
             // is_goal panicked on root — preserve evidence
+            if let Some(sink) = &mut tape_sink {
+                let fp_raw = content_hash_to_raw(&root_node.state_fingerprint)?;
+                sink.on_node_created(&NodeCreationView {
+                    node_id: root_node.node_id,
+                    parent_id: None,
+                    state_fingerprint_raw: fp_raw,
+                    depth: root_node.depth,
+                    f_cost: root_node.f_cost(),
+                    creation_order: root_node.creation_order,
+                    node: &root_node,
+                })
+                .map_err(SearchError::TapeWrite)?;
+                sink.on_termination(&TerminationView {
+                    termination_reason: TerminationReasonV1::InternalPanic {
+                        stage: PanicStageV1::IsGoalRoot,
+                    },
+                    frontier_high_water: frontier.high_water(),
+                })
+                .map_err(SearchError::TapeWrite)?;
+            }
             all_nodes.push(root_node);
             let graph = build_graph(
                 expansions,
@@ -172,6 +306,21 @@ pub fn search(
             });
         }
         Ok(false) => {} // continue normally
+    }
+
+    // Emit root node creation to tape
+    if let Some(sink) = &mut tape_sink {
+        let fp_raw = content_hash_to_raw(&root_node.state_fingerprint)?;
+        sink.on_node_created(&NodeCreationView {
+            node_id: root_node.node_id,
+            parent_id: None,
+            state_fingerprint_raw: fp_raw,
+            depth: root_node.depth,
+            f_cost: root_node.f_cost(),
+            creation_order: root_node.creation_order,
+            node: &root_node,
+        })
+        .map_err(SearchError::TapeWrite)?;
     }
 
     all_nodes.push(root_node.clone());
@@ -214,7 +363,7 @@ pub fn search(
 
         let Ok(mut candidates) = candidates_result else {
             // enumerate_candidates panicked — record partial expand event
-            expansions.push(ExpandEventV1 {
+            let panic_expansion = ExpandEventV1 {
                 expansion_order: expansion_count,
                 node_id: current.node_id,
                 state_fingerprint: current_fp_hex,
@@ -223,7 +372,16 @@ pub fn search(
                 candidates_truncated: false,
                 dead_end_reason: None,
                 notes: Vec::new(),
-            });
+            };
+            if let Some(sink) = &mut tape_sink {
+                let exp_fp_raw = crate::tape::hex_str_to_raw(&panic_expansion.state_fingerprint)?;
+                sink.on_expansion(&ExpansionView {
+                    expansion: &panic_expansion,
+                    state_fingerprint_raw: exp_fp_raw,
+                })
+                .map_err(SearchError::TapeWrite)?;
+            }
+            expansions.push(panic_expansion);
             // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
             expansion_index
                 .entry(current.node_id)
@@ -260,7 +418,7 @@ pub fn search(
                 // Scorer returned wrong arity — record expansion with candidate identity
                 let actual_len = cs.len() as u64;
                 total_candidates_generated += candidates.len() as u64;
-                expansions.push(ExpandEventV1 {
+                let arity_expansion = ExpandEventV1 {
                     expansion_order: expansion_count,
                     node_id: current.node_id,
                     state_fingerprint: current_fp_hex,
@@ -269,7 +427,17 @@ pub fn search(
                     candidates_truncated,
                     dead_end_reason: None,
                     notes,
-                });
+                };
+                if let Some(sink) = &mut tape_sink {
+                    let exp_fp_raw =
+                        crate::tape::hex_str_to_raw(&arity_expansion.state_fingerprint)?;
+                    sink.on_expansion(&ExpansionView {
+                        expansion: &arity_expansion,
+                        state_fingerprint_raw: exp_fp_raw,
+                    })
+                    .map_err(SearchError::TapeWrite)?;
+                }
+                expansions.push(arity_expansion);
                 // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
                 expansion_index
                     .entry(current.node_id)
@@ -283,7 +451,7 @@ pub fn search(
             Err(_) => {
                 // Scorer panicked — record expansion with candidate identity
                 total_candidates_generated += candidates.len() as u64;
-                expansions.push(ExpandEventV1 {
+                let scorer_panic_expansion = ExpandEventV1 {
                     expansion_order: expansion_count,
                     node_id: current.node_id,
                     state_fingerprint: current_fp_hex,
@@ -292,7 +460,17 @@ pub fn search(
                     candidates_truncated,
                     dead_end_reason: None,
                     notes,
-                });
+                };
+                if let Some(sink) = &mut tape_sink {
+                    let exp_fp_raw =
+                        crate::tape::hex_str_to_raw(&scorer_panic_expansion.state_fingerprint)?;
+                    sink.on_expansion(&ExpansionView {
+                        expansion: &scorer_panic_expansion,
+                        state_fingerprint_raw: exp_fp_raw,
+                    })
+                    .map_err(SearchError::TapeWrite)?;
+                }
+                expansions.push(scorer_panic_expansion);
                 // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
                 expansion_index
                     .entry(current.node_id)
@@ -433,11 +611,26 @@ pub fn search(
                         Ok(false) => {}
                         Err(_) => {
                             // is_goal panicked during expansion — record and terminate
+                            // Emit child node creation to tape
+                            if let Some(sink) = &mut tape_sink {
+                                let child_fp_raw = content_hash_to_raw(&child.state_fingerprint)?;
+                                sink.on_node_created(&NodeCreationView {
+                                    node_id: child.node_id,
+                                    parent_id: child.parent_id,
+                                    state_fingerprint_raw: child_fp_raw,
+                                    depth: child.depth,
+                                    f_cost: child.f_cost(),
+                                    creation_order: child.creation_order,
+                                    node: &child,
+                                })
+                                .map_err(SearchError::TapeWrite)?;
+                            }
+
                             all_nodes.push(child.clone());
                             frontier.push(child);
 
                             // Record expansion event before terminating
-                            expansions.push(ExpandEventV1 {
+                            let panic_expansion = ExpandEventV1 {
                                 expansion_order: expansion_count,
                                 node_id: current.node_id,
                                 state_fingerprint: current_fp_hex.clone(),
@@ -446,7 +639,28 @@ pub fn search(
                                 candidates_truncated,
                                 dead_end_reason: None,
                                 notes,
-                            });
+                            };
+
+                            // Emit expansion + termination to tape
+                            if let Some(sink) = &mut tape_sink {
+                                let exp_fp_raw = crate::tape::hex_str_to_raw(
+                                    &panic_expansion.state_fingerprint,
+                                )?;
+                                sink.on_expansion(&ExpansionView {
+                                    expansion: &panic_expansion,
+                                    state_fingerprint_raw: exp_fp_raw,
+                                })
+                                .map_err(SearchError::TapeWrite)?;
+                                sink.on_termination(&TerminationView {
+                                    termination_reason: TerminationReasonV1::InternalPanic {
+                                        stage: PanicStageV1::IsGoalExpansion,
+                                    },
+                                    frontier_high_water: frontier.high_water(),
+                                })
+                                .map_err(SearchError::TapeWrite)?;
+                            }
+
+                            expansions.push(panic_expansion);
                             // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
                             expansion_index
                                 .entry(current.node_id)
@@ -479,6 +693,21 @@ pub fn search(
                         }
                     }
 
+                    // Emit child node creation to tape
+                    if let Some(sink) = &mut tape_sink {
+                        let child_fp_raw = content_hash_to_raw(&child.state_fingerprint)?;
+                        sink.on_node_created(&NodeCreationView {
+                            node_id: child.node_id,
+                            parent_id: child.parent_id,
+                            state_fingerprint_raw: child_fp_raw,
+                            depth: child.depth,
+                            f_cost: child.f_cost(),
+                            creation_order: child.creation_order,
+                            node: &child,
+                        })
+                        .map_err(SearchError::TapeWrite)?;
+                    }
+
                     all_nodes.push(child.clone());
                     frontier.push(child);
                     children_created += 1;
@@ -488,7 +717,7 @@ pub fn search(
 
         // If WorldContractViolation, record expansion and terminate
         if contract_violation {
-            expansions.push(ExpandEventV1 {
+            let violation_expansion = ExpandEventV1 {
                 expansion_order: expansion_count,
                 node_id: current.node_id,
                 state_fingerprint: current_fp_hex,
@@ -497,7 +726,17 @@ pub fn search(
                 candidates_truncated,
                 dead_end_reason: None,
                 notes,
-            });
+            };
+            if let Some(sink) = &mut tape_sink {
+                let exp_fp_raw =
+                    crate::tape::hex_str_to_raw(&violation_expansion.state_fingerprint)?;
+                sink.on_expansion(&ExpansionView {
+                    expansion: &violation_expansion,
+                    state_fingerprint_raw: exp_fp_raw,
+                })
+                .map_err(SearchError::TapeWrite)?;
+            }
+            expansions.push(violation_expansion);
             // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
             expansion_index
                 .entry(current.node_id)
@@ -535,7 +774,7 @@ pub fn search(
         }
 
         // Record the expansion event (INV-SC-03, INV-SC-06)
-        expansions.push(ExpandEventV1 {
+        let normal_expansion = ExpandEventV1 {
             expansion_order: expansion_count,
             node_id: current.node_id,
             state_fingerprint: current_fp_hex,
@@ -544,7 +783,16 @@ pub fn search(
             candidates_truncated,
             dead_end_reason,
             notes,
-        });
+        };
+        if let Some(sink) = &mut tape_sink {
+            let exp_fp_raw = crate::tape::hex_str_to_raw(&normal_expansion.state_fingerprint)?;
+            sink.on_expansion(&ExpansionView {
+                expansion: &normal_expansion,
+                state_fingerprint_raw: exp_fp_raw,
+            })
+            .map_err(SearchError::TapeWrite)?;
+        }
+        expansions.push(normal_expansion);
         // Index for O(1) lookup in build_graph; first-wins matches .find() semantics.
         expansion_index
             .entry(current.node_id)
@@ -558,6 +806,15 @@ pub fn search(
             };
             break;
         }
+    }
+
+    // Emit termination to tape (for all break-path terminations)
+    if let Some(sink) = &mut tape_sink {
+        sink.on_termination(&TerminationView {
+            termination_reason: termination_reason.clone(),
+            frontier_high_water: frontier.high_water(),
+        })
+        .map_err(SearchError::TapeWrite)?;
     }
 
     let goal_node = match &termination_reason {

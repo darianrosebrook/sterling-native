@@ -13,6 +13,8 @@
 pub enum SearchError {
     /// A reserved policy option was selected that is not supported in M1.
     UnsupportedPolicyMode { detail: String },
+    /// Tape write failed during `search_with_tape()`.
+    TapeWrite(crate::tape::TapeWriteError),
 }
 
 impl std::fmt::Display for SearchError {
@@ -21,7 +23,14 @@ impl std::fmt::Display for SearchError {
             Self::UnsupportedPolicyMode { detail } => {
                 write!(f, "unsupported policy mode in M1: {detail}")
             }
+            Self::TapeWrite(e) => write!(f, "tape write error: {e}"),
         }
+    }
+}
+
+impl From<crate::tape::TapeWriteError> for SearchError {
+    fn from(e: crate::tape::TapeWriteError) -> Self {
+        Self::TapeWrite(e)
     }
 }
 
