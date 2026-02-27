@@ -714,7 +714,7 @@ milestones:
         change: "6 lock tests covering INV-SC-05 (3 tests) and INV-SC-08 (3 tests)"
   - id: M4
     title: "Tape as Verified Bundle Artifact: fail-closed evidence chain"
-    status: pending
+    status: complete
     scope: >-
       Wire search_with_tape() into run_search(), persist search_tape.stap as
       normative bundle artifact, extend verify_bundle() with tape chain hash
@@ -725,44 +725,96 @@ milestones:
       - "run_search() calls search_with_tape() instead of search(); tape is always produced"
       - "search_tape.stap is a normative bundle artifact; its content_hash participates in digest_basis"
       - "tape_digest added to verification_report.json as BINDING field"
-      - "verify_bundle() parses tape, verifies chain hash, checks header→report binding, renders tape→graph and asserts byte-identical equivalence to search_graph.json"
-      - "VerificationProfile enum: Base (tape verification optional, accepts pre-M4 bundles) vs Cert (tape required, full verification)"
-      - "Base profile: if tape present, verify it; if absent, skip tape checks (backward compatible)"
-      - "Cert profile: tape must be present; absent tape is a hard error (TapeMissing)"
-      - "verify_bundle() signature gains optional profile parameter; default is Base for backward compat"
+      - "VerificationProfile enum: Base (default, cheap) vs Cert (full, tape required)"
+      - "Base profile: if tape present, verify parse + chain + header bindings; if absent, skip"
+      - "Cert profile: tape must be present; full Base + tape→graph canonical equivalence"
+      - "verify_bundle() delegates to verify_bundle_with_profile(bundle, Base); backward compatible"
       - "Uniform scorer bundles: 6 artifacts (was 5); Table scorer bundles: 7 artifacts (was 6)"
-      - "Tape header bindings checked: world_id, registry_digest, policy_snapshot_digest, search_policy_digest, root_state_fingerprint, scorer_digest"
+      - "Tape header bindings checked against AUTHORITATIVE artifacts, not report: world_id/registry_digest/search_policy_digest/root_state_fingerprint from graph metadata; policy_snapshot_digest from policy_snapshot.json content_hash; scorer_digest from scorer.json content_hash"
+      - "Mode coherence: scorer_digest present in tape ↔ scorer.json in bundle; absent ↔ Uniform"
+      - "Single tape_digest computation path: compute once in runner, reuse for report + precomputed_hash"
+      - "Wrap TapeParseError/TapeRenderError directly (TapeParseFailed/TapeRenderFailed); no duplicate headline variants"
       - "No performance gate in M4 — perf evidence deferred to M4.1/M5"
     acceptance:
       - id: SC1-M4-TAPE-IN-BUNDLE
+        test: tape_artifact_in_bundle
+        description: "search_tape.stap present in bundle, normative, starts with STAP magic"
       - id: SC1-M4-TAPE-DIGEST-IN-REPORT
+        test: tape_digest_in_report
+        description: "tape_digest in report equals tape artifact content_hash"
       - id: SC1-M4-TAPE-CHAIN-VERIFIED
+        test: tape_chain_verified_on_clean_bundle
+        description: "Base and Cert profiles both pass on clean bundle (chain hash verified internally)"
       - id: SC1-M4-TAPE-HEADER-BINDING
+        test: tape_header_binding_coherence
+        description: "All header fields match authoritative artifacts: world_id, registry_digest, search_policy_digest, root_state_fingerprint, policy_snapshot_digest, scorer_digest (mode coherence)"
       - id: SC1-M4-TAPE-GRAPH-EQUIVALENCE
+        test: tape_graph_equivalence_cert_pass
+        description: "Cert profile verifies tape→graph canonical equivalence"
       - id: SC1-M4-TAPE-TAMPER-BODY-REJECTED
+        test: tape_tamper_body_rejected
+        description: "Flipped record byte → TapeParseFailed (chain hash break)"
       - id: SC1-M4-TAPE-TAMPER-HEADER-REJECTED
+        test: tape_tamper_header_world_id_rejected
+        description: "Tampered graph world_id → binding mismatch detected"
       - id: SC1-M4-CERT-REQUIRES-TAPE
+        test: cert_requires_tape
+        description: "Cert profile → TapeMissing when tape absent"
       - id: SC1-M4-BASE-ACCEPTS-NO-TAPE
+        test: base_accepts_no_tape
+        description: "Base profile passes when tape absent"
       - id: SC1-M4-BUNDLE-PERSISTENCE-WITH-TAPE
+        test: bundle_persistence_with_tape
+        description: "write/read/verify round-trip preserves tape artifact identically"
       - id: SC1-M4-TAPE-DETERMINISM-N10
+        test: tape_determinism_n10
+        description: "10 runs produce byte-identical tape"
       - id: SC1-M4-ARTIFACT-COUNT-UNIFORM
+        test: artifact_count_uniform
+        description: "Uniform search bundle has 6 artifacts"
       - id: SC1-M4-ARTIFACT-COUNT-TABLE
+        test: artifact_count_table
+        description: "Table scorer bundle has 7 artifacts"
+    evidence:
+      total_tests: 434
+      new_tests: 15
+      acceptance_ids_anchored: 13
+      bonus_tests:
+        - tape_tamper_header_policy_snapshot_rejected
+        - tape_digest_mismatch_rejected
+      commits:
+        - "c9ae828 feat(harness): wire search_with_tape() into run_search(), add tape artifact [TAPE-002]"
+        - "9e8d167 feat(bundle): add VerificationProfile and tape verification pipeline [TAPE-002]"
+        - "bc1ab30 test(lock): add 15 M4 tape-as-bundle-artifact lock tests [TAPE-002]"
+      files_created:
+        - "tests/lock/tests/sc1_m4_tape_bundle.rs"
+      files_modified:
+        - "harness/src/runner.rs"
+        - "harness/src/bundle.rs"
+        - "tests/lock/src/bundle_test_helpers.rs"
+        - "tests/lock/tests/sc1_crossproc.rs"
+        - "tests/lock/tests/sc1_m3_2_table_scorer.rs"
+        - "tests/lock/tests/sc1_m2_hardening.rs"
+        - "tests/lock/tests/sc1_m3_persistence.rs"
     deliverables:
       - "run_search() uses search_with_tape() — tape always produced alongside graph"
       - "search_tape.stap as normative bundle artifact with content_hash in manifest"
       - "tape_digest BINDING field in verification_report.json"
       - "VerificationProfile enum (Base/Cert) controlling tape requirement"
-      - "verify_bundle() tape chain hash verification (parse + recompute chain + footer match)"
-      - "verify_bundle() tape header binding coherence (header fields vs report fields)"
-      - "verify_bundle() tape→graph canonical equivalence (render + compare bytes)"
-      - "BundleVerifyError new variants: TapeChainHashMismatch, TapeHeaderBindingMismatch, TapeGraphEquivalenceMismatch, TapeMissing, TapeParseFailed"
-      - "Backward compatibility: base profile accepts tape-absent bundles; cert profile requires tape"
+      - "verify_tape() pipeline: digest binding, parse + chain, header binding against authoritative artifacts, mode coherence, schema_version, graph equivalence (Cert)"
+      - "6 new BundleVerifyError variants: TapeMissing, TapeParseFailed, TapeHeaderBindingMismatch, TapeGraphEquivalenceMismatch, TapeDigestMismatch, TapeRenderFailed"
+      - "Tape header binds to authoritative artifacts, not report (prevents self-validating tampered reports)"
+      - "Mode coherence: scorer_digest ↔ scorer.json presence/absence bidirectionally enforced"
+      - "Backward compatibility: Base profile accepts tape-absent bundles; all existing verify_bundle() calls unchanged"
       - "Bundle artifact count: 6 (uniform) / 7 (table)"
-      - "Lock tests: tape presence, digest binding, chain verification, header binding, equivalence, tamper detection (body + header), cert/base profile, persistence round-trip, determinism, artifact counts"
+      - "rebuild_with_modified_tape() + rebuild_without_artifact() shared test helpers"
+      - "15 lock tests: 13 planned + 2 bonus (header policy tamper, digest mismatch)"
     touch_points:
       - path: harness/src/runner.rs
-        change: "Switch from search() to search_with_tape(); include TapeOutput bytes as search_tape.stap artifact; add tape_digest to verification report"
+        change: "Switch from search() to search_with_tape(); include TapeOutput bytes as search_tape.stap artifact; add tape_digest to verification report; single computation path for tape content hash"
       - path: harness/src/bundle.rs
-        change: "VerificationProfile enum; extend verify_bundle() with tape verification pipeline (chain, header bindings, graph equivalence); new BundleVerifyError variants"
+        change: "VerificationProfile enum; verify_bundle_with_profile(); verify_tape() pipeline with 6 steps; check_tape_header_field() helper; 6 new BundleVerifyError variants"
       - path: tests/lock/tests/sc1_m4_tape_bundle.rs
-        change: "13 lock tests covering all M4 acceptance items"
+        change: "15 lock tests covering all M4 acceptance items plus 2 bonus tamper tests"
+      - path: tests/lock/src/bundle_test_helpers.rs
+        change: "rebuild_with_modified_tape() and rebuild_without_artifact() helpers"
