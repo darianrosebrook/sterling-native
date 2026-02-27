@@ -28,6 +28,11 @@ pub struct TapeWriter {
     record_count: u64,
     /// Whether `on_termination` has been called.
     terminated: bool,
+    /// Reusable scratch buffer for building record bodies.
+    ///
+    /// Cleared and reused each record. Preserves transactional atomicity:
+    /// if body construction fails, `buf` is untouched.
+    scratch: Vec<u8>,
 }
 
 impl TapeWriter {
@@ -61,6 +66,7 @@ impl TapeWriter {
             chain_hash,
             record_count: 0,
             terminated: false,
+            scratch: Vec::with_capacity(256),
         }
     }
 
@@ -96,21 +102,24 @@ impl TapeWriter {
         })
     }
 
-    /// Write a framed record and advance the hash chain.
+    /// Commit the scratch buffer as a framed record and advance the hash chain.
     ///
     /// Frame format: `[len:u32le][type:u8][body...]`
     /// where `len` includes the type byte + body (NOT the len field itself).
-    fn write_record(&mut self, record_type: u8, body: &[u8]) {
-        // Frame length = 1 (type byte) + body.len()
+    ///
+    /// Transactional: if body construction fails (before calling this),
+    /// `self.buf` is untouched because the body was built in `self.scratch`.
+    fn commit_record(&mut self, record_type: u8) {
+        // Frame length = 1 (type byte) + scratch.len()
         #[allow(clippy::cast_possible_truncation)]
-        let frame_len = (1 + body.len()) as u32;
+        let frame_len = (1 + self.scratch.len()) as u32;
 
         let frame_start = self.buf.len();
 
         // Write frame
         self.buf.extend_from_slice(&frame_len.to_le_bytes());
         self.buf.push(record_type);
-        self.buf.extend_from_slice(body);
+        self.buf.extend_from_slice(&self.scratch);
 
         // Advance hash chain over the complete frame bytes
         let frame_bytes = &self.buf[frame_start..];
@@ -126,35 +135,36 @@ impl TapeSink for TapeWriter {
             return Err(TapeWriteError::AlreadyTerminated);
         }
 
-        let mut body = Vec::with_capacity(8 + 1 + 8 + 32 + 4 + 8 + 8);
+        self.scratch.clear();
 
         // node_id: u64le
-        body.extend_from_slice(&view.node_id.to_le_bytes());
+        self.scratch.extend_from_slice(&view.node_id.to_le_bytes());
 
         // parent_id_present: u8, then optional parent_id: u64le
         match view.parent_id {
             None => {
-                body.push(0x00);
+                self.scratch.push(0x00);
             }
             Some(pid) => {
-                body.push(0x01);
-                body.extend_from_slice(&pid.to_le_bytes());
+                self.scratch.push(0x01);
+                self.scratch.extend_from_slice(&pid.to_le_bytes());
             }
         }
 
         // state_fingerprint: 32 bytes raw
-        body.extend_from_slice(&view.state_fingerprint_raw);
+        self.scratch.extend_from_slice(&view.state_fingerprint_raw);
 
         // depth: u32le
-        body.extend_from_slice(&view.depth.to_le_bytes());
+        self.scratch.extend_from_slice(&view.depth.to_le_bytes());
 
         // f_cost: i64le
-        body.extend_from_slice(&view.f_cost.to_le_bytes());
+        self.scratch.extend_from_slice(&view.f_cost.to_le_bytes());
 
         // creation_order: u64le
-        body.extend_from_slice(&view.creation_order.to_le_bytes());
+        self.scratch
+            .extend_from_slice(&view.creation_order.to_le_bytes());
 
-        self.write_record(tape::RECORD_TYPE_NODE_CREATION, &body);
+        self.commit_record(tape::RECORD_TYPE_NODE_CREATION);
         Ok(())
     }
 
@@ -164,53 +174,58 @@ impl TapeSink for TapeWriter {
         }
 
         let exp = view.expansion;
-        let mut body = Vec::with_capacity(256);
+        self.scratch.clear();
 
         // expansion_order: u64le
-        body.extend_from_slice(&exp.expansion_order.to_le_bytes());
+        self.scratch
+            .extend_from_slice(&exp.expansion_order.to_le_bytes());
 
         // node_id: u64le
-        body.extend_from_slice(&exp.node_id.to_le_bytes());
+        self.scratch.extend_from_slice(&exp.node_id.to_le_bytes());
 
         // state_fingerprint: 32 bytes raw
-        body.extend_from_slice(&view.state_fingerprint_raw);
+        self.scratch.extend_from_slice(&view.state_fingerprint_raw);
 
         // pop_f_cost: i64le
-        body.extend_from_slice(&exp.frontier_pop_key.f_cost.to_le_bytes());
+        self.scratch
+            .extend_from_slice(&exp.frontier_pop_key.f_cost.to_le_bytes());
 
         // pop_depth: u32le
-        body.extend_from_slice(&exp.frontier_pop_key.depth.to_le_bytes());
+        self.scratch
+            .extend_from_slice(&exp.frontier_pop_key.depth.to_le_bytes());
 
         // pop_creation_order: u64le
-        body.extend_from_slice(&exp.frontier_pop_key.creation_order.to_le_bytes());
+        self.scratch
+            .extend_from_slice(&exp.frontier_pop_key.creation_order.to_le_bytes());
 
         // candidates_truncated: u8
-        body.push(u8::from(exp.candidates_truncated));
+        self.scratch.push(u8::from(exp.candidates_truncated));
 
         // dead_end_reason: u8
-        body.push(dead_end_to_tag(exp.dead_end_reason));
+        self.scratch.push(dead_end_to_tag(exp.dead_end_reason));
 
         // candidate_count: u32le
         #[allow(clippy::cast_possible_truncation)]
         let candidate_count = exp.candidates.len() as u32;
-        body.extend_from_slice(&candidate_count.to_le_bytes());
+        self.scratch
+            .extend_from_slice(&candidate_count.to_le_bytes());
 
         // Candidates
         for cand in &exp.candidates {
-            write_candidate(&mut body, cand)?;
+            write_candidate(&mut self.scratch, cand)?;
         }
 
         // note_count: u32le
         #[allow(clippy::cast_possible_truncation)]
         let note_count = exp.notes.len() as u32;
-        body.extend_from_slice(&note_count.to_le_bytes());
+        self.scratch.extend_from_slice(&note_count.to_le_bytes());
 
         // Notes
         for note in &exp.notes {
-            write_note(&mut body, note);
+            write_note(&mut self.scratch, note);
         }
 
-        self.write_record(tape::RECORD_TYPE_EXPANSION, &body);
+        self.commit_record(tape::RECORD_TYPE_EXPANSION);
         Ok(())
     }
 
@@ -219,18 +234,20 @@ impl TapeSink for TapeWriter {
             return Err(TapeWriteError::AlreadyTerminated);
         }
 
-        let mut body = Vec::with_capacity(32);
+        self.scratch.clear();
 
         // termination_tag: u8
-        body.push(termination_to_tag(&view.termination_reason));
+        self.scratch
+            .push(termination_to_tag(&view.termination_reason));
 
         // termination_payload: variable
-        write_termination_payload(&mut body, &view.termination_reason);
+        write_termination_payload(&mut self.scratch, &view.termination_reason);
 
         // frontier_high_water: u64le
-        body.extend_from_slice(&view.frontier_high_water.to_le_bytes());
+        self.scratch
+            .extend_from_slice(&view.frontier_high_water.to_le_bytes());
 
-        self.write_record(tape::RECORD_TYPE_TERMINATION, &body);
+        self.commit_record(tape::RECORD_TYPE_TERMINATION);
         self.terminated = true;
         Ok(())
     }
