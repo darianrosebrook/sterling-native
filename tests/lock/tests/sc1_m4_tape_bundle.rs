@@ -10,7 +10,8 @@
 //! tape-specific verification checks have an opportunity to trigger.
 
 use lock_tests::bundle_test_helpers::{
-    rebuild_with_modified_tape, rebuild_without_artifact,
+    rebuild_with_modified_graph_and_report, rebuild_with_modified_tape,
+    rebuild_without_artifact,
 };
 use sterling_harness::bundle::{
     verify_bundle, verify_bundle_with_profile, BundleVerifyError, VerificationProfile,
@@ -196,30 +197,26 @@ fn tape_tamper_body_rejected() {
 fn tape_tamper_header_world_id_rejected() {
     let bundle = search_bundle();
 
-    // To tamper the tape header, we need to reconstruct the header JSON with
-    // a wrong world_id, then rebuild the tape binary with the modified header
-    // but keeping records intact. This is complex, so instead we use the
-    // rebuild-graph approach: modify graph metadata's world_id, which creates
-    // a mismatch with the tape's header.
-    let tampered = lock_tests::bundle_test_helpers::rebuild_with_modified_graph(
+    // Patch BOTH graph metadata and report world_id together so the
+    // graph↔report binding (Step 12) passes. The tape header still has the
+    // original world_id, creating a mismatch at Step 16d.
+    let tampered = rebuild_with_modified_graph_and_report(
         &bundle,
         |graph| {
             graph["metadata"]["world_id"] = serde_json::json!("tampered_world_id");
         },
+        |report| {
+            report["world_id"] = serde_json::json!("tampered_world_id");
+        },
     );
 
     let err = verify_bundle(&tampered).unwrap_err();
-    // This fires the graph-level MetadataBindingWorldIdMismatch first, since
-    // the graph world_id vs report world_id diverges. But if that check passes
-    // (because we also patch the report), we'd hit TapeHeaderBindingMismatch.
-    // For this test, either error is acceptable — both prove fail-closed.
     assert!(
         matches!(
             err,
-            BundleVerifyError::MetadataBindingWorldIdMismatch { .. }
-                | BundleVerifyError::TapeHeaderBindingMismatch { field: "world_id", .. }
+            BundleVerifyError::TapeHeaderBindingMismatch { field: "world_id", .. }
         ),
-        "expected world_id binding mismatch, got {err:?}"
+        "expected TapeHeaderBindingMismatch for world_id, got {err:?}"
     );
 }
 
@@ -229,39 +226,74 @@ fn tape_tamper_header_world_id_rejected() {
 
 #[test]
 fn tape_tamper_header_policy_snapshot_rejected() {
+    use sterling_harness::bundle::{build_bundle, DOMAIN_BUNDLE_ARTIFACT};
+    use sterling_kernel::proof::canon::canonical_json_bytes;
+    use sterling_kernel::proof::hash::canonical_hash;
+
     let bundle = search_bundle();
 
-    // Tamper the tape header's policy_snapshot_digest by modifying the raw
-    // tape binary. The header JSON starts at offset 10 in the tape.
-    let tampered = rebuild_with_modified_tape(&bundle, |bytes| {
-        let b = bytes.to_vec();
-        let header_len =
-            u32::from_le_bytes([b[6], b[7], b[8], b[9]]) as usize;
-        let header_bytes = &b[10..10 + header_len];
-        let mut header_json: serde_json::Value =
-            serde_json::from_slice(header_bytes).unwrap();
+    // Strategy: modify policy_snapshot.json content (semantically valid but
+    // different bytes), update report's policy_digest to match, then rebuild.
+    // The tape header still has the original policy_snapshot_digest (raw hex
+    // of the old content_hash), creating a mismatch at Step 16d.
+    let policy_art = bundle.artifacts.get("policy_snapshot.json").unwrap();
+    let mut policy_json: serde_json::Value =
+        serde_json::from_slice(&policy_art.content).unwrap();
+    policy_json["_tamper"] = serde_json::json!(true);
+    let modified_policy_bytes = canonical_json_bytes(&policy_json).unwrap();
+    let new_policy_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &modified_policy_bytes);
 
-        // Replace policy_snapshot_digest with a bogus value.
-        header_json["policy_snapshot_digest"] =
-            serde_json::json!("0000000000000000000000000000000000000000000000000000000000000000");
+    // Update report's policy_digest so Step 8 (report ↔ policy artifact) passes.
+    let report_art = bundle.artifacts.get("verification_report.json").unwrap();
+    let mut report_json: serde_json::Value =
+        serde_json::from_slice(&report_art.content).unwrap();
+    report_json["policy_digest"] = serde_json::json!(new_policy_hash.as_str());
+    let modified_report_bytes = canonical_json_bytes(&report_json).unwrap();
 
-        let new_header = sterling_kernel::proof::canon::canonical_json_bytes(&header_json).unwrap();
-        let new_header_len = new_header.len() as u32;
+    // Also update graph metadata policy_snapshot_digest so Step 12 passes.
+    let graph_art = bundle.artifacts.get("search_graph.json").unwrap();
+    let mut graph_json: serde_json::Value =
+        serde_json::from_slice(&graph_art.content).unwrap();
+    graph_json["metadata"]["policy_snapshot_digest"] =
+        serde_json::json!(new_policy_hash.hex_digest());
 
-        // Rebuild: magic + version + new_header_len + new_header + rest (records + footer).
-        let mut out = Vec::new();
-        out.extend_from_slice(&b[..6]); // magic + version
-        out.extend_from_slice(&new_header_len.to_le_bytes());
-        out.extend_from_slice(&new_header);
-        out.extend_from_slice(&b[10 + header_len..]); // records + footer unchanged
-        out
-    });
+    let modified_graph_bytes = canonical_json_bytes(&graph_json).unwrap();
+    let new_graph_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &modified_graph_bytes);
 
-    // The chain hash will break because the header changed, so TapeParseFailed fires.
+    // Patch report's search_graph_digest to match modified graph.
+    let mut report_json2: serde_json::Value =
+        serde_json::from_slice(&modified_report_bytes).unwrap();
+    report_json2["search_graph_digest"] = serde_json::json!(new_graph_hash.as_str());
+    let final_report_bytes = canonical_json_bytes(&report_json2).unwrap();
+
+    let artifacts: Vec<(String, Vec<u8>, bool)> = bundle
+        .artifacts
+        .values()
+        .map(|a| {
+            if a.name == "policy_snapshot.json" {
+                (a.name.clone(), modified_policy_bytes.clone(), a.normative)
+            } else if a.name == "verification_report.json" {
+                (a.name.clone(), final_report_bytes.clone(), a.normative)
+            } else if a.name == "search_graph.json" {
+                (a.name.clone(), modified_graph_bytes.clone(), a.normative)
+            } else {
+                (a.name.clone(), a.content.clone(), a.normative)
+            }
+        })
+        .collect();
+    let tampered = build_bundle(artifacts).unwrap();
+
+    // Tape header policy_snapshot_digest (old hex) != new policy artifact hex.
     let err = verify_bundle(&tampered).unwrap_err();
     assert!(
-        matches!(err, BundleVerifyError::TapeParseFailed { .. }),
-        "expected TapeParseFailed from tampered header (chain hash broken), got {err:?}"
+        matches!(
+            err,
+            BundleVerifyError::TapeHeaderBindingMismatch {
+                field: "policy_snapshot_digest",
+                ..
+            }
+        ),
+        "expected TapeHeaderBindingMismatch for policy_snapshot_digest, got {err:?}"
     );
 }
 
@@ -448,4 +480,99 @@ fn tape_digest_mismatch_rejected() {
         matches!(err, BundleVerifyError::TapeDigestMismatch { .. }),
         "expected TapeDigestMismatch, got {err:?}"
     );
+}
+
+// ===========================================================================
+// Table-mode tape verification tests
+// ===========================================================================
+
+/// Build a table-scorer bundle using `regime_truncation`.
+fn table_scorer_bundle() -> ArtifactBundleV1 {
+    use std::collections::BTreeMap;
+    use sterling_harness::runner::build_table_scorer_input;
+    use sterling_harness::worlds::slot_lattice_regimes::regime_truncation;
+    use sterling_kernel::carrier::bytestate::ByteStateV1;
+    use sterling_search::contract::SearchWorldV1;
+
+    let regime = regime_truncation();
+    let root = ByteStateV1::new(1, 10);
+    let registry = regime.world.registry().unwrap();
+    let mut candidates = regime.world.enumerate_candidates(&root, &registry);
+    candidates.sort();
+
+    #[allow(clippy::cast_possible_truncation)]
+    if candidates.len() as u64 > regime.policy.max_candidates_per_node {
+        candidates.truncate(regime.policy.max_candidates_per_node as usize);
+    }
+
+    let last = candidates.last().unwrap();
+    let mut table = BTreeMap::new();
+    table.insert(last.canonical_hash().as_str().to_string(), 100_i64);
+    let scorer_input = build_table_scorer_input(table).unwrap();
+
+    run_search(&regime.world, &regime.policy, &scorer_input).unwrap()
+}
+
+// ---------------------------------------------------------------------------
+// SC1-M4-TABLE-SCORER-DIGEST-COHERENCE
+// ---------------------------------------------------------------------------
+
+#[test]
+fn table_mode_scorer_digest_coherence_base_pass() {
+    let bundle = table_scorer_bundle();
+
+    // Tape header must have scorer_digest matching scorer.json content_hash.
+    let tape_art = bundle.artifacts.get("search_tape.stap").unwrap();
+    let tape = sterling_search::tape_reader::read_tape(&tape_art.content).unwrap();
+    let header = &tape.header.json;
+
+    let scorer_art = bundle.artifacts.get("scorer.json").unwrap();
+    let tape_scorer = header
+        .get("scorer_digest")
+        .and_then(|v| v.as_str())
+        .expect("table-mode tape must have scorer_digest");
+    assert_eq!(
+        tape_scorer,
+        scorer_art.content_hash.hex_digest(),
+        "tape scorer_digest must match scorer.json content_hash hex"
+    );
+
+    // Base verification passes.
+    verify_bundle(&bundle).unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// SC1-M4-TABLE-CERT-EQUIVALENCE
+// ---------------------------------------------------------------------------
+
+#[test]
+fn table_mode_cert_equivalence_pass() {
+    let bundle = table_scorer_bundle();
+    // Cert profile: full tape→graph equivalence on table-scorer bundle.
+    verify_bundle_with_profile(&bundle, VerificationProfile::Cert).unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// SC1-M4-TABLE-BUNDLE-PERSISTENCE-WITH-TAPE
+// ---------------------------------------------------------------------------
+
+#[test]
+fn table_mode_bundle_persistence_with_tape() {
+    use sterling_harness::bundle_dir::{read_bundle_dir, verify_bundle_dir, write_bundle_dir};
+
+    let bundle = table_scorer_bundle();
+    let dir = tempfile::tempdir().unwrap();
+
+    write_bundle_dir(&bundle, dir.path()).unwrap();
+    let loaded = read_bundle_dir(dir.path()).unwrap();
+
+    // Tape + scorer survive round-trip.
+    assert!(loaded.artifacts.contains_key("search_tape.stap"));
+    assert!(loaded.artifacts.contains_key("scorer.json"));
+    assert_eq!(loaded.artifacts.len(), 7);
+
+    // Full verification passes including tape on loaded bundle.
+    verify_bundle(&loaded).unwrap();
+    verify_bundle_with_profile(&loaded, VerificationProfile::Cert).unwrap();
+    verify_bundle_dir(dir.path()).unwrap();
 }

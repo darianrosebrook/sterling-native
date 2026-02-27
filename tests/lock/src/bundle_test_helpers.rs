@@ -55,6 +55,56 @@ pub fn rebuild_with_modified_graph(
     build_bundle(artifacts).unwrap()
 }
 
+/// Modify both `search_graph.json` and `verification_report.json` in a bundle
+/// and rebuild with consistent content hashes.
+///
+/// Unlike [`rebuild_with_modified_graph`], which patches the report's
+/// `search_graph_digest` automatically, this gives the caller full control
+/// over both JSON values. The caller is responsible for keeping
+/// `search_graph_digest` and other cross-referenced fields consistent.
+///
+/// Primary use case: patching graph metadata + report fields together so
+/// earlier verification steps pass, isolating tape-header-specific checks.
+///
+/// # Panics
+///
+/// Panics if the bundle is missing `search_graph.json` or `verification_report.json`.
+pub fn rebuild_with_modified_graph_and_report(
+    bundle: &ArtifactBundleV1,
+    modify_graph: impl FnOnce(&mut serde_json::Value),
+    modify_report: impl FnOnce(&mut serde_json::Value),
+) -> ArtifactBundleV1 {
+    let graph_artifact = bundle.artifacts.get("search_graph.json").unwrap();
+    let mut graph_json: serde_json::Value =
+        serde_json::from_slice(&graph_artifact.content).unwrap();
+    modify_graph(&mut graph_json);
+    let modified_graph_bytes = canonical_json_bytes(&graph_json).unwrap();
+    let new_graph_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &modified_graph_bytes);
+
+    let report_artifact = bundle.artifacts.get("verification_report.json").unwrap();
+    let mut report_json: serde_json::Value =
+        serde_json::from_slice(&report_artifact.content).unwrap();
+    // Keep search_graph_digest consistent with the modified graph.
+    report_json["search_graph_digest"] = serde_json::json!(new_graph_hash.as_str());
+    modify_report(&mut report_json);
+    let modified_report_bytes = canonical_json_bytes(&report_json).unwrap();
+
+    let artifacts: Vec<(String, Vec<u8>, bool)> = bundle
+        .artifacts
+        .values()
+        .map(|a| {
+            if a.name == "search_graph.json" {
+                (a.name.clone(), modified_graph_bytes.clone(), a.normative)
+            } else if a.name == "verification_report.json" {
+                (a.name.clone(), modified_report_bytes.clone(), a.normative)
+            } else {
+                (a.name.clone(), a.content.clone(), a.normative)
+            }
+        })
+        .collect();
+    build_bundle(artifacts).unwrap()
+}
+
 /// Replace the raw bytes of `search_tape.stap` in a bundle and rebuild with
 /// consistent content hashes, manifest, and digest basis.
 ///
