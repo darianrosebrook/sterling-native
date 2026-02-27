@@ -99,32 +99,40 @@ MDEOF
   fi
 
   # --- Generate per-turn files via python ---
-  # Streams transcript through jq (extract events) then python (split into turns)
+  # jq emits each content block as a separate chronological event.
+  # Python accumulates into turns and writes sequential timeline per turn.
   jq -c '
     if .type == "user" then
       if (.message.content | type) == "string" then
         {ev: "user_text", text: .message.content}
       elif (.message.content | type) == "array" then
-        # Extract tool_result content (especially errors and test output)
-        {ev: "tool_results", results: [.message.content[]? | select(.type == "tool_result") | {id: .tool_use_id, content: ((.content // "") | tostring | .[:2000]), is_error: (.is_error // false)}]}
+        .message.content[]? |
+        if .type == "tool_result" then
+          {ev: "tool_result", id: .tool_use_id, content: ((.content // "") | tostring | .[:2000]), is_error: (.is_error // false)}
+        else
+          empty
+        end
       else
         empty
       end
     elif .type == "assistant" then
-      {ev: "assistant",
-       texts: [.message.content[]? | select(.type == "text") | .text],
-       tools: [.message.content[]? | select(.type == "tool_use") | {
-         name, id,
+      .message.content[]? |
+      if .type == "text" then
+        {ev: "text", text: .text}
+      elif .type == "tool_use" then
+        {ev: "tool_use", name, id,
          file: (.input.file_path // null),
          command: (.input.command // null),
          description: (.input.description // null),
-         pattern: (.input.pattern // null)
-       }]}
+         pattern: (.input.pattern // null)}
+      else
+        empty
+      end
     else
       empty
     end
   ' "$transcript" 2>/dev/null | python3 - "$LOG_DIR" "$CWD" "$SESSION_ID" "$started_at" "$model" "$branch" "$head_sha" "$dirty_count" "$start_sha" << 'PYEOF'
-import json, sys, os, hashlib
+import json, sys, os
 
 log_dir = sys.argv[1]
 cwd = sys.argv[2]
@@ -141,33 +149,26 @@ def rel(path):
         return path[len(cwd) + 1:]
     return path or ""
 
-# ---- Accumulate turns ----
+# ---- Accumulate turns as chronological event timelines ----
 turns = []
-current = {
-    "user": None,
-    "reasoning": [],
-    "tools": [],
-    "tool_results": {},  # tool_use_id -> result content
-    "edits": [],
-    "reads": [],
-    "searches": [],
-    "commands": [],
-}
+# Each turn: {user, timeline: [{kind, ...}, ...], edits, reads, searches, commands}
+current = {"user": None, "timeline": [], "edits": [], "reads": [], "searches": [], "commands": []}
 
 def new_turn(user_text):
     return {
         "user": user_text[:1000] if user_text else None,
-        "reasoning": [],
-        "tools": [],
-        "tool_results": {},
-        "edits": [],
-        "reads": [],
-        "searches": [],
-        "commands": [],
+        "timeline": [], "edits": [], "reads": [], "searches": [], "commands": [],
     }
+
+# Track pending tool_use IDs to match with results
+pending_tools = {}  # id -> {name, ...}
 
 NOISE_PREFIXES = ("<local-command", "<command-name", "<local-command-stdout",
                   "<local-command-caveat", "This session is being continued")
+
+# Keywords that make a tool result "notable" (worth showing inline)
+NOTABLE_KW = ["error", "fail", "refusal", "mismatch", "passed", "assert",
+              "traceback", "exception", "pytest", "PASSED", "FAILED", "TypedRefusal"]
 
 for line in sys.stdin:
     try:
@@ -183,169 +184,167 @@ for line in sys.stdin:
             continue
         if not text.strip():
             continue
-        # Save current turn, start new one
-        if current["user"] or current["reasoning"]:
+        if current["user"] or current["timeline"]:
             turns.append(current)
         current = new_turn(text)
 
-    elif ev == "tool_results":
-        for r in entry.get("results", []):
-            rid = r.get("id", "")
-            content = r.get("content", "")
-            is_error = r.get("is_error", False)
-            if rid:
-                current["tool_results"][rid] = {"content": content, "is_error": is_error}
+    elif ev == "text":
+        text = entry.get("text", "")
+        if len(text) > 80:
+            current["timeline"].append({"kind": "reasoning", "text": text})
 
-    elif ev == "assistant":
-        for t in entry.get("texts", []):
-            if len(t) > 80:
-                current["reasoning"].append(t)
-        for tool in entry.get("tools", []):
-            name = tool.get("name", "")
-            tid = tool.get("id", "")
-            current["tools"].append({"name": name, "id": tid})
+    elif ev == "tool_use":
+        name = entry.get("name", "")
+        tid = entry.get("id", "")
+        tool_entry = {"kind": "tool_call", "name": name, "id": tid}
 
-            if name in ("Write", "Edit"):
-                f = rel(tool.get("file"))
-                if f and f not in current["edits"]:
-                    current["edits"].append(f)
-            elif name == "Read":
-                f = rel(tool.get("file"))
-                if f and f not in current["reads"]:
-                    current["reads"].append(f)
-            elif name in ("Grep", "Glob"):
-                pat = tool.get("pattern", "")
-                if pat:
-                    current["searches"].append(pat)
-            elif name == "Bash":
-                cmd = tool.get("command", "")
-                desc = tool.get("description", "")
-                if cmd:
-                    current["commands"].append({"cmd": cmd[:200], "desc": desc or ""})
+        if name in ("Write", "Edit"):
+            f = rel(entry.get("file"))
+            tool_entry["file"] = f
+            if f and f not in current["edits"]:
+                current["edits"].append(f)
+        elif name == "Read":
+            f = rel(entry.get("file"))
+            tool_entry["file"] = f
+            if f and f not in current["reads"]:
+                current["reads"].append(f)
+        elif name in ("Grep", "Glob"):
+            pat = entry.get("pattern", "")
+            tool_entry["pattern"] = pat
+            if pat:
+                current["searches"].append(pat)
+        elif name == "Bash":
+            cmd = entry.get("command", "")
+            desc = entry.get("description", "")
+            tool_entry["command"] = cmd[:200]
+            tool_entry["description"] = desc or ""
+            if cmd:
+                current["commands"].append({"cmd": cmd[:200], "desc": desc or ""})
 
-# Flush last turn
-if current["user"] or current["reasoning"]:
+        current["timeline"].append(tool_entry)
+        pending_tools[tid] = tool_entry
+
+    elif ev == "tool_result":
+        tid = entry.get("id", "")
+        content = entry.get("content", "")
+        is_error = entry.get("is_error", False)
+        tool_info = pending_tools.get(tid, {})
+        name = tool_info.get("name", "unknown")
+
+        # Decide if this result is notable enough to show inline
+        notable = is_error
+        if not notable and content:
+            content_lower = content.lower()
+            notable = any(kw.lower() in content_lower for kw in NOTABLE_KW)
+
+        if notable and content:
+            current["timeline"].append({
+                "kind": "tool_output",
+                "name": name,
+                "content": content[:2000],
+                "is_error": is_error,
+            })
+
+if current["user"] or current["timeline"]:
     turns.append(current)
 
 # ---- Write per-turn files ----
-turn_index = []  # for session.md index
+turn_index = []
 
 for i, turn in enumerate(turns):
     num = i + 1
     padded = f"{num:03d}"
 
-    # --- Build per-turn markdown ---
-    md_lines = []
-    md_lines.append(f"# Turn {num}")
-    md_lines.append("")
+    # --- Build per-turn markdown: chronological timeline ---
+    md_lines = [f"# Turn {num}", ""]
 
     if turn["user"]:
-        md_lines.append(f"> **User:** {turn['user']}")
-        md_lines.append("")
+        md_lines.extend([f"> **User:** {turn['user']}", ""])
 
-    # Reasoning with interleaved key tool results
-    tool_idx = 0
-    for text in turn["reasoning"]:
-        # Truncate very long messages
-        if len(text) > 3000:
-            md_lines.append(text[:3000])
+    for event in turn["timeline"]:
+        kind = event["kind"]
+
+        if kind == "reasoning":
+            text = event["text"]
+            if len(text) > 3000:
+                md_lines.append(text[:3000])
+                md_lines.extend(["", "_(message truncated at 3000 chars)_"])
+            else:
+                md_lines.append(text)
+            md_lines.extend(["", "---", ""])
+
+        elif kind == "tool_call":
+            name = event.get("name", "")
+            if name in ("Read", "Glob"):
+                f = event.get("file") or event.get("pattern", "")
+                md_lines.append(f"`{name}` {f}")
+            elif name in ("Write", "Edit"):
+                md_lines.append(f"`{name}` {event.get('file', '')}")
+            elif name == "Bash":
+                cmd = event.get("command", "")[:120]
+                desc = event.get("description", "")
+                if desc:
+                    md_lines.append(f"`Bash` {cmd} -- _{desc}_")
+                else:
+                    md_lines.append(f"`Bash` {cmd}")
+            elif name in ("Grep",):
+                md_lines.append(f"`Grep` {event.get('pattern', '')}")
+            elif name == "Task":
+                md_lines.append(f"`Task` (subagent)")
+            else:
+                md_lines.append(f"`{name}`")
             md_lines.append("")
-            md_lines.append("_(message truncated at 3000 chars)_")
-        else:
-            md_lines.append(text)
-        md_lines.append("")
-        md_lines.append("---")
-        md_lines.append("")
 
-    # Key tool results: errors, test output, refusals
-    notable_results = []
-    for tool in turn["tools"]:
-        tid = tool.get("id", "")
-        result = turn["tool_results"].get(tid, {})
-        content = result.get("content", "")
-        is_error = result.get("is_error", False)
-        name = tool.get("name", "")
-
-        if not content:
-            continue
-
-        # Include: errors, test results, short meaningful output
-        if is_error:
-            notable_results.append((name, content, "error"))
-        elif name == "Bash" and any(kw in content.lower() for kw in
-                ["error", "fail", "refusal", "mismatch", "passed", "assert", "traceback", "exception"]):
-            notable_results.append((name, content, "output"))
-        elif name == "Bash" and any(kw in content for kw in
-                ["pytest", "PASSED", "FAILED", "warnings summary"]):
-            notable_results.append((name, content, "test"))
-
-    if notable_results:
-        md_lines.append("### Key Tool Output")
-        md_lines.append("")
-        for name, content, kind in notable_results:
-            # Truncate long output
+        elif kind == "tool_output":
+            content = event.get("content", "")
+            name = event.get("name", "")
+            is_error = event.get("is_error", False)
+            label = "error" if is_error else "output"
             if len(content) > 1500:
                 content = content[:1500] + "\n...(truncated)"
-            md_lines.append(f"**{name}** ({kind}):")
-            md_lines.append("```")
-            md_lines.append(content)
-            md_lines.append("```")
-            md_lines.append("")
-
-    # Summary footer
-    if turn["edits"] or turn["reads"] or turn["commands"]:
-        md_lines.append("### Activity")
-        md_lines.append("")
-        for f in turn["edits"]:
-            md_lines.append(f"- EDIT `{f}`")
-        for f in turn["reads"]:
-            md_lines.append(f"- READ `{f}`")
-        for cmd in turn["commands"][:10]:
-            short = cmd["cmd"][:120]
-            if cmd["desc"]:
-                md_lines.append(f"- BASH `{short}` — {cmd['desc']}")
-            else:
-                md_lines.append(f"- BASH `{short}`")
-        md_lines.append("")
+            md_lines.extend([
+                f"**{name}** ({label}):",
+                "```",
+                content,
+                "```",
+                "",
+            ])
 
     # Write turn markdown
-    turn_md_path = os.path.join(log_dir, f"turn-{padded}.md")
-    with open(turn_md_path, "w") as f:
+    with open(os.path.join(log_dir, f"turn-{padded}.md"), "w") as f:
         f.write("\n".join(md_lines))
 
-    # --- Build per-turn JSON ---
+    # --- Build per-turn JSON: chronological timeline ---
     tool_summary = {}
-    for tool in turn["tools"]:
-        name = tool.get("name", "")
-        tool_summary[name] = tool_summary.get(name, 0) + 1
+    for event in turn["timeline"]:
+        if event["kind"] == "tool_call":
+            n = event.get("name", "")
+            tool_summary[n] = tool_summary.get(n, 0) + 1
 
     turn_json = {
         "turn": num,
         "user": turn["user"],
-        "reasoning": turn["reasoning"],
+        "timeline": turn["timeline"],
         "tool_summary": tool_summary,
         "files_edited": turn["edits"],
         "files_read": turn["reads"],
         "searches": turn["searches"],
         "commands": [c["cmd"] for c in turn["commands"]],
-        "notable_results": [
-            {"tool": name, "kind": kind, "content": content[:2000]}
-            for name, content, kind in notable_results
-        ] if notable_results else [],
     }
 
-    turn_json_path = os.path.join(log_dir, f"turn-{padded}.json")
-    with open(turn_json_path, "w") as f:
+    with open(os.path.join(log_dir, f"turn-{padded}.json"), "w") as f:
         json.dump(turn_json, f, indent=2)
 
     # Index entry
     user_preview = (turn["user"] or "(no user message)")[:120]
+    reasoning_count = sum(1 for e in turn["timeline"] if e["kind"] == "reasoning")
+    tool_count = sum(1 for e in turn["timeline"] if e["kind"] == "tool_call")
     turn_index.append({
         "num": num,
         "padded": padded,
         "user_preview": user_preview,
-        "reasoning_count": len(turn["reasoning"]),
-        "tool_count": sum(tool_summary.values()),
+        "reasoning_count": reasoning_count,
+        "tool_count": tool_count,
         "edits": turn["edits"],
     })
 
