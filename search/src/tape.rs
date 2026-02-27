@@ -492,40 +492,6 @@ pub(crate) fn dead_end_to_tag(reason: Option<DeadEndReasonV1>) -> u8 {
     }
 }
 
-/// Result of decoding a dead-end tag. Avoids `Option<Option<T>>`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DeadEndDecode {
-    /// Tag 0: no dead end.
-    None,
-    /// Tag 1 or 2: a dead-end reason.
-    Reason(DeadEndReasonV1),
-    /// Unknown tag.
-    Unknown(u8),
-}
-
-impl DeadEndDecode {
-    /// Convert to `Option<DeadEndReasonV1>` for the parsed tape struct.
-    /// Returns `None` for `DeadEndDecode::None`, `Some(reason)` for `Reason`.
-    /// Panics on `Unknown` — caller must check first.
-    pub(crate) fn into_option(self) -> Option<DeadEndReasonV1> {
-        match self {
-            Self::None => Option::None,
-            Self::Reason(r) => Some(r),
-            Self::Unknown(tag) => panic!("into_option called on Unknown({tag})"),
-        }
-    }
-}
-
-/// Decode a tape tag to `DeadEndDecode`.
-pub(crate) fn tag_to_dead_end(tag: u8) -> DeadEndDecode {
-    match tag {
-        DEAD_END_NONE => DeadEndDecode::None,
-        DEAD_END_EXHAUSTIVE => DeadEndDecode::Reason(DeadEndReasonV1::Exhaustive),
-        DEAD_END_BUDGET_LIMITED => DeadEndDecode::Reason(DeadEndReasonV1::BudgetLimited),
-        other => DeadEndDecode::Unknown(other),
-    }
-}
-
 /// Encode a `CandidateOutcomeV1` to its tape tag.
 pub(crate) fn outcome_to_tag(outcome: &CandidateOutcomeV1) -> u8 {
     match outcome {
@@ -760,16 +726,19 @@ mod tests {
 
     #[test]
     fn dead_end_tag_roundtrip() {
-        assert_eq!(tag_to_dead_end(dead_end_to_tag(None)), DeadEndDecode::None);
+        assert_eq!(dead_end_to_tag(None), DEAD_END_NONE);
         assert_eq!(
-            tag_to_dead_end(dead_end_to_tag(Some(DeadEndReasonV1::Exhaustive))),
-            DeadEndDecode::Reason(DeadEndReasonV1::Exhaustive)
+            dead_end_to_tag(Some(DeadEndReasonV1::Exhaustive)),
+            DEAD_END_EXHAUSTIVE
         );
         assert_eq!(
-            tag_to_dead_end(dead_end_to_tag(Some(DeadEndReasonV1::BudgetLimited))),
-            DeadEndDecode::Reason(DeadEndReasonV1::BudgetLimited)
+            dead_end_to_tag(Some(DeadEndReasonV1::BudgetLimited)),
+            DEAD_END_BUDGET_LIMITED
         );
-        assert!(matches!(tag_to_dead_end(255), DeadEndDecode::Unknown(255)));
+        // Tags are distinct and contiguous from 0
+        assert_eq!(DEAD_END_NONE, 0);
+        assert_eq!(DEAD_END_EXHAUSTIVE, 1);
+        assert_eq!(DEAD_END_BUDGET_LIMITED, 2);
     }
 
     #[test]
