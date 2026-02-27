@@ -610,3 +610,38 @@ milestones:
         change: "8 lock tests: golden snapshot, determinism, histogram invariants, outcome exhaustiveness, non-binding proof, metadata cross-check, report presence, persistence round-trip"
       - path: tests/lock/tests/goldens/sc1_m3_3_regime_duplicates_metrics.json
         change: "Golden snapshot for regime_duplicates health metrics canonical JSON"
+  - id: M3.4
+    title: "Invariant gap lock tests"
+    status: in_progress
+    scope: >-
+      Explicit lock tests for INV-SC-05 (identity-only fingerprint) and
+      INV-SC-08 (runner-supplied registry). Closes the two invariant coverage
+      gaps identified in the post-M3.3 audit. No production code changes.
+    acceptance:
+      - id: SC1-M3.4-INV-SC-05-IDENTITY-ONLY
+        given: "two ByteStateV1 with identical identity but different status planes"
+        when: "fingerprint computed via canonical_hash(DOMAIN_SEARCH_NODE, identity_bytes())"
+        then: "both fingerprints are equal"
+      - id: SC1-M3.4-INV-SC-05-DIFFERENT-IDENTITY
+        given: "two ByteStateV1 with different identity planes"
+        when: "fingerprint computed via canonical_hash(DOMAIN_SEARCH_NODE, identity_bytes())"
+        then: "fingerprints differ (contrapositive)"
+      - id: SC1-M3.4-INV-SC-05-SEARCH-DEDUP
+        given: "a live search on RomeMiniSearch with default policy"
+        when: "every node's state_fingerprint is compared to canonical_hash(DOMAIN_SEARCH_NODE, identity_bytes())"
+        then: "all match; dedup-suppressed candidates reference known fingerprints"
+      - id: SC1-M3.4-INV-SC-08-RESTRICTED-REGISTRY
+        given: "RomeMiniSearch.enumerate_candidates with restricted registry (1 value)"
+        when: "compared to full registry (4 values)"
+        then: "restricted produces strictly fewer candidates"
+      - id: SC1-M3.4-INV-SC-08-EMPTY-REGISTRY
+        given: "RomeMiniSearch.enumerate_candidates with empty registry"
+        when: "called"
+        then: "produces zero candidates"
+      - id: SC1-M3.4-INV-SC-08-SEARCH-COHERENCE
+        given: "a live search with restricted 2-value registry"
+        when: "all graph candidates inspected"
+        then: "no candidate uses ops/values outside supplied registry; total candidates less than full-registry run"
+    touch_points:
+      - path: tests/lock/tests/sc1_m3_4_invariant_gaps.rs
+        change: "7 lock tests covering INV-SC-05 (3 tests) and INV-SC-08 (3 tests) plus search-level coherence"
