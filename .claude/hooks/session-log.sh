@@ -108,7 +108,7 @@ MDEOF
       elif (.message.content | type) == "array" then
         .message.content[]? |
         if .type == "tool_result" then
-          {ev: "tool_result", id: .tool_use_id, content: ((.content // "") | tostring | .[:2000]), is_error: (.is_error // false)}
+          {ev: "tool_result", id: .tool_use_id, content: ((.content // "") | tostring), is_error: (.is_error // false)}
         else
           empty
         end
@@ -164,7 +164,7 @@ current = {"user": None, "timeline": [], "edits": [], "reads": [], "searches": [
 
 def new_turn(user_text):
     return {
-        "user": user_text[:1000] if user_text else None,
+        "user": user_text if user_text else None,
         "timeline": [], "edits": [], "reads": [], "searches": [], "commands": [],
     }
 
@@ -250,12 +250,14 @@ for line in sys.stdin:
             notable = any(kw.lower() in content_lower for kw in NOTABLE_KW)
 
         if notable and content:
-            # Task results get more space (subagent summaries are substantive)
-            cap = 5000 if name == "Task" else 2000
+            # Cap file-content tools (full file reads/writes blow out turn files)
+            display = content
+            if name in ("Read", "Write", "Edit") and len(content) > 2000:
+                display = content[:2000] + "\n...(file content truncated)"
             current["timeline"].append({
                 "kind": "tool_output",
                 "name": name,
-                "content": content[:cap],
+                "content": display,
                 "is_error": is_error,
             })
 
@@ -280,11 +282,7 @@ for i, turn in enumerate(turns):
 
         if kind == "reasoning":
             text = event["text"]
-            if len(text) > 5000:
-                md_lines.append(text[:5000])
-                md_lines.extend(["", "_(message truncated at 5000 chars)_"])
-            else:
-                md_lines.append(text)
+            md_lines.append(text)
             md_lines.extend(["", "---", ""])
 
         elif kind == "tool_call":
@@ -323,8 +321,6 @@ for i, turn in enumerate(turns):
             name = event.get("name", "")
             is_error = event.get("is_error", False)
             label = "error" if is_error else "output"
-            if len(content) > 1500:
-                content = content[:1500] + "\n...(truncated)"
             md_lines.extend([
                 f"**{name}** ({label}):",
                 "```",
