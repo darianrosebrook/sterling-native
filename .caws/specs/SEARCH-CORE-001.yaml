@@ -49,6 +49,9 @@ invariants:
   - "INV-SC-10: DedupKeyV1::FullState and PruneVisitedPolicyV1::ReleaseVisited are hard errors in M1"
   - "sterling_search depends on sterling_kernel only; it does NOT depend on sterling_harness"
   - "Neural/learned scoring is advisory only: cannot create actions, bypass legality, or suppress candidates"
+  - "INV-SC-M33-01: SearchHealthMetricsV1 is a pure function of SearchGraphV1 (expansions + node_summaries only); no runtime state, no metadata counters"
+  - "INV-SC-M33-02: Health metrics are DIAGNOSTIC; must not participate in any binding digest; verification must not fail due to metrics content"
+  - "INV-SC-M33-03: Health metrics serialization is deterministic across platforms; no HashMap iteration; histogram arrays sorted by key ascending"
 acceptance:
   # --- M1: Search Core ---
   - id: SC1-M1-SEARCH-DETERMINISM-INPROC
@@ -262,6 +265,27 @@ acceptance:
     given: "a SlotLatticeSearch world and fresh state"
     when: "enumerate_candidates() is called twice"
     then: "returns identical candidates in identical order"
+  # --- M3.3: Search Health Metrics ---
+  - id: SC1-M3.3-METRICS-PURE
+    given: "a fixed SearchGraphV1 fixture"
+    when: "compute_health_metrics() is called twice"
+    then: "produces identical SearchHealthMetricsV1 values (struct equality)"
+  - id: SC1-M3.3-METRICS-GOLDEN
+    given: "regime_duplicates SearchGraphV1 fixture"
+    when: "compute_health_metrics() serialized to canonical JSON"
+    then: "bytes equal golden snapshot committed in the test"
+  - id: SC1-M3.3-HISTOGRAMS-COVERAGE
+    given: "any SearchGraphV1"
+    when: "sum(depth_histogram_pairs values) and sum(candidate_count_histogram_pairs values) are computed"
+    then: "depth sum equals node_summaries.len(); candidate_count sum equals expansions.len()"
+  - id: SC1-M3.3-OUTCOME-EXHAUSTIVE
+    given: "a SearchGraphV1 fixture containing all CandidateOutcomeV1 variants"
+    when: "compute_health_metrics() is called"
+    then: "every outcome counter is non-zero and all counters sum to total_candidates"
+  - id: SC1-M3.3-NONBINDING
+    given: "a valid bundle produced by run_search()"
+    when: "verification_report.json health_metrics bytes are modified"
+    then: "verify_bundle() still passes (metrics are DIAGNOSTIC, not binding)"
 acceptance_criteria: []
 non_functional:
   perf:
@@ -549,3 +573,23 @@ milestones:
       - "Conditional scorer evidence: ScorerEvidenceMissing replaces ScorerArtifactUnused (allows root-goal and scorer-failure shapes)"
       - "Advisory-only invariant: scorer reorders but cannot add/remove candidates"
       - "Back-compat: Uniform runs remain 5-artifact bundles with no scorer fields"
+  - id: M3.3
+    title: "Search Health Metrics: deterministic diagnostics derived from SearchGraphV1"
+    status: not_started
+    scope: >-
+      New SearchHealthMetricsV1 struct computed purely from SearchGraphV1;
+      placed in verification report as DIAGNOSTIC (non-binding); no changes
+      to search loop, frontier, scorer, bundle verification, or digest computation.
+    design_decisions:
+      - "Histograms use array-of-pairs [[key, value], ...] sorted by key ascending, not JSON object keys (avoids lexicographic '10' < '2' papercut)"
+      - "Health metrics live under diagnostics.health_metrics in verification report (namespace prevents future binding creep)"
+      - "compute_health_metrics() is a pure function of &SearchGraphV1 — reads expansions + node_summaries only, never metadata counters"
+      - "Cross-check against metadata counters is a test assertion, not a standing invariant (divergence is a bug, not a governance violation)"
+      - "frontier_high_water is excluded from health metrics (runtime counter, not graph-derivable)"
+    touch_points:
+      - path: search/src/graph.rs
+        change: "SearchHealthMetricsV1 struct + compute_health_metrics() impl"
+      - path: harness/src/bundle.rs
+        change: "Include health metrics under diagnostics.health_metrics in verification report JSON (DIAGNOSTIC)"
+      - path: tests/lock/tests/sc1_m3_3_health_metrics.rs
+        change: "Golden snapshot, determinism, histogram invariants, outcome exhaustiveness, non-binding proof"
