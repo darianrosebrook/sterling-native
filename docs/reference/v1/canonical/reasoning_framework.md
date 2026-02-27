@@ -1,4 +1,7 @@
 > **NOTE: Quarantined v1 canonical contract. Non-authoritative for Sterling Native. See [promotion criteria](README.md).**
+>
+> **Superseded in v2**: `search/src/search.rs` (search loop), `search/src/frontier.rs` (BestFirstFrontier), `search/src/graph.rs` (SearchGraphV1).
+> v2 evidence: SC-001 M1; lock tests `sc1_search_determinism.rs`, `sc1_crossproc.rs`.
 
 # The Sterling Reasoning Framework
 

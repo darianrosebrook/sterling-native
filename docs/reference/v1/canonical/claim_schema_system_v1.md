@@ -1,4 +1,7 @@
 > **NOTE: Quarantined v1 canonical contract. Non-authoritative for Sterling Native. See [promotion criteria](README.md).**
+>
+> **Superseded in v2**: `.caws/specs/` YAML structure (acceptance criteria, invariants, falsifiers, test pointers); CAWS workflow.
+> v2 evidence: SPINE-001, SC-001, TAPE-001, TAPE-002 specs with mechanical acceptance ID anchoring.
 
 # Claim and Schema System Contract
 

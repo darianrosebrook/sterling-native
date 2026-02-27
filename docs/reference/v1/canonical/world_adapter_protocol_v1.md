@@ -1,4 +1,7 @@
 > **NOTE: Quarantined v1 canonical contract. Non-authoritative for Sterling Native. See [promotion criteria](README.md).**
+>
+> **Superseded in v2**: `harness/src/contract.rs` (WorldHarnessV1), `search/src/contract.rs` (SearchWorldV1); 3 test worlds in `harness/src/worlds/`.
+> v2 evidence: SC-001 M1, M3.1; lock tests `sc1_search_determinism.rs`, `sc1_m3_1_slot_lattice.rs`.
 
 # World Adapter Protocol v1.1
 

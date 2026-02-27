@@ -1,4 +1,6 @@
 > **NOTE: Quarantined v1 canonical contract. Non-authoritative for Sterling Native. See [promotion criteria](README.md).**
+>
+> **v2 realization**: The thesis here (path-finding over semantic state space) is implemented in v2 as best-first graph search over compiled ByteState with deterministic tape evidence. See `search/src/search.rs`, `docs/canonical/search_evidence_contract.md`. The Wikipedia Pathfinder analogy maps to: ByteState nodes = "pages," operator-applied transitions = "links," tape = "the route you took."
 
 # Sterling's North Star
 

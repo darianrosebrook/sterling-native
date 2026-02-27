@@ -1,4 +1,7 @@
 > **NOTE: Quarantined v1 canonical contract. Non-authoritative for Sterling Native. See [promotion criteria](README.md).**
+>
+> **Superseded in v2**: `docs/canonical/philosophy.md` §1 (four-layer authority stack: Carrier → State → Operator → Search); crate structure `kernel ← search ← harness`.
+> v2 evidence: SPINE-001, SC-001.
 
 # Sterling Architecture Layers
 

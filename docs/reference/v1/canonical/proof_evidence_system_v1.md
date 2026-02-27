@@ -1,4 +1,7 @@
 > **NOTE: Quarantined v1 canonical contract. Non-authoritative for Sterling Native. See [promotion criteria](README.md).**
+>
+> **Superseded in v2**: `docs/canonical/search_evidence_contract.md`, `harness/src/bundle.rs` (ArtifactBundleV1, verify_bundle, VerificationProfile).
+> v2 evidence: SPINE-001 M3, SC-001 M4; lock tests `s1_m3_harness.rs`, `sc1_m4_tape_bundle.rs`.
 
 # Proof and Evidence System Contract
 

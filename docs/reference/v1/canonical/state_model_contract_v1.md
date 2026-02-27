@@ -1,4 +1,7 @@
 > **NOTE: Quarantined v1 canonical contract. Non-authoritative for Sterling Native. See [promotion criteria](README.md).**
+>
+> **Superseded in v2**: `docs/canonical/bytestate_compilation_boundary.md`, `kernel/src/carrier/` (compile, bytestate, registry), `search/src/` (search, node, frontier, graph).
+> v2 evidence: SPINE-001 M1, SC-001 M1; lock tests `s1_m1_golden_fixtures.rs`, `sc1_search_determinism.rs`.
 
 # State Model and Search Contract
 

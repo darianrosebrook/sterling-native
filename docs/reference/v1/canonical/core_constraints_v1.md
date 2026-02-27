@@ -1,4 +1,6 @@
 > **NOTE: Quarantined v1 canonical contract. Non-authoritative for Sterling Native. See [promotion criteria](README.md).**
+>
+> **Superseded in v2**: `docs/canonical/core_constraints.md` (INV-CORE-01 through INV-CORE-11, identical content promoted to v2 canonical).
 
 # Core Constraints v1
 

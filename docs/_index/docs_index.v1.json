@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "03db5751e0aae5b8",
-  "entry_count": 107,
+  "aggregate_hash": "0cf3f21b7895f3fe",
+  "entry_count": 108,
   "entries": [
     {
       "path": "docs/README.md",
@@ -101,6 +101,36 @@
       "scope": null,
       "content_hash": "af334aa3143e1419",
       "links": []
+    },
+    {
+      "path": "docs/architecture/v1_v2_parity_audit.md",
+      "title": "V1→V2 Parity Audit (Capability Migration Map)",
+      "authority": "architecture",
+      "status": "Living audit — updated 2026-02-27",
+      "scope": null,
+      "content_hash": "e02e137cc30f12e0",
+      "links": [
+        {
+          "text": "`v1_contract_promotion_queue.md`",
+          "target": "docs/architecture/v1_contract_promotion_queue.md"
+        },
+        {
+          "text": "`v1_contract_promotion_queue.md`",
+          "target": "docs/architecture/v1_contract_promotion_queue.md"
+        },
+        {
+          "text": "`v2_success_rubric.md`",
+          "target": "docs/architecture/v2_success_rubric.md"
+        },
+        {
+          "text": "`clean_sheet_architecture.md`",
+          "target": "docs/architecture/clean_sheet_architecture.md"
+        },
+        {
+          "text": "`docs/canonical/search_evidence_contract.md`",
+          "target": "docs/architecture/../canonical/search_evidence_contract.md"
+        }
+      ]
     },
     {
       "path": "docs/architecture/v2_success_rubric.md",
@@ -494,7 +524,7 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "9a8feeeddaf1a58e",
+      "content_hash": "211afff8f25d9f25",
       "links": [
         {
           "text": "promotion criteria",
@@ -542,7 +572,7 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "5f07ba777dd16755",
+      "content_hash": "57c224a69a60133a",
       "links": [
         {
           "text": "promotion criteria",
@@ -652,7 +682,7 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "b0f44d8ea7d8cedf",
+      "content_hash": "7904a086efd3e6c5",
       "links": [
         {
           "text": "promotion criteria",
@@ -794,7 +824,7 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "877e5809ac4cda49",
+      "content_hash": "23eb9ed711d12203",
       "links": [
         {
           "text": "promotion criteria",
@@ -882,7 +912,7 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "3009a11444023af2",
+      "content_hash": "989c49f2ea83bc46",
       "links": [
         {
           "text": "promotion criteria",
@@ -916,7 +946,7 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "4fb6bdb655fcb6cc",
+      "content_hash": "628d8f3d2ff26be2",
       "links": [
         {
           "text": "promotion criteria",
@@ -1147,7 +1177,7 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "8345174f8effe362",
+      "content_hash": "6076a8448c76b004",
       "links": [
         {
           "text": "promotion criteria",
@@ -1189,7 +1219,7 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "1d608308528cfebf",
+      "content_hash": "7a20c70b2ef1c96d",
       "links": [
         {
           "text": "promotion criteria",
@@ -1375,7 +1405,7 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "e1afc8ff8251327b",
+      "content_hash": "e3341cd3bb14f211",
       "links": [
         {
           "text": "promotion criteria",

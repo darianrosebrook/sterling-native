@@ -1,4 +1,7 @@
 > **NOTE: Quarantined v1 canonical contract. Non-authoritative for Sterling Native. See [promotion criteria](README.md).**
+>
+> **Superseded in v2**: `kernel/src/proof/hash.rs` (SHA-256 + domain prefixes), `kernel/src/proof/canon.rs` (single canonical JSON).
+> v2 evidence: SPINE-001 M1; lock tests `s1_m1_determinism.rs`, `s1_m1_golden_fixtures.rs`.
 
 # Hashing Contracts and Canonical Serialization
 
