@@ -190,7 +190,7 @@ for line in sys.stdin:
 
     elif ev == "text":
         text = entry.get("text", "")
-        if len(text) > 80:
+        if len(text) > 20:
             current["timeline"].append({"kind": "reasoning", "text": text})
 
     elif ev == "tool_use":
@@ -216,10 +216,10 @@ for line in sys.stdin:
         elif name == "Bash":
             cmd = entry.get("command", "")
             desc = entry.get("description", "")
-            tool_entry["command"] = cmd[:200]
+            tool_entry["command"] = cmd
             tool_entry["description"] = desc or ""
             if cmd:
-                current["commands"].append({"cmd": cmd[:200], "desc": desc or ""})
+                current["commands"].append({"cmd": cmd, "desc": desc or ""})
 
         current["timeline"].append(tool_entry)
         pending_tools[tid] = tool_entry
@@ -281,12 +281,13 @@ for i, turn in enumerate(turns):
             elif name in ("Write", "Edit"):
                 md_lines.append(f"`{name}` {event.get('file', '')}")
             elif name == "Bash":
-                cmd = event.get("command", "")[:120]
+                cmd = event.get("command", "")
                 desc = event.get("description", "")
-                if desc:
-                    md_lines.append(f"`Bash` {cmd} -- _{desc}_")
+                header = f"`Bash` _{desc}_" if desc else "`Bash`"
+                if len(cmd) > 120:
+                    md_lines.extend([header, "```", cmd, "```"])
                 else:
-                    md_lines.append(f"`Bash` {cmd}")
+                    md_lines.append(f"{header} `{cmd}`" if cmd else header)
             elif name in ("Grep",):
                 md_lines.append(f"`Grep` {event.get('pattern', '')}")
             elif name == "Task":
