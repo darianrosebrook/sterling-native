@@ -22,6 +22,8 @@ use sterling_kernel::carrier::trace_reader::bytes_to_trace;
 use sterling_kernel::proof::canon::canonical_json_bytes;
 use sterling_kernel::proof::hash::{canonical_hash, ContentHash};
 use sterling_kernel::proof::trace_hash::{payload_hash, step_chain};
+use sterling_search::tape_reader::read_tape;
+use sterling_search::tape_render::render_graph;
 
 /// Domain prefix for bundle artifact content hashing (harness-originated).
 pub const DOMAIN_BUNDLE_ARTIFACT: &[u8] = b"STERLING::BUNDLE_ARTIFACT::V1\0";
@@ -263,9 +265,54 @@ pub enum BundleVerifyError {
     },
     /// Canonical JSON error during verification.
     CanonError { detail: String },
+    /// Cert profile requires `search_tape.stap` but it is absent.
+    TapeMissing,
+    /// `search_tape.stap` failed to parse (wraps underlying `TapeParseError`).
+    TapeParseFailed { source: String },
+    /// Tape header field does not match the authoritative artifact/graph metadata value.
+    TapeHeaderBindingMismatch {
+        field: &'static str,
+        in_tape: String,
+        in_artifact: String,
+    },
+    /// Tape-rendered `SearchGraphV1` canonical JSON bytes differ from `search_graph.json`
+    /// (Cert profile only).
+    TapeGraphEquivalenceMismatch,
+    /// `tape_digest` in `verification_report.json` does not match
+    /// `search_tape.stap`'s `content_hash`.
+    TapeDigestMismatch { declared: String, recomputed: String },
+    /// `search_tape.stap` tape render to `SearchGraphV1` failed.
+    TapeRenderFailed { source: String },
 }
 
-/// Verify the internal consistency of a bundle.
+/// Verification profile controlling tape evidence requirements.
+///
+/// `Base` (default): everyday verification; if tape present, verify parse +
+/// chain hash + header bindings. Skips tape→graph equivalence.
+///
+/// `Cert`: certification-grade verification; requires tape presence, verifies
+/// everything in Base plus tape→graph canonical equivalence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VerificationProfile {
+    /// Tape verification is optional. If tape present, verify parse + bindings.
+    #[default]
+    Base,
+    /// Tape required. Full verification including tape→graph equivalence.
+    Cert,
+}
+
+/// Verify the internal consistency of a bundle using the default `Base` profile.
+///
+/// Equivalent to `verify_bundle_with_profile(bundle, VerificationProfile::Base)`.
+///
+/// # Errors
+///
+/// Returns the first [`BundleVerifyError`] encountered.
+pub fn verify_bundle(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError> {
+    verify_bundle_with_profile(bundle, VerificationProfile::Base)
+}
+
+/// Verify the internal consistency of a bundle with an explicit verification profile.
 ///
 /// This is a pure integrity check — it does NOT run `replay_verify()`.
 /// It proves:
@@ -282,11 +329,20 @@ pub enum BundleVerifyError {
 /// 8. If both `policy_snapshot.json` and `verification_report.json` exist: `policy_digest`
 ///    in the report matches `policy_snapshot.json`'s `content_hash`.
 /// 9. `codebook_hash` in the verification report is NOT verified (diagnostic field).
+/// 10. Tape verification (if `search_tape.stap` present or Cert profile):
+///     - `tape_digest` binding: report field matches artifact `content_hash`
+///     - Parse tape: chain hash integrity verified by reader
+///     - Header binding: fields match authoritative artifacts/graph metadata
+///     - Mode coherence: `scorer_digest` presence matches scorer mode
+///     - (Cert only) Tape→graph equivalence: rendered graph bytes == `search_graph.json`
 ///
 /// # Errors
 ///
 /// Returns the first [`BundleVerifyError`] encountered.
-pub fn verify_bundle(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError> {
+pub fn verify_bundle_with_profile(
+    bundle: &ArtifactBundleV1,
+    profile: VerificationProfile,
+) -> Result<(), BundleVerifyError> {
     // Step 1: Verify each artifact's content_hash.
     for artifact in bundle.artifacts.values() {
         let recomputed = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &artifact.content);
@@ -371,6 +427,9 @@ pub fn verify_bundle(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError>
 
     // Step 15: Candidate score source consistency with scorer artifact.
     verify_candidate_scorer_consistency(bundle)?;
+
+    // Step 16: Tape verification (profile-dependent).
+    verify_tape(bundle, profile)?;
 
     Ok(())
 }
@@ -819,6 +878,198 @@ fn verify_policy_digest_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleV
         });
     }
 
+    Ok(())
+}
+
+/// Tape verification pipeline (profile-dependent).
+///
+/// Base: if tape present, verify digest binding + parse + header bindings + mode coherence.
+/// Cert: require tape. Do everything Base does, plus tape→graph equivalence.
+#[allow(clippy::too_many_lines)]
+fn verify_tape(
+    bundle: &ArtifactBundleV1,
+    profile: VerificationProfile,
+) -> Result<(), BundleVerifyError> {
+    let tape_artifact = bundle.artifacts.get("search_tape.stap");
+    let graph_artifact = bundle.artifacts.get("search_graph.json");
+    let report_artifact = bundle.artifacts.get("verification_report.json");
+
+    // Step 16a: Profile gate.
+    match (tape_artifact, profile) {
+        (None, VerificationProfile::Cert) => return Err(BundleVerifyError::TapeMissing),
+        (None, VerificationProfile::Base) => return Ok(()),
+        _ => {}
+    }
+
+    // Tape is present from here.
+    let tape_art = tape_artifact.expect("tape presence checked above");
+
+    // Step 16b: tape_digest binding (report tape_digest == tape content_hash).
+    if let Some(report_art) = report_artifact {
+        let report: serde_json::Value =
+            serde_json::from_slice(&report_art.content).map_err(|e| {
+                BundleVerifyError::ReportParseError {
+                    detail: format!("{e:?}"),
+                }
+            })?;
+
+        if let Some(declared_tape_digest) = report.get("tape_digest").and_then(|v| v.as_str()) {
+            if tape_art.content_hash.as_str() != declared_tape_digest {
+                return Err(BundleVerifyError::TapeDigestMismatch {
+                    declared: declared_tape_digest.to_string(),
+                    recomputed: tape_art.content_hash.as_str().to_string(),
+                });
+            }
+        }
+    }
+
+    // Step 16c: Parse tape (chain hash verified internally by reader).
+    let tape = read_tape(&tape_art.content).map_err(|e| BundleVerifyError::TapeParseFailed {
+        source: format!("{e:?}"),
+    })?;
+
+    // Step 16d: Header binding against authoritative artifacts (not report).
+    let header = &tape.header.json;
+
+    // world_id: authoritative source is graph metadata.
+    if let Some(graph_art) = graph_artifact {
+        let graph: serde_json::Value =
+            serde_json::from_slice(&graph_art.content).map_err(|e| {
+                BundleVerifyError::CanonError {
+                    detail: format!("{e:?}"),
+                }
+            })?;
+
+        let metadata = &graph["metadata"];
+
+        // world_id
+        if let (Some(tape_val), Some(graph_val)) = (
+            header.get("world_id").and_then(|v| v.as_str()),
+            metadata.get("world_id").and_then(|v| v.as_str()),
+        ) {
+            if tape_val != graph_val {
+                return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                    field: "world_id",
+                    in_tape: tape_val.to_string(),
+                    in_artifact: graph_val.to_string(),
+                });
+            }
+        }
+
+        // registry_digest (both raw hex, from graph metadata)
+        check_tape_header_field(header, metadata, "registry_digest")?;
+
+        // search_policy_digest (both raw hex, from graph metadata)
+        check_tape_header_field(header, metadata, "search_policy_digest")?;
+
+        // root_state_fingerprint (both raw hex, from graph metadata)
+        check_tape_header_field(header, metadata, "root_state_fingerprint")?;
+    }
+
+    // policy_snapshot_digest: authoritative source is policy_snapshot.json content_hash.
+    if let Some(policy_art) = bundle.artifacts.get("policy_snapshot.json") {
+        if let Some(tape_val) = header
+            .get("policy_snapshot_digest")
+            .and_then(|v| v.as_str())
+        {
+            let artifact_hex = binding_hex(&policy_art.content_hash);
+            if tape_val != artifact_hex {
+                return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                    field: "policy_snapshot_digest",
+                    in_tape: tape_val.to_string(),
+                    in_artifact: artifact_hex.to_string(),
+                });
+            }
+        }
+    }
+
+    // scorer_digest: authoritative source is scorer.json content_hash.
+    let scorer_artifact = bundle.artifacts.get("scorer.json");
+    let tape_scorer_digest = header.get("scorer_digest").and_then(|v| v.as_str());
+
+    match (tape_scorer_digest, scorer_artifact) {
+        // Mode coherence: tape claims scorer but no artifact.
+        (Some(_), None) => {
+            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                field: "scorer_digest",
+                in_tape: tape_scorer_digest.unwrap_or("").to_string(),
+                in_artifact: "<absent>".to_string(),
+            });
+        }
+        // Mode coherence: artifact exists but tape has no scorer_digest.
+        (None, Some(_)) => {
+            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                field: "scorer_digest",
+                in_tape: "<absent>".to_string(),
+                in_artifact: scorer_artifact
+                    .map(|a| binding_hex(&a.content_hash).to_string())
+                    .unwrap_or_default(),
+            });
+        }
+        // Both present: verify match.
+        (Some(tape_val), Some(scorer_art)) => {
+            let artifact_hex = binding_hex(&scorer_art.content_hash);
+            if tape_val != artifact_hex {
+                return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                    field: "scorer_digest",
+                    in_tape: tape_val.to_string(),
+                    in_artifact: artifact_hex.to_string(),
+                });
+            }
+        }
+        // Neither: Uniform mode, fine.
+        (None, None) => {}
+    }
+
+    // Step 16e: schema_version check.
+    if let Some(sv) = header.get("schema_version").and_then(|v| v.as_str()) {
+        if sv != "search_tape.v1" {
+            return Err(BundleVerifyError::TapeParseFailed {
+                source: format!("unexpected tape schema_version: {sv}"),
+            });
+        }
+    }
+
+    // Step 16f (Cert only): Tape→graph canonical equivalence.
+    if profile == VerificationProfile::Cert {
+        if let Some(graph_art) = graph_artifact {
+            let rendered_graph =
+                render_graph(&tape).map_err(|e| BundleVerifyError::TapeRenderFailed {
+                    source: format!("{e:?}"),
+                })?;
+            let rendered_bytes = rendered_graph.to_canonical_json_bytes().map_err(|e| {
+                BundleVerifyError::TapeRenderFailed {
+                    source: format!("{e:?}"),
+                }
+            })?;
+            if rendered_bytes != graph_art.content {
+                return Err(BundleVerifyError::TapeGraphEquivalenceMismatch);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Compare a tape header field against the same field in graph metadata.
+/// Both use raw hex format (no `sha256:` prefix).
+fn check_tape_header_field(
+    header: &serde_json::Value,
+    metadata: &serde_json::Value,
+    field: &'static str,
+) -> Result<(), BundleVerifyError> {
+    if let (Some(tape_val), Some(graph_val)) = (
+        header.get(field).and_then(|v| v.as_str()),
+        metadata.get(field).and_then(|v| v.as_str()),
+    ) {
+        if tape_val != graph_val {
+            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                field,
+                in_tape: tape_val.to_string(),
+                in_artifact: graph_val.to_string(),
+            });
+        }
+    }
     Ok(())
 }
 
