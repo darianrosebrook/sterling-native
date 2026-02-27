@@ -54,3 +54,67 @@ pub fn rebuild_with_modified_graph(
         .collect();
     build_bundle(artifacts).unwrap()
 }
+
+/// Replace the raw bytes of `search_tape.stap` in a bundle and rebuild with
+/// consistent content hashes, manifest, and digest basis.
+///
+/// The report's `tape_digest` is updated to match the new tape content hash,
+/// so tests bypass `TapeDigestMismatch` and reach deeper tape-specific checks.
+///
+/// # Panics
+///
+/// Panics if the bundle is missing `search_tape.stap` or `verification_report.json`.
+pub fn rebuild_with_modified_tape(
+    bundle: &ArtifactBundleV1,
+    modify_bytes: impl FnOnce(&[u8]) -> Vec<u8>,
+) -> ArtifactBundleV1 {
+    let tape_artifact = bundle.artifacts.get("search_tape.stap").unwrap();
+    let modified_tape_bytes = modify_bytes(&tape_artifact.content);
+    let new_tape_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &modified_tape_bytes);
+
+    // Update the report's tape_digest to match the modified tape.
+    let report_artifact = bundle.artifacts.get("verification_report.json").unwrap();
+    let mut report_json: serde_json::Value =
+        serde_json::from_slice(&report_artifact.content).unwrap();
+    report_json["tape_digest"] = serde_json::json!(new_tape_hash.as_str());
+    let modified_report_bytes = canonical_json_bytes(&report_json).unwrap();
+
+    let artifacts: Vec<(String, Vec<u8>, bool)> = bundle
+        .artifacts
+        .values()
+        .map(|a| {
+            if a.name == "search_tape.stap" {
+                (a.name.clone(), modified_tape_bytes.clone(), a.normative)
+            } else if a.name == "verification_report.json" {
+                (a.name.clone(), modified_report_bytes.clone(), a.normative)
+            } else {
+                (a.name.clone(), a.content.clone(), a.normative)
+            }
+        })
+        .collect();
+    build_bundle(artifacts).unwrap()
+}
+
+/// Rebuild a bundle with one artifact removed entirely.
+///
+/// Useful for testing "missing artifact" error paths after the read boundary.
+/// The resulting bundle has consistent content hashes and digest basis for the
+/// remaining artifacts.
+///
+/// # Panics
+///
+/// Panics if the named artifact does not exist in the bundle.
+#[must_use]
+pub fn rebuild_without_artifact(bundle: &ArtifactBundleV1, remove_name: &str) -> ArtifactBundleV1 {
+    assert!(
+        bundle.artifacts.contains_key(remove_name),
+        "cannot remove non-existent artifact: {remove_name}"
+    );
+    let artifacts: Vec<(String, Vec<u8>, bool)> = bundle
+        .artifacts
+        .values()
+        .filter(|a| a.name != remove_name)
+        .map(|a| (a.name.clone(), a.content.clone(), a.normative))
+        .collect();
+    build_bundle(artifacts).unwrap()
+}
