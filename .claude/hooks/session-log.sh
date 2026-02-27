@@ -131,7 +131,13 @@ MDEOF
     else
       empty
     end
-  ' "$transcript" 2>/dev/null | python3 - "$LOG_DIR" "$CWD" "$SESSION_ID" "$started_at" "$model" "$branch" "$head_sha" "$dirty_count" "$start_sha" << 'PYEOF'
+  ' "$transcript" 2>/dev/null > "$LOG_DIR/.events.jsonl"
+
+  # Write python script to temp file (can't pipe + heredoc simultaneously)
+  local pyscript
+  pyscript=$(mktemp "${TMPDIR:-/tmp}/session-log-XXXX.py")
+  trap "rm -f '$pyscript'" RETURN
+  cat > "$pyscript" << 'PYEOF'
 import json, sys, os
 
 log_dir = sys.argv[1]
@@ -420,6 +426,10 @@ with open(os.path.join(log_dir, "session.md"), "w") as f:
     f.write(f"| Total turns | {len(turn_index)} |\n")
 
 PYEOF
+
+  # Run the python script with events as input
+  python3 "$pyscript" "$LOG_DIR" "$CWD" "$SESSION_ID" "$started_at" "$model" "$branch" "$head_sha" "$dirty_count" "$start_sha" < "$LOG_DIR/.events.jsonl"
+  rm -f "$LOG_DIR/.events.jsonl"
 }
 
 # ============================================================
