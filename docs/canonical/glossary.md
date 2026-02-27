@@ -53,11 +53,27 @@ scope: "Definitions enforced by contracts, invariants, and ADRs. For the compreh
 
 ## Search Layer
 
-**Episode:** One reasoning session from initial state to goal or failure. All intermediate states, applied operators, and evidence are recorded in ByteTrace for replay and audit.
+**SearchNodeV1:** A node in the search graph representing a compiled state plus metadata (depth, cost, parent, state fingerprint). Nodes are created during frontier expansion and recorded in the search transcript.
+
+**BestFirstFrontier:** The frontier data structure for search. Orders nodes by `(f_cost, depth, creation_order)` — lower cost first, shallower first, older first. Uses a visited set keyed by state fingerprint for deduplication.
+
+**SearchGraphV1:** The canonical JSON artifact (`search_graph.json`) recording the full search transcript: expansion events, candidate records, node summaries, metadata bindings, and termination reason. Deterministic across runs given identical inputs. This is the search-layer analogue of ByteTrace — the auditable record of what happened.
+
+**SearchPolicyV1:** Controls search behavior: dedup strategy (`DedupKeyV1`), step budget, candidate limits per node, pruning policy. Captured as part of the bundle's metadata bindings and bound into the verification report.
+
+**SearchTapeV1 (.stap):** Binary hot-loop event log recording the search process with minimal overhead. Contains a canonical JSON header (binding fields: world_id, registry_digest, policy digests, scorer_digest, root state fingerprint, schema version), record frames for each search event, and a footer. Chain-hash integrity across records ensures tamper detection during parsing.
+
+**Tape chain hash:** A running SHA-256 hash accumulated across tape records. Each record's hash input includes the previous record's hash, forming a hash chain. Verified by the tape reader during parsing — any tampered record breaks the chain.
+
+**Tape→graph equivalence:** A Cert-mode verification check: render a parsed tape into `SearchGraphV1`, serialize to canonical JSON bytes, and compare byte-for-byte to the bundle's `search_graph.json`. Proves the tape and graph describe identical search behavior.
+
+**ValueScorer:** Trait for scoring candidate actions during search. Implementations: `UniformScorer` (all candidates score equally — baseline) and `TableScorer` (per-candidate bonuses from an injected lookup table with digest binding).
+
+**Episode:** One reasoning session from initial state to goal or failure. All intermediate states, applied operators, and evidence are recorded for replay and audit.
 
 **CommitIndex:** A monotonic counter indexing each committed operator application in an episode. Ensures no gaps or out-of-order events in the recorded sequence.
 
-**Landmark:** A discovered state that reliably leads to goal satisfaction. Sterling compresses experience into landmarks: "if we can reach this state, the goal is easy." Landmarks are durable memory artifacts.
+**Landmark:** A discovered state that reliably leads to goal satisfaction. Sterling compresses experience into landmarks: "if we can reach this state, the goal is easy." Landmarks are durable memory artifacts. (Not yet implemented in v2.)
 
 ---
 
@@ -75,13 +91,37 @@ scope: "Definitions enforced by contracts, invariants, and ADRs. For the compreh
 
 ---
 
-## Evidence and Learning
+## Evidence Layer
+
+**ArtifactBundleV1:** A content-addressed evidence container produced by the harness. Contains named artifacts (each with content hash and normative flag), a manifest, a digest basis (the normative projection), and a bundle digest. Verified fail-closed by `verify_bundle()`.
+
+**Normative artifact:** An artifact that participates in the bundle's digest basis. Normative artifacts are canonicalized and cryptographically bound into the bundle identity. Examples: `search_graph.json`, `policy_snapshot.json`, `search_tape.stap`. Observational artifacts (like `.bst1` traces) are bound indirectly via hash commitments in the normative verification report.
+
+**Digest basis:** The canonical JSON projection of a bundle's normative artifacts, sorted by name. The bundle digest is computed over the digest basis bytes under a domain-separated hash (`DOMAIN_BUNDLE_DIGEST`).
+
+**VerificationProfile:** Controls verification strictness for bundles.
+- **Base:** Verifies integrity (content hashes, manifest, metadata bindings) when evidence is present. Tape is optional — bundles from earlier milestones without tape pass Base verification.
+- **Cert:** Requires tape presence. Adds tape→graph canonical byte equivalence. Cert is the promotion-eligible profile.
+
+`verify_bundle()` defaults to Base. `verify_bundle_with_profile(bundle, Cert)` enables the stricter profile.
+
+**PolicySnapshotV1:** A canonical JSON artifact capturing the policy configuration used for a run. Included as a normative bundle artifact and bound into the verification report via `policy_digest`.
+
+**Verification report:** A normative JSON artifact (`verification_report.json`) containing binding digests that cross-reference other artifacts in the bundle: `search_graph_digest`, `policy_digest`, `tape_digest`, `codebook_hash`, and optional `scorer_digest`. The report is the "glue" that binds independently-hashed artifacts into a coherent evidence package.
+
+**Two evidence layers:** Sterling Native produces distinct evidence artifacts certifying different layers:
+1. **Carrier replay** — `ByteTrace` (`.bst1`): proves deterministic compile→apply execution.
+2. **Search replay** — `SearchTapeV1` (`.stap`) + `SearchGraphV1`: proves deterministic search execution with chain-hash integrity and (Cert) tape→graph equivalence.
+
+Both can coexist in a bundle and are verified independently.
+
+## Learning
 
 **Dual-Stream Evidence:** Sterling's induction substrate uses two evidence streams:
 - **Stream A (SemanticDeltaIR):** What changed in the utterance's semantic content when an operator was applied.
 - **Stream B (ObservationIR):** What happened in the world/dialogue as a result of the transition.
 
-Together they link "what changed" with "why it mattered" for credit assignment.
+Together they link "what changed" with "why it mattered" for credit assignment. (Not yet implemented in v2.)
 
 **Claim / Falsifier:** The core unit of Sterling's proof system. A **claim** is a testable assertion about a capability. A **falsifier** is a concrete condition that would disprove the claim. Claims without falsifiers are not admissible.
 

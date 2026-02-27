@@ -1,5 +1,5 @@
 ---
-status: Design target
+status: "Living scorecard — updated 2026-02-27"
 authority: architecture
 date: 2026-02-23
 ---
@@ -43,6 +43,14 @@ Why it matters vs transformer-centric stacks:
 
 * Most agent frameworks can’t make “bit-identical run replay” a contract because the model is stochastic and the orchestration isn’t content-addressed end-to-end.
 
+**Current v2 status: Proven**
+
+* Carrier layer: `compile()` + `apply()` + `replay_verify()` produce bit-identical ByteState/ByteTrace. 30+ lock tests including N=10 in-proc, cross-process (4 env variants), and cross-OS (CI: Linux + macOS). Golden fixtures constrain output against v1 oracle. (SPINE-001 M1–M4)
+* Search layer: `search()` / `search_with_tape()` produce bit-identical SearchGraphV1 and SearchTapeV1 bytes. 10x determinism tests, cross-process search fixtures, tape chain-hash integrity verification. (SC-001 M1–M4)
+* Bundle round-trip: `write_bundle_dir()` → `read_bundle_dir()` → `verify_bundle()` preserves all artifacts with identical bytes and content hashes. (SC-001 M3.0)
+* Evidence: SPINE-001, SC-001 specs; `tests/lock/tests/s1_m1_determinism.rs`, `tests/lock/tests/sc1_search_determinism.rs`, `tests/lock/tests/sc1_m4_tape_bundle.rs`
+* Next falsifier: a new world type (stochastic, partially observable) that requires seed/witness binding not yet implemented.
+
 ---
 
 2. Trace completeness is 100%: no hidden routers, no unlogged decisions
@@ -72,6 +80,14 @@ Why it matters:
 
 * This is the operational form of INV-CORE-08. If you can’t prove this, “no hidden routers” is aspirational.
 
+**Current v2 status: Partial — proven for search, not yet tested for cross-domain or tool use**
+
+* Search trace completeness: SearchTapeV1 records every node creation, expansion, candidate evaluation, dead-end, and termination. SearchGraphV1 records every ExpandEventV1 and CandidateRecordV1. INV-SC-03 (“no silent pruning”) enforced by lock tests. (SC-001 M1)
+* Tape→graph equivalence (Cert): proves tape and graph describe identical behavior — no hidden decisions in either representation. (SC-001 M4)
+* Not yet testable: MetaPlan (cross-domain routing), tool transcripts, multi-world composition. These require worlds that don’t exist yet.
+* Evidence: SC-001 spec; `tests/lock/tests/sc1_search_determinism.rs` (graph completeness), `tests/lock/tests/sc1_m4_tape_bundle.rs` (tape equivalence)
+* Next falsifier: a multi-domain world where cross-domain selection must be traced as an operator application.
+
 ---
 
 3. Semantic drift is structurally prevented, not “disciplined”
@@ -99,6 +115,16 @@ Responsible components:
 Why it matters:
 
 * Transformer-centric stacks often accept drift as normal (“the model updated,” “prompt changed,” “tool behavior changed”). You’re claiming drift control as a core advantage.
+
+**Current v2 status: Proven**
+
+* Golden digest locks: `tests/fixtures/rome_2x4_golden.json` (v1 oracle), cross-process golden output matching, canonical JSON ordering-invariance tests. (SPINE-001 M1)
+* Single canonical implementation: one `canonical_hash()`, one `canonical_json_bytes()`, enforced by `S1-M1-ONE-CANONICALIZER` lock test that greps for alternative implementations. (SPINE-001 M1)
+* Content-addressed artifacts: every bundle artifact has a content hash verified at the read boundary. Bundle digest computed from normative projection only. Tampered artifacts fail `verify_bundle()`. (SPINE-001 M3, SC-001 M3.0)
+* Schema/registry versioning: `SchemaDescriptor` and `RegistrySnapshot` are part of the compilation boundary triple; changes trigger epoch transitions. (SPINE-001 M1)
+* Zero drift incidents across 439 tests and 5 completed milestones.
+* Evidence: SPINE-001, SC-001 specs; `tests/lock/tests/s1_m1_golden_fixtures.rs`, `tests/lock/tests/s1_m1_determinism.rs`
+* Next falsifier: a schema evolution scenario where a payload change must trigger an epoch bump or fail.
 
 ---
 
@@ -131,6 +157,12 @@ Why it matters:
 
 * “Tool calling agents” often log tool I/O, but they don’t make transactional semantics a core capability with a proof trail.
 
+**Current v2 status: Not started**
+
+* No tool-use world exists in v2. The Transactional KV Store truth-regime world is proposed but not built.
+* The harness infrastructure (bundle verification, policy snapshots, fail-closed checks) would support tool transcript binding, but the operator contract for tool actions (stage/verify/rollback) is not yet defined.
+* Next step: build a minimal tool-use world that exercises the stage/commit/rollback pattern through the existing harness.
+
 ---
 
 5. Transfer is real: the same capability holds across orthogonal truth regimes
@@ -159,6 +191,14 @@ Why it matters:
 
 * This is where “reasoning system” distinguishes itself from “a solver that learned one environment.”
 
+**Current v2 status: Partial — structural transfer proven, semantic transfer not yet tested**
+
+* 3 worlds share the same harness contract (`WorldHarnessV1` + `SearchWorldV1`): RomeMini, RomeMiniSearch, SlotLatticeSearch (6 regimes). All produce identical bundle structures, pass the same `verify_bundle()` pipeline, and use the same evidence schemas.
+* SlotLatticeSearch exercises diverse search behaviors (traps, deep paths, wide branching, scale) without world-specific harness modifications — demonstrating structural transfer of the search + evidence pipeline.
+* Not yet tested: capability transfer in the claim-catalog sense (same claim IDs satisfied across domains with different semantics). Current worlds are all “search over slot lattice” variants, not structurally different truth regimes.
+* Evidence: SC-001 M1, M3.1 specs; `tests/lock/tests/sc1_m3_1_slot_lattice.rs` (6 regimes)
+* Next falsifier: a world with fundamentally different state semantics (e.g., partial observability) that must pass the same search + evidence pipeline without world-specific patches.
+
 ---
 
 6. Partial observability is handled with explicit belief discipline
@@ -185,6 +225,12 @@ Responsible components:
 Why it matters:
 
 * Transformer-centric agents often appear to reason under partial observability but can’t prove belief discipline. Sterling can, if you force belief into the substrate.
+
+**Current v2 status: Not started**
+
+* No partially observable world exists in v2. The Mastermind truth-regime world is proposed but not built.
+* The ByteState substrate can encode belief state (it’s just slots), but no world exercises probe operators or belief-size monotonicity claims.
+* Next step: build a minimal Mastermind-like world where probe operators reveal information and belief set size is trace-visible.
 
 ---
 
@@ -215,6 +261,12 @@ Responsible components:
 Why it matters:
 
 * This is the line between “we tested it” and “we can reproduce exactly what we tested.”
+
+**Current v2 status: Not started**
+
+* No stochastic world exists in v2. The Slippery Gridworld truth-regime world is proposed but not built.
+* The bundle infrastructure supports seed/witness binding (any data can be included as an artifact), but no world exercises stochastic transitions or distributional evaluation.
+* Next step: build a minimal stochastic world with seed-bound transitions and demonstrate exact replay of recorded trajectories.
 
 ---
 
@@ -251,6 +303,12 @@ Why it matters:
 
 * This is the “scientific method loop” turned into a governed capability pipeline instead of a research playground.
 
+**Current v2 status: Not started**
+
+* No induction pipeline exists in v2. The `operators/induced/` module structure is proposed but not built.
+* The operator registry (`RegistryV1`) supports adding operators, and the harness produces evidence bundles that could serve as promotion inputs, but no propose/evaluate/promote/store pipeline exists.
+* Next step: define the v2 induction contract and build a minimal propose→evaluate→promote cycle for one operator family.
+
 ---
 
 9. Transformer demotion is real: ML is helpful, but never authoritative
@@ -284,6 +342,35 @@ Responsible components:
 Why it matters:
 
 * This is the decisive evidence that Sterling is not “an LLM agent with extra steps.”
+
+**Current v2 status: Proven (structurally) — no ML exists to demote yet**
+
+* The entire search + harness system runs with zero ML dependencies. The `kernel` and `search` crates have no neural component. The `ValueScorer` trait is the only extension point for ML-influenced scoring, and it is advisory-only: it cannot create actions, bypass legality, or suppress candidates.
+* `UniformScorer` (no ML) and `TableScorer` (injected lookup, no ML) both produce valid, deterministic, verifiable bundles. Swapping scorers changes search ordering but not trace correctness or bundle integrity.
+* The API boundary enforces INV-CORE-13 structurally: the `search()` function takes a `&dyn ValueScorer` that can only return scores, not mutate state.
+* Not yet demonstrated: an actual ML scorer integrated and then removed, showing the system degrades gracefully. This requires the `ml/` crate (not started).
+* Evidence: `search/src/scorer.rs` (ValueScorer trait), SC-001 M3.2 (TableScorer tests prove scorer is advisory-only)
+* Next falsifier: integrate a real ML scorer and demonstrate that removing it preserves trace correctness and bundle verification.
+
+---
+
+## Scorecard summary (as of 2026-02-27)
+
+| # | Claim | Status | Class |
+|---|-------|--------|-------|
+| 1 | Deterministic replay | **Proven** | Hard win |
+| 2 | Trace completeness | **Partial** (search proven; cross-domain/tool not tested) | Hard win |
+| 3 | Semantic drift prevention | **Proven** | Hard win |
+| 4 | Tool safety transactional | **Not started** | Hard win |
+| 5 | Transfer across truth regimes | **Partial** (structural transfer; semantic transfer not tested) | Competitive win |
+| 6 | Partial observability belief discipline | **Not started** | Competitive win |
+| 7 | Stochastic environment certification | **Not started** | Competitive win |
+| 8 | Learning / induction | **Not started** | Competitive win |
+| 9 | Transformer demotion | **Proven** (structurally; no ML to demote yet) | Hard win |
+
+**Hard wins**: 3 of 5 proven, 1 partial, 1 not started. The substrate for hard wins is largely in place.
+
+**Competitive wins**: 0 of 4 proven, 1 partial, 3 not started. These require domain diversity (truth-regime worlds) and the induction pipeline — the primary frontier for v2.
 
 ---
 

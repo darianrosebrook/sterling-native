@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "6430dc2fe4645acd",
-  "entry_count": 106,
+  "aggregate_hash": "03db5751e0aae5b8",
+  "entry_count": 107,
   "entries": [
     {
       "path": "docs/README.md",
@@ -99,16 +99,16 @@
       "authority": "architecture",
       "status": null,
       "scope": null,
-      "content_hash": "d0852c56dcb90346",
+      "content_hash": "af334aa3143e1419",
       "links": []
     },
     {
       "path": "docs/architecture/v2_success_rubric.md",
       "title": "Sterling v2 Success Rubric",
       "authority": "architecture",
-      "status": "Design target",
+      "status": "Living scorecard — updated 2026-02-27",
       "scope": null,
-      "content_hash": "ba68f6707b5f8dce",
+      "content_hash": "b164be1482ec02ec",
       "links": []
     },
     {
@@ -117,7 +117,7 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "5d504945c1233f3e",
+      "content_hash": "5827570d6f2635dd",
       "links": []
     },
     {
@@ -244,7 +244,7 @@
       "authority": "canonical",
       "status": "v2 canonical — curated vocabulary for Sterling Native.",
       "scope": "Definitions enforced by contracts, invariants, and ADRs. For the comprehensive v1 glossary (historical), see docs/reference/v1/glossary_full.md.",
-      "content_hash": "ee95bb7f56039c73",
+      "content_hash": "ad65b085738611f7",
       "links": [
         {
           "text": "`code32_bytestate.md`",
@@ -299,7 +299,7 @@
       "authority": "canonical",
       "status": "v2 canonical",
       "scope": null,
-      "content_hash": "a21457dbc732cf11",
+      "content_hash": "a2590b8fa0a73305",
       "links": [
         {
           "text": "docs/reference/v1/philosophy_full.md",
@@ -334,6 +334,15 @@
           "target": "docs/canonical/../reference/v1/philosophy_full.md"
         }
       ]
+    },
+    {
+      "path": "docs/canonical/search_evidence_contract.md",
+      "title": "Search Evidence Contract",
+      "authority": "canonical",
+      "status": "v2 canonical",
+      "scope": null,
+      "content_hash": "90a335dfc3d24741",
+      "links": []
     },
     {
       "path": "docs/policy/benchmarking_policy.md",

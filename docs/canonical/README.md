@@ -20,6 +20,7 @@ This directory contains **normative** contracts, invariants, and definitions for
 | `neural_usage_contract.md` | Rules for neural component usage (advisory only, API-enforced) |
 | `bytestate_compilation_boundary.md` | Compilation boundary contract |
 | `code32_bytestate.md` | Code32 identity atom, ByteStateV1 substrate, ByteTraceV1 evidence format |
+| `search_evidence_contract.md` | Search bundle artifacts, verification profiles (Base/Cert), verification pipeline, tape→graph equivalence |
 
 ## Relationship to v1
 

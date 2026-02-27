@@ -26,7 +26,7 @@ compile(payload, schema_descriptor, registry_snapshot) → ByteState
 
 ByteState is the only runtime truth. Nothing bypasses compilation. This is the hardest constraint in the system and the one that prevents domain coupling.
 
-**Four-layer authority stack vs. seven-module packaging:** The conceptual authority stack is four layers: **Carrier → State → Operator → Search**. Each layer depends only on the layer below it. The repo and doc structure uses seven modules (carrier, state, operators, search, proof, worlds, ml) — the additional three are packaging concerns (proof artifacts, domain adapters, neural integration) that cut across the authority stack but do not add authority layers.
+**Four-layer authority stack vs. crate packaging:** The conceptual authority stack is four layers: **Carrier → State → Operator → Search**. Each layer depends only on the layer below it. The repo currently uses three crates with one-way dependencies: `kernel` (carrier + state + operators + proof/hash) ← `search` (search engine + tape) ← `harness` (orchestration + bundles + verification + worlds). This is a packaging choice, not an authority change — the authority stack remains four layers regardless of how many crates express them.
 
 **Governing decisions:** [ADR 0001](../adr/0001-compilation-boundary.md), [`bytestate_compilation_boundary.md`](bytestate_compilation_boundary.md)
 
@@ -74,11 +74,20 @@ This is enforced by API shape, not by policy document. The neural component neve
 
 ---
 
-## 4. ByteTrace is the replay spine
+## 4. Evidence is layered, not monolithic
 
-ByteTrace is the canonical persisted trace. StateGraph is a derived view — useful for visualization and debugging, but not the replay authority. If ByteTrace and StateGraph disagree, ByteTrace wins.
+Sterling Native produces distinct evidence artifacts, each certifying a different layer of computation:
 
-**Governing decision:** [ADR 0002](../adr/0002-byte-trace-is-canonical.md)
+| Layer | Evidence artifact | What it certifies |
+|-------|------------------|-------------------|
+| **Carrier** | `ByteTrace` (`.bst1`) | Deterministic compile→apply execution. Frame-by-frame replay with O(1) divergence localization. |
+| **Search** | `SearchTapeV1` (`.stap`) + `SearchGraphV1` (`search_graph.json`) | Deterministic search: expansion ordering, candidate outcomes, termination. Tape has chain-hash integrity; graph is the canonical transcript. |
+
+Both coexist in an `ArtifactBundleV1` and are verified independently. The tape is the minimal hot-loop recorder; the graph is the analysis-friendly view. In Cert mode, tape→graph canonical byte equivalence is required — proving both describe identical search behavior.
+
+**Within each layer, the binary evidence format is authoritative.** ByteTrace is the replay spine for carrier execution (StateGraph is derived). SearchTape is the evidence spine for search (SearchGraph is the derived canonical view, verified equivalent under Cert).
+
+**Governing decision:** [ADR 0002](../adr/0002-byte-trace-is-canonical.md) (ByteTrace authority for carrier layer; the same principle extends to SearchTape for the search layer)
 
 ---
 
