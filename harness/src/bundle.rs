@@ -905,22 +905,27 @@ fn verify_tape(
     let tape_art = tape_artifact.expect("tape presence checked above");
 
     // Step 16b: tape_digest binding (report tape_digest == tape content_hash).
-    if let Some(report_art) = report_artifact {
-        let report: serde_json::Value =
-            serde_json::from_slice(&report_art.content).map_err(|e| {
-                BundleVerifyError::ReportParseError {
-                    detail: format!("{e:?}"),
-                }
-            })?;
-
-        if let Some(declared_tape_digest) = report.get("tape_digest").and_then(|v| v.as_str()) {
-            if tape_art.content_hash.as_str() != declared_tape_digest {
-                return Err(BundleVerifyError::TapeDigestMismatch {
-                    declared: declared_tape_digest.to_string(),
-                    recomputed: tape_art.content_hash.as_str().to_string(),
-                });
+    // Fail-closed: if tape is present, report MUST exist and MUST contain tape_digest.
+    let report_art = report_artifact.ok_or(BundleVerifyError::ReportFieldMissing {
+        field: "verification_report.json (required when tape present)".to_string(),
+    })?;
+    let report: serde_json::Value =
+        serde_json::from_slice(&report_art.content).map_err(|e| {
+            BundleVerifyError::ReportParseError {
+                detail: format!("{e:?}"),
             }
-        }
+        })?;
+    let declared_tape_digest = report
+        .get("tape_digest")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::ReportFieldMissing {
+            field: "tape_digest".to_string(),
+        })?;
+    if tape_art.content_hash.as_str() != declared_tape_digest {
+        return Err(BundleVerifyError::TapeDigestMismatch {
+            declared: declared_tape_digest.to_string(),
+            recomputed: tape_art.content_hash.as_str().to_string(),
+        });
     }
 
     // Step 16c: Parse tape (chain hash verified internally by reader).
@@ -929,58 +934,54 @@ fn verify_tape(
     })?;
 
     // Step 16d: Header binding against authoritative artifacts (not report).
+    // Fail-closed: if tape is present, graph MUST be present (tape is a search artifact).
     let header = &tape.header.json;
 
-    // world_id: authoritative source is graph metadata.
-    if let Some(graph_art) = graph_artifact {
-        let graph: serde_json::Value =
-            serde_json::from_slice(&graph_art.content).map_err(|e| {
-                BundleVerifyError::CanonError {
-                    detail: format!("{e:?}"),
-                }
-            })?;
-
-        let metadata = &graph["metadata"];
-
-        // world_id
-        if let (Some(tape_val), Some(graph_val)) = (
-            header.get("world_id").and_then(|v| v.as_str()),
-            metadata.get("world_id").and_then(|v| v.as_str()),
-        ) {
-            if tape_val != graph_val {
-                return Err(BundleVerifyError::TapeHeaderBindingMismatch {
-                    field: "world_id",
-                    in_tape: tape_val.to_string(),
-                    in_artifact: graph_val.to_string(),
-                });
+    let graph_art = graph_artifact.ok_or(BundleVerifyError::TapeParseFailed {
+        source: "search_graph.json required when search_tape.stap present".to_string(),
+    })?;
+    let graph: serde_json::Value =
+        serde_json::from_slice(&graph_art.content).map_err(|e| {
+            BundleVerifyError::CanonError {
+                detail: format!("{e:?}"),
             }
-        }
+        })?;
+    let metadata = &graph["metadata"];
 
-        // registry_digest (both raw hex, from graph metadata)
-        check_tape_header_field(header, metadata, "registry_digest")?;
+    // world_id (fail-closed: require both sides)
+    check_tape_header_field(header, metadata, "world_id")?;
 
-        // search_policy_digest (both raw hex, from graph metadata)
-        check_tape_header_field(header, metadata, "search_policy_digest")?;
+    // registry_digest (both raw hex, from graph metadata)
+    check_tape_header_field(header, metadata, "registry_digest")?;
 
-        // root_state_fingerprint (both raw hex, from graph metadata)
-        check_tape_header_field(header, metadata, "root_state_fingerprint")?;
-    }
+    // search_policy_digest (both raw hex, from graph metadata)
+    check_tape_header_field(header, metadata, "search_policy_digest")?;
+
+    // root_state_fingerprint (both raw hex, from graph metadata)
+    check_tape_header_field(header, metadata, "root_state_fingerprint")?;
 
     // policy_snapshot_digest: authoritative source is policy_snapshot.json content_hash.
-    if let Some(policy_art) = bundle.artifacts.get("policy_snapshot.json") {
-        if let Some(tape_val) = header
-            .get("policy_snapshot_digest")
-            .and_then(|v| v.as_str())
-        {
-            let artifact_hex = binding_hex(&policy_art.content_hash);
-            if tape_val != artifact_hex {
-                return Err(BundleVerifyError::TapeHeaderBindingMismatch {
-                    field: "policy_snapshot_digest",
-                    in_tape: tape_val.to_string(),
-                    in_artifact: artifact_hex.to_string(),
-                });
-            }
-        }
+    // Fail-closed: require policy artifact and tape header field.
+    let policy_art = bundle.artifacts.get("policy_snapshot.json").ok_or(
+        BundleVerifyError::TapeParseFailed {
+            source: "policy_snapshot.json required when search_tape.stap present".to_string(),
+        },
+    )?;
+    let tape_policy_val = header
+        .get("policy_snapshot_digest")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::TapeHeaderBindingMismatch {
+            field: "policy_snapshot_digest",
+            in_tape: "<missing>".to_string(),
+            in_artifact: binding_hex(&policy_art.content_hash).to_string(),
+        })?;
+    let artifact_hex = binding_hex(&policy_art.content_hash);
+    if tape_policy_val != artifact_hex {
+        return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+            field: "policy_snapshot_digest",
+            in_tape: tape_policy_val.to_string(),
+            in_artifact: artifact_hex.to_string(),
+        });
     }
 
     // scorer_digest: authoritative source is scorer.json content_hash.
@@ -1021,30 +1022,33 @@ fn verify_tape(
         (None, None) => {}
     }
 
-    // Step 16e: schema_version check.
-    if let Some(sv) = header.get("schema_version").and_then(|v| v.as_str()) {
-        if sv != "search_tape.v1" {
-            return Err(BundleVerifyError::TapeParseFailed {
-                source: format!("unexpected tape schema_version: {sv}"),
-            });
-        }
+    // Step 16e: schema_version check (fail-closed: must be present and correct).
+    let schema_version = header
+        .get("schema_version")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::TapeParseFailed {
+            source: "tape header missing required schema_version field".to_string(),
+        })?;
+    if schema_version != "search_tape.v1" {
+        return Err(BundleVerifyError::TapeParseFailed {
+            source: format!("unexpected tape schema_version: {schema_version}"),
+        });
     }
 
     // Step 16f (Cert only): Tape→graph canonical equivalence.
+    // graph_art is already required above (fail-closed when tape present).
     if profile == VerificationProfile::Cert {
-        if let Some(graph_art) = graph_artifact {
-            let rendered_graph =
-                render_graph(&tape).map_err(|e| BundleVerifyError::TapeRenderFailed {
-                    source: format!("{e:?}"),
-                })?;
-            let rendered_bytes = rendered_graph.to_canonical_json_bytes().map_err(|e| {
-                BundleVerifyError::TapeRenderFailed {
-                    source: format!("{e:?}"),
-                }
+        let rendered_graph =
+            render_graph(&tape).map_err(|e| BundleVerifyError::TapeRenderFailed {
+                source: format!("{e:?}"),
             })?;
-            if rendered_bytes != graph_art.content {
-                return Err(BundleVerifyError::TapeGraphEquivalenceMismatch);
+        let rendered_bytes = rendered_graph.to_canonical_json_bytes().map_err(|e| {
+            BundleVerifyError::TapeRenderFailed {
+                source: format!("{e:?}"),
             }
+        })?;
+        if rendered_bytes != graph_art.content {
+            return Err(BundleVerifyError::TapeGraphEquivalenceMismatch);
         }
     }
 
@@ -1053,22 +1057,38 @@ fn verify_tape(
 
 /// Compare a tape header field against the same field in graph metadata.
 /// Both use raw hex format (no `sha256:` prefix).
+///
+/// Fail-closed: both sides must be present. Missing field on either side
+/// is an error, not a skip.
 fn check_tape_header_field(
     header: &serde_json::Value,
     metadata: &serde_json::Value,
     field: &'static str,
 ) -> Result<(), BundleVerifyError> {
-    if let (Some(tape_val), Some(graph_val)) = (
-        header.get(field).and_then(|v| v.as_str()),
-        metadata.get(field).and_then(|v| v.as_str()),
-    ) {
-        if tape_val != graph_val {
-            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
-                field,
-                in_tape: tape_val.to_string(),
-                in_artifact: graph_val.to_string(),
-            });
-        }
+    let tape_val = header.get(field).and_then(|v| v.as_str()).ok_or(
+        BundleVerifyError::TapeHeaderBindingMismatch {
+            field,
+            in_tape: "<missing>".to_string(),
+            in_artifact: metadata
+                .get(field)
+                .and_then(|v| v.as_str())
+                .unwrap_or("<missing>")
+                .to_string(),
+        },
+    )?;
+    let graph_val = metadata.get(field).and_then(|v| v.as_str()).ok_or(
+        BundleVerifyError::TapeHeaderBindingMismatch {
+            field,
+            in_tape: tape_val.to_string(),
+            in_artifact: "<missing>".to_string(),
+        },
+    )?;
+    if tape_val != graph_val {
+        return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+            field,
+            in_tape: tape_val.to_string(),
+            in_artifact: graph_val.to_string(),
+        });
     }
     Ok(())
 }
