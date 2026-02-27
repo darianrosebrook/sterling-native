@@ -151,21 +151,15 @@ pub(crate) fn raw_hash2(domain: &[u8], a: &[u8], b: &[u8]) -> [u8; 32] {
 
 /// Extract the raw 32-byte SHA-256 digest from a `ContentHash`.
 ///
-/// Uses the cached raw bytes via `raw_sha256_strict()`. Returns an error
-/// (mapped to tape-local variants) if the hash is not a valid full SHA-256 digest.
+/// Decodes the hex digest string. Returns a tape-local error if the
+/// algorithm is not `sha256` or the digest is not valid 64-char lowercase hex.
 pub(crate) fn content_hash_to_raw(
     hash: &sterling_kernel::proof::hash::ContentHash,
 ) -> Result<[u8; 32], TapeWriteError> {
-    match hash.raw_sha256_strict() {
-        Ok(raw) => Ok(*raw),
-        Err(sterling_kernel::proof::hash::ContentHashError::NotSha256) => {
-            Err(TapeWriteError::UnsupportedHashAlgorithm)
-        }
-        Err(
-            sterling_kernel::proof::hash::ContentHashError::InvalidDigestLength { .. }
-            | sterling_kernel::proof::hash::ContentHashError::InvalidHexChars,
-        ) => Err(TapeWriteError::InvalidHexDigest),
+    if hash.algorithm() != "sha256" {
+        return Err(TapeWriteError::UnsupportedHashAlgorithm);
     }
+    hex_str_to_raw(hash.hex_digest())
 }
 
 /// Reconstruct a `ContentHash` from raw 32-byte SHA-256 digest.
@@ -704,10 +698,7 @@ mod tests {
         let short = ContentHash::parse("sha256:abcdef0123456789").unwrap();
         assert_eq!(short.algorithm(), "sha256");
 
-        // raw_sha256() returns None (no cache for short digests).
-        assert!(short.raw_sha256().is_none());
-
-        // Tape path rejects with tape-local error, not kernel ContentHashError.
+        // Tape path rejects with tape-local error (hex decode fails on short input).
         assert_eq!(
             content_hash_to_raw(&short),
             Err(TapeWriteError::InvalidHexDigest)

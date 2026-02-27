@@ -5,35 +5,7 @@
 //!
 //! **Exactly one place defines canonical hashing** (SPINE-001 invariant).
 
-use std::cmp::Ordering;
-use std::hash::{Hash, Hasher};
-
 use sha2::{Digest, Sha256};
-
-/// Errors from strict `ContentHash` raw-byte accessors.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ContentHashError {
-    /// Algorithm is not `sha256`.
-    NotSha256,
-    /// Hex digest is not exactly 64 lowercase hex chars (32 bytes).
-    InvalidDigestLength { len: usize },
-    /// Hex digest contains non-hex characters.
-    InvalidHexChars,
-}
-
-impl std::fmt::Display for ContentHashError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NotSha256 => write!(f, "algorithm is not sha256"),
-            Self::InvalidDigestLength { len } => {
-                write!(f, "sha256 digest length {len}, expected 64")
-            }
-            Self::InvalidHexChars => write!(f, "digest contains invalid hex characters"),
-        }
-    }
-}
-
-impl std::error::Error for ContentHashError {}
 
 /// A content-addressed hash with algorithm identifier.
 ///
@@ -41,48 +13,12 @@ impl std::error::Error for ContentHashError {}
 ///
 /// Invariant: the inner string always contains exactly one `:` separator,
 /// with non-empty substrings on both sides (enforced by [`ContentHash::parse`]).
-///
-/// When the algorithm is `sha256` and the digest is exactly 64 valid hex chars,
-/// the raw 32-byte digest is cached in `raw_sha256`. This cache is a derived
-/// value and does NOT participate in equality, hashing, or ordering.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ContentHash {
     /// Full string in `"algorithm:hex_digest"` format.
     full: String,
     /// Byte offset of the `:` separator (cached from parse).
     colon: usize,
-    /// Cached raw SHA-256 digest bytes (when algorithm is sha256 and digest is valid 64 hex).
-    raw_sha256: Option<[u8; 32]>,
-}
-
-// Manual trait impls: raw_sha256 is a derived cache and must NOT participate
-// in identity semantics. Only `full` (which includes colon position implicitly)
-// is compared.
-
-impl PartialEq for ContentHash {
-    fn eq(&self, other: &Self) -> bool {
-        self.full == other.full
-    }
-}
-
-impl Eq for ContentHash {}
-
-impl Hash for ContentHash {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.full.hash(state);
-    }
-}
-
-impl PartialOrd for ContentHash {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for ContentHash {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.full.cmp(&other.full)
-    }
 }
 
 impl ContentHash {
@@ -124,22 +60,9 @@ impl ContentHash {
             return None;
         }
 
-        // Cache raw SHA-256 bytes when algorithm is sha256 and digest is exactly 64 hex chars.
-        let raw_sha256 = if algorithm == "sha256" && digest.len() == 64 {
-            let mut raw = [0u8; 32];
-            if hex::decode_to_slice(digest, &mut raw).is_ok() {
-                Some(raw)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
         Some(Self {
             full: s.to_string(),
             colon,
-            raw_sha256,
         })
     }
 
@@ -159,42 +82,6 @@ impl ContentHash {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.full
-    }
-
-    /// Cached raw 32-byte SHA-256 digest, if available.
-    ///
-    /// Returns `Some` when the algorithm is `sha256` and the hex digest is
-    /// exactly 64 valid lowercase hex characters. Returns `None` for non-sha256
-    /// algorithms or short/malformed digests.
-    #[must_use]
-    pub fn raw_sha256(&self) -> Option<&[u8; 32]> {
-        self.raw_sha256.as_ref()
-    }
-
-    /// Strict raw 32-byte SHA-256 digest accessor.
-    ///
-    /// Returns `Ok` only when the algorithm is `sha256` and the hex digest is
-    /// exactly 64 valid lowercase hex characters. Fails closed for all other cases.
-    ///
-    /// Tape code uses this accessor to guarantee it never accepts ambiguous input.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ContentHashError`] if the hash is not a valid sha256 digest.
-    pub fn raw_sha256_strict(&self) -> Result<&[u8; 32], ContentHashError> {
-        if self.algorithm() != "sha256" {
-            return Err(ContentHashError::NotSha256);
-        }
-        if let Some(raw) = &self.raw_sha256 {
-            return Ok(raw);
-        }
-        // Algorithm is sha256 but raw not cached — digest is malformed.
-        let digest = self.hex_digest();
-        if digest.len() == 64 {
-            Err(ContentHashError::InvalidHexChars)
-        } else {
-            Err(ContentHashError::InvalidDigestLength { len: digest.len() })
-        }
     }
 }
 
@@ -249,15 +136,10 @@ pub fn canonical_hash(domain: &[u8], data: &[u8]) -> ContentHash {
     hasher.update(domain);
     hasher.update(data);
     let digest = hasher.finalize();
-    let raw: [u8; 32] = digest.into();
-    let hex = hex::encode(raw);
+    let hex = hex::encode(digest);
     let full = format!("sha256:{hex}");
     let colon = 6; // "sha256" is 6 bytes
-    ContentHash {
-        full,
-        colon,
-        raw_sha256: Some(raw),
-    }
+    ContentHash { full, colon }
 }
 
 #[cfg(test)]
@@ -405,103 +287,5 @@ mod tests {
         for _ in 0..10 {
             assert_eq!(canonical_hash(DOMAIN_EVIDENCE_PLANE, b"determinism"), first);
         }
-    }
-
-    // --- raw_sha256 cache tests ---
-
-    #[test]
-    fn canonical_hash_has_raw_sha256() {
-        let h = canonical_hash(DOMAIN_IDENTITY_PLANE, b"test");
-        let raw = h.raw_sha256().expect("canonical_hash must have raw_sha256");
-        assert_eq!(hex::encode(raw), h.hex_digest());
-    }
-
-    #[test]
-    fn canonical_hash_strict_succeeds() {
-        let h = canonical_hash(DOMAIN_IDENTITY_PLANE, b"test");
-        let raw = h
-            .raw_sha256_strict()
-            .expect("canonical_hash must pass strict");
-        assert_eq!(hex::encode(raw), h.hex_digest());
-    }
-
-    #[test]
-    fn parse_full_sha256_has_raw_cache() {
-        let h = ContentHash::parse(
-            "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-        )
-        .unwrap();
-        let raw = h.raw_sha256().expect("full 64-char sha256 must cache raw");
-        assert_eq!(
-            hex::encode(raw),
-            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
-        );
-    }
-
-    #[test]
-    fn parse_short_sha256_has_no_raw_cache() {
-        // Short sha256 digests are accepted by parse() for backward compat,
-        // but raw_sha256 is None because the digest is not 64 chars.
-        let h = ContentHash::parse("sha256:abcdef0123456789").unwrap();
-        assert!(h.raw_sha256().is_none());
-    }
-
-    #[test]
-    fn strict_rejects_short_sha256() {
-        let h = ContentHash::parse("sha256:abcdef0123456789").unwrap();
-        let err = h.raw_sha256_strict().unwrap_err();
-        assert!(matches!(
-            err,
-            ContentHashError::InvalidDigestLength { len: 16 }
-        ));
-    }
-
-    #[test]
-    fn strict_rejects_non_sha256() {
-        let h = ContentHash::parse(
-            "blake3:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-        )
-        .unwrap();
-        let err = h.raw_sha256_strict().unwrap_err();
-        assert!(matches!(err, ContentHashError::NotSha256));
-    }
-
-    #[test]
-    fn raw_cache_does_not_affect_equality() {
-        // Two ContentHash values with same full string must be equal,
-        // regardless of whether one has raw_sha256 cached.
-        let a = canonical_hash(DOMAIN_IDENTITY_PLANE, b"test");
-        let b = ContentHash::parse(a.as_str()).unwrap();
-        assert_eq!(a, b);
-
-        // Both should have raw_sha256 since it's a valid full sha256.
-        assert!(a.raw_sha256().is_some());
-        assert!(b.raw_sha256().is_some());
-    }
-
-    #[test]
-    fn raw_cache_does_not_affect_hash() {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let a = canonical_hash(DOMAIN_IDENTITY_PLANE, b"test");
-        let b = ContentHash::parse(a.as_str()).unwrap();
-
-        let hash_of = |v: &ContentHash| {
-            let mut h = DefaultHasher::new();
-            v.hash(&mut h);
-            h.finish()
-        };
-
-        assert_eq!(hash_of(&a), hash_of(&b));
-    }
-
-    #[test]
-    fn raw_cache_does_not_affect_ord() {
-        let a = canonical_hash(DOMAIN_IDENTITY_PLANE, b"aaa");
-        let b = canonical_hash(DOMAIN_IDENTITY_PLANE, b"bbb");
-        let a2 = ContentHash::parse(a.as_str()).unwrap();
-        let b2 = ContentHash::parse(b.as_str()).unwrap();
-        assert_eq!(a.cmp(&b), a2.cmp(&b2));
     }
 }
