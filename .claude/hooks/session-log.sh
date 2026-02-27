@@ -124,7 +124,9 @@ MDEOF
          file: (.input.file_path // null),
          command: (.input.command // null),
          description: (.input.description // null),
-         pattern: (.input.pattern // null)}
+         pattern: (.input.pattern // null),
+         prompt: (.input.prompt // null),
+         subagent_type: (.input.subagent_type // null)}
       else
         empty
       end
@@ -226,6 +228,9 @@ for line in sys.stdin:
             tool_entry["description"] = desc or ""
             if cmd:
                 current["commands"].append({"cmd": cmd, "desc": desc or ""})
+        elif name == "Task":
+            tool_entry["prompt"] = entry.get("prompt", "")
+            tool_entry["subagent_type"] = entry.get("subagent_type", "")
 
         current["timeline"].append(tool_entry)
         pending_tools[tid] = tool_entry
@@ -238,16 +243,19 @@ for line in sys.stdin:
         name = tool_info.get("name", "unknown")
 
         # Decide if this result is notable enough to show inline
-        notable = is_error
+        # Task results are always notable (subagent did substantive work)
+        notable = is_error or name == "Task"
         if not notable and content:
             content_lower = content.lower()
             notable = any(kw.lower() in content_lower for kw in NOTABLE_KW)
 
         if notable and content:
+            # Task results get more space (subagent summaries are substantive)
+            cap = 5000 if name == "Task" else 2000
             current["timeline"].append({
                 "kind": "tool_output",
                 "name": name,
-                "content": content[:2000],
+                "content": content[:cap],
                 "is_error": is_error,
             })
 
@@ -272,9 +280,9 @@ for i, turn in enumerate(turns):
 
         if kind == "reasoning":
             text = event["text"]
-            if len(text) > 3000:
-                md_lines.append(text[:3000])
-                md_lines.extend(["", "_(message truncated at 3000 chars)_"])
+            if len(text) > 5000:
+                md_lines.append(text[:5000])
+                md_lines.extend(["", "_(message truncated at 5000 chars)_"])
             else:
                 md_lines.append(text)
             md_lines.extend(["", "---", ""])
@@ -297,7 +305,15 @@ for i, turn in enumerate(turns):
             elif name in ("Grep",):
                 md_lines.append(f"`Grep` {event.get('pattern', '')}")
             elif name == "Task":
-                md_lines.append(f"`Task` (subagent)")
+                sa = event.get("subagent_type", "subagent")
+                prompt = event.get("prompt", "")
+                header = f"`Task` ({sa})" if sa else "`Task` (subagent)"
+                if prompt:
+                    # Show the dispatch prompt so readers know what the subagent was asked
+                    short_prompt = prompt[:500]
+                    if len(prompt) > 500:
+                        short_prompt += "..."
+                    md_lines.extend([header, "", f"> {short_prompt}", ""])
             else:
                 md_lines.append(f"`{name}`")
             md_lines.append("")
