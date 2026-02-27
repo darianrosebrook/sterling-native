@@ -144,10 +144,10 @@ pub enum ScorerInputV1 {
 pub fn build_table_scorer_input(
     table: BTreeMap<String, i64>,
 ) -> Result<ScorerInputV1, SearchRunError> {
-    // Validate all keys are valid sha256 ContentHash values.
+    // Validate all keys are valid sha256 ContentHash values with full-length digest.
     for key in table.keys() {
         match ContentHash::parse(key) {
-            Some(hash) if hash.algorithm() == "sha256" => {}
+            Some(hash) if hash.algorithm() == "sha256" && hash.hex_digest().len() == 64 => {}
             _ => {
                 return Err(SearchRunError::InvalidScorerTableKey { key: key.clone() });
             }
@@ -878,5 +878,31 @@ mod tests {
         let graph_json: serde_json::Value = serde_json::from_slice(&graph.content).unwrap();
         let term = &graph_json["metadata"]["termination_reason"];
         assert_eq!(term["type"], "goal_reached");
+    }
+
+    #[test]
+    fn short_sha256_scorer_key_rejected() {
+        let mut table = BTreeMap::new();
+        // Valid algorithm, but only 4 hex chars instead of 64.
+        table.insert("sha256:abcd".to_string(), 10);
+
+        let err = build_table_scorer_input(table).unwrap_err();
+        assert!(
+            matches!(err, SearchRunError::InvalidScorerTableKey { .. }),
+            "short sha256 digest must be rejected, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn full_length_sha256_scorer_key_accepted() {
+        let mut table = BTreeMap::new();
+        table.insert(
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            10,
+        );
+
+        // Should succeed (full 64-char hex digest).
+        let result = build_table_scorer_input(table);
+        assert!(result.is_ok(), "full-length sha256 key must be accepted");
     }
 }

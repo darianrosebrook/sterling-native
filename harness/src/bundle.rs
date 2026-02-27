@@ -69,6 +69,12 @@ pub struct ArtifactBundleV1 {
 pub enum BundleBuildError {
     /// Canonical JSON serialization failed.
     CanonError { detail: String },
+    /// Caller-provided `precomputed_hash` does not match recomputed hash.
+    PrecomputedHashMismatch {
+        name: String,
+        expected: String,
+        computed: String,
+    },
 }
 
 /// Input for bundle assembly.
@@ -119,12 +125,14 @@ pub fn build_bundle(
         let input = input.into();
         let content_hash = match input.precomputed_hash {
             Some(h) => {
-                debug_assert_eq!(
-                    h,
-                    canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &input.content),
-                    "precomputed_hash for '{}' does not match recomputed hash",
-                    input.name,
-                );
+                let recomputed = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &input.content);
+                if h != recomputed {
+                    return Err(BundleBuildError::PrecomputedHashMismatch {
+                        name: input.name,
+                        expected: h.as_str().to_string(),
+                        computed: recomputed.as_str().to_string(),
+                    });
+                }
                 h
             }
             None => canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &input.content),
@@ -867,5 +875,44 @@ mod tests {
 
         let names: Vec<&str> = bundle.artifacts.keys().map(String::as_str).collect();
         assert_eq!(names, vec!["a.txt", "z.txt"]);
+    }
+
+    #[test]
+    fn wrong_precomputed_hash_rejected() {
+        use sterling_kernel::proof::hash::ContentHash;
+
+        let wrong_hash = ContentHash::parse(
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        )
+        .unwrap();
+
+        let input = ArtifactInput {
+            name: "test.json".to_string(),
+            content: b"{\"key\":\"value\"}".to_vec(),
+            normative: true,
+            precomputed_hash: Some(wrong_hash),
+        };
+
+        let err = build_bundle(vec![input]).unwrap_err();
+        assert!(
+            matches!(err, BundleBuildError::PrecomputedHashMismatch { .. }),
+            "wrong precomputed hash must be rejected, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn correct_precomputed_hash_accepted() {
+        let content = b"{\"key\":\"value\"}";
+        let correct_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, content);
+
+        let input = ArtifactInput {
+            name: "test.json".to_string(),
+            content: content.to_vec(),
+            normative: true,
+            precomputed_hash: Some(correct_hash),
+        };
+
+        let bundle = build_bundle(vec![input]).unwrap();
+        assert_eq!(bundle.artifacts.len(), 1);
     }
 }

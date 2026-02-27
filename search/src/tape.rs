@@ -286,6 +286,11 @@ pub enum TapeParseError {
     DuplicateTermination { record_index: u64 },
     /// Record parser did not consume all bytes in the frame body.
     FrameBodyNotFullyConsumed { record_index: u64, remaining: usize },
+    /// `NodeCreation` references a `parent_id` that has no corresponding
+    /// `NodeCreation` record (dangling link in graph topology).
+    DanglingParentLink { node_id: u64, parent_id: u64 },
+    /// `parent_id_present` flag byte is not `0x00` (absent) or `0x01` (present).
+    InvalidParentPresenceFlag { flag: u8, record_index: u64 },
 }
 
 impl std::fmt::Display for TapeParseError {

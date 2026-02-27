@@ -216,6 +216,13 @@ fn validate_structural_invariants(records: &[TapeRecordV1]) -> Result<(), TapePa
                             parent_id: pid,
                         });
                     }
+                    // parent must actually exist (no dangling links)
+                    if !node_ids.contains(&pid) {
+                        return Err(TapeParseError::DanglingParentLink {
+                            node_id: nc.node_id,
+                            parent_id: pid,
+                        });
+                    }
                 }
             }
             TapeRecordV1::Expansion(exp) => {
@@ -287,17 +294,22 @@ fn parse_node_creation(
             detail: "parent_id_present",
         })?;
 
-    let parent_id = if parent_present == 0x00 {
-        None
-    } else {
-        Some(
+    let parent_id = match parent_present {
+        0x00 => None,
+        0x01 => Some(
             cursor
                 .read_u64()
                 .map_err(|()| TapeParseError::RecordBodyTruncated {
                     record_index,
                     detail: "parent_id",
                 })?,
-        )
+        ),
+        _ => {
+            return Err(TapeParseError::InvalidParentPresenceFlag {
+                flag: parent_present,
+                record_index,
+            });
+        }
     };
 
     let mut state_fingerprint = [0u8; 32];
@@ -1241,6 +1253,142 @@ mod tests {
                 }
             ),
             "expected FrameBodyNotFullyConsumed, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn dangling_parent_rejected() {
+        let header = test_header_bytes();
+        let mut writer = TapeWriter::new(&header);
+
+        // Write root node (id=0, no parent).
+        let root_node = make_test_node(0);
+        writer
+            .on_node_created(&NodeCreationView {
+                node_id: 0,
+                parent_id: None,
+                state_fingerprint_raw: [0xAA; 32],
+                depth: 0,
+                f_cost: 0,
+                creation_order: 0,
+                node: &root_node,
+            })
+            .unwrap();
+
+        // Write child node (id=2, parent_id=1) — but node 1 was never created.
+        let child_node = make_test_node(2);
+        writer
+            .on_node_created(&NodeCreationView {
+                node_id: 2,
+                parent_id: Some(1),
+                state_fingerprint_raw: [0xBB; 32],
+                depth: 1,
+                f_cost: 1,
+                creation_order: 1,
+                node: &child_node,
+            })
+            .unwrap();
+
+        writer
+            .on_termination(&TerminationView {
+                termination_reason: TerminationReasonV1::FrontierExhausted,
+                frontier_high_water: 1,
+            })
+            .unwrap();
+
+        let bytes = writer.finish().unwrap().bytes;
+        let err = read_tape(&bytes).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                TapeParseError::DanglingParentLink {
+                    node_id: 2,
+                    parent_id: 1,
+                }
+            ),
+            "expected DanglingParentLink, got: {err:?}"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::cast_possible_truncation)]
+    fn invalid_parent_flag_rejected() {
+        // Build a valid minimal tape, then surgically set the parent_id_present
+        // byte to 0x02. Since the flag is in the record body, the chain hash
+        // covers it — so we need to bypass chain verification.
+        //
+        // Strategy: construct raw bytes manually for a minimal tape, computing
+        // the chain hash ourselves so the footer is consistent.
+        use crate::tape::{
+            raw_hash, raw_hash2, DOMAIN_SEARCH_TAPE, DOMAIN_SEARCH_TAPE_CHAIN,
+            RECORD_TYPE_NODE_CREATION, RECORD_TYPE_TERMINATION, SEARCH_TAPE_FOOTER_MAGIC,
+            SEARCH_TAPE_MAGIC, SEARCH_TAPE_VERSION,
+        };
+
+        let header = test_header_bytes();
+
+        let mut buf = Vec::new();
+        // Magic
+        buf.extend_from_slice(&SEARCH_TAPE_MAGIC);
+        // Version
+        buf.extend_from_slice(&SEARCH_TAPE_VERSION.to_le_bytes());
+        // Header length
+        buf.extend_from_slice(&(header.len() as u32).to_le_bytes());
+        // Header bytes
+        buf.extend_from_slice(&header);
+
+        // Chain seed
+        let mut chain = raw_hash(DOMAIN_SEARCH_TAPE, &header);
+
+        // --- Record 0: NodeCreation with invalid parent_id_present = 0x02 ---
+        // Body after type byte: node_id(8) + flag(1) + fingerprint(32) + depth(4) + f_cost(8) + creation_order(8)
+        let mut body = Vec::new();
+        body.extend_from_slice(&0u64.to_le_bytes()); // node_id = 0
+        body.push(0x02); // INVALID parent_id_present flag
+        body.extend_from_slice(&[0xAA; 32]); // state_fingerprint
+        body.extend_from_slice(&0u32.to_le_bytes()); // depth
+        body.extend_from_slice(&0i64.to_le_bytes()); // f_cost
+        body.extend_from_slice(&0u64.to_le_bytes()); // creation_order
+
+        // Wire format: frame_len(4) + type(1) + body
+        let frame_len = (1 + body.len()) as u32;
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&frame_len.to_le_bytes());
+        frame.push(RECORD_TYPE_NODE_CREATION);
+        frame.extend_from_slice(&body);
+
+        chain = raw_hash2(DOMAIN_SEARCH_TAPE_CHAIN, &chain, &frame);
+        buf.extend_from_slice(&frame);
+
+        // --- Record 1: Termination (FrontierExhausted = tag 0x01) ---
+        let mut term_body = Vec::new();
+        term_body.push(0x01); // FrontierExhausted tag
+        term_body.extend_from_slice(&1u64.to_le_bytes()); // frontier_high_water
+
+        let term_frame_len = (1 + term_body.len()) as u32;
+        let mut term_frame = Vec::new();
+        term_frame.extend_from_slice(&term_frame_len.to_le_bytes());
+        term_frame.push(RECORD_TYPE_TERMINATION);
+        term_frame.extend_from_slice(&term_body);
+
+        chain = raw_hash2(DOMAIN_SEARCH_TAPE_CHAIN, &chain, &term_frame);
+        buf.extend_from_slice(&term_frame);
+
+        // Footer: magic(4) + record_count(8) + chain_hash(32)
+        buf.extend_from_slice(&SEARCH_TAPE_FOOTER_MAGIC);
+        buf.extend_from_slice(&2u64.to_le_bytes());
+        buf.extend_from_slice(&chain);
+
+        let err = read_tape(&buf).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                TapeParseError::InvalidParentPresenceFlag {
+                    flag: 0x02,
+                    record_index: 0,
+                }
+            ),
+            "expected InvalidParentPresenceFlag, got: {err:?}"
         );
     }
 }
