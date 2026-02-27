@@ -776,16 +776,24 @@ milestones:
         test: artifact_count_table
         description: "Table scorer bundle has 7 artifacts"
     evidence:
-      total_tests: 434
-      new_tests: 15
+      total_tests: 439
+      new_tests: 20
       acceptance_ids_anchored: 13
       bonus_tests:
         - tape_tamper_header_policy_snapshot_rejected
         - tape_digest_mismatch_rejected
+        - tape_digest_missing_in_report_rejected
+        - cert_tape_graph_equivalence_mismatch_detected
+        - table_mode_scorer_digest_coherence_base_pass
+        - table_mode_cert_equivalence_pass
+        - table_mode_bundle_persistence_with_tape
       commits:
         - "c9ae828 feat(harness): wire search_with_tape() into run_search(), add tape artifact [TAPE-002]"
         - "9e8d167 feat(bundle): add VerificationProfile and tape verification pipeline [TAPE-002]"
         - "bc1ab30 test(lock): add 15 M4 tape-as-bundle-artifact lock tests [TAPE-002]"
+        - "2516272 fix(bundle): tighten verify_tape() to fail-closed on missing fields [TAPE-002]"
+        - "f0cc607 test(lock): strengthen M4 tape tests — deterministic error paths + table mode [TAPE-002]"
+        - "e38df7e test(lock): add fail-closed and Cert equivalence mismatch tests [TAPE-002]"
       files_created:
         - "tests/lock/tests/sc1_m4_tape_bundle.rs"
       files_modified:
@@ -801,20 +809,21 @@ milestones:
       - "search_tape.stap as normative bundle artifact with content_hash in manifest"
       - "tape_digest BINDING field in verification_report.json"
       - "VerificationProfile enum (Base/Cert) controlling tape requirement"
-      - "verify_tape() pipeline: digest binding, parse + chain, header binding against authoritative artifacts, mode coherence, schema_version, graph equivalence (Cert)"
+      - "verify_tape() fail-closed pipeline: require tape_digest, require schema_version, require all header fields on both sides"
       - "6 new BundleVerifyError variants: TapeMissing, TapeParseFailed, TapeHeaderBindingMismatch, TapeGraphEquivalenceMismatch, TapeDigestMismatch, TapeRenderFailed"
       - "Tape header binds to authoritative artifacts, not report (prevents self-validating tampered reports)"
       - "Mode coherence: scorer_digest ↔ scorer.json presence/absence bidirectionally enforced"
       - "Backward compatibility: Base profile accepts tape-absent bundles; all existing verify_bundle() calls unchanged"
       - "Bundle artifact count: 6 (uniform) / 7 (table)"
-      - "rebuild_with_modified_tape() + rebuild_without_artifact() shared test helpers"
-      - "15 lock tests: 13 planned + 2 bonus (header policy tamper, digest mismatch)"
+      - "rebuild_with_modified_tape(), rebuild_without_artifact(), rebuild_with_modified_graph_and_report() shared test helpers"
+      - "20 lock tests: 13 planned + 7 bonus (fail-closed, table mode, Cert equivalence mismatch)"
+      - "Post-review hardening: fail-closed on missing fields, deterministic TapeHeaderBindingMismatch error paths in tamper tests"
     touch_points:
       - path: harness/src/runner.rs
         change: "Switch from search() to search_with_tape(); include TapeOutput bytes as search_tape.stap artifact; add tape_digest to verification report; single computation path for tape content hash"
       - path: harness/src/bundle.rs
-        change: "VerificationProfile enum; verify_bundle_with_profile(); verify_tape() pipeline with 6 steps; check_tape_header_field() helper; 6 new BundleVerifyError variants"
+        change: "VerificationProfile enum; verify_bundle_with_profile(); fail-closed verify_tape() pipeline with 6 steps; check_tape_header_field() requires both sides; 6 new BundleVerifyError variants"
       - path: tests/lock/tests/sc1_m4_tape_bundle.rs
-        change: "15 lock tests covering all M4 acceptance items plus 2 bonus tamper tests"
+        change: "20 lock tests: 13 acceptance + 7 bonus covering fail-closed checks, table mode, deterministic tamper paths, Cert equivalence mismatch"
       - path: tests/lock/src/bundle_test_helpers.rs
-        change: "rebuild_with_modified_tape() and rebuild_without_artifact() helpers"
+        change: "rebuild_with_modified_tape(), rebuild_without_artifact(), rebuild_with_modified_graph_and_report() helpers"

@@ -25,7 +25,7 @@
     "TAPE-002": {
       "path": "TAPE-002.yaml",
       "type": "feature",
-      "status": "in_progress",
+      "status": "closed",
       "created_at": "2026-02-27T18:14:13.347Z",
       "updated_at": "2026-02-27T18:14:13.348Z"
     }

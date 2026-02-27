@@ -1,7 +1,7 @@
 id: TAPE-002
 type: feature
 title: 'M4: Tape as Verified Bundle Artifact'
-status: in_progress
+status: closed
 risk_tier: 2
 mode: development
 created_at: '2026-02-27T18:14:13.347Z'
