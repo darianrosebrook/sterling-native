@@ -56,7 +56,7 @@ pub fn prepare_search_setup<W: SearchWorldV1 + WorldHarnessV1>(
 
     let scorer_digest_hex = match scorer_input {
         ScorerInputV1::Uniform => None,
-        ScorerInputV1::Table { artifact, .. } => Some(artifact.hex_digest.clone()),
+        ScorerInputV1::Table(t) => Some(t.artifact.hex_digest.clone()),
     };
 
     let bindings = MetadataBindings {
