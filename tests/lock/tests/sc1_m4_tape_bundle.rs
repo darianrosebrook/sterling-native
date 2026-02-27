@@ -576,3 +576,84 @@ fn table_mode_bundle_persistence_with_tape() {
     verify_bundle_with_profile(&loaded, VerificationProfile::Cert).unwrap();
     verify_bundle_dir(dir.path()).unwrap();
 }
+
+// ===========================================================================
+// Fail-closed validation tests (presence-implies-contract)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// SC1-M4-TAPE-DIGEST-MISSING-REJECTED
+// ---------------------------------------------------------------------------
+
+/// Tape present but report lacks `tape_digest` → `ReportFieldMissing`.
+/// Proves the fail-closed tightening: the old code silently skipped this.
+#[test]
+fn tape_digest_missing_in_report_rejected() {
+    use sterling_kernel::proof::canon::canonical_json_bytes;
+
+    let bundle = search_bundle();
+
+    // Strip tape_digest from report while keeping tape present.
+    let report_art = bundle.artifacts.get("verification_report.json").unwrap();
+    let mut report_json: serde_json::Value =
+        serde_json::from_slice(&report_art.content).unwrap();
+    report_json
+        .as_object_mut()
+        .unwrap()
+        .remove("tape_digest");
+    let modified_report = canonical_json_bytes(&report_json).unwrap();
+
+    let artifacts: Vec<(String, Vec<u8>, bool)> = bundle
+        .artifacts
+        .values()
+        .map(|a| {
+            if a.name == "verification_report.json" {
+                (a.name.clone(), modified_report.clone(), a.normative)
+            } else {
+                (a.name.clone(), a.content.clone(), a.normative)
+            }
+        })
+        .collect();
+    let tampered = sterling_harness::bundle::build_bundle(artifacts).unwrap();
+
+    let err = verify_bundle(&tampered).unwrap_err();
+    assert!(
+        matches!(err, BundleVerifyError::ReportFieldMissing { ref field } if field == "tape_digest"),
+        "expected ReportFieldMissing for tape_digest, got {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SC1-M4-TAPE-CERT-GRAPH-EQUIVALENCE-MISMATCH
+// ---------------------------------------------------------------------------
+
+/// Tape present and internally valid, but graph content diverges → Cert catches it.
+/// Proves tape→graph equivalence is actually checked (not just a pass-through).
+#[test]
+fn cert_tape_graph_equivalence_mismatch_detected() {
+    let bundle = search_bundle();
+
+    // Modify graph content in a way that keeps all bindings consistent EXCEPT
+    // tape→graph equivalence: add a diagnostic field to graph metadata.
+    // The tape renders to the original graph; the modified graph differs.
+    let tampered = rebuild_with_modified_graph_and_report(
+        &bundle,
+        |graph| {
+            graph["metadata"]["_tamper"] = serde_json::json!("extra_field");
+        },
+        |_report| {
+            // report unchanged (search_graph_digest auto-updated by helper)
+        },
+    );
+
+    // Base: passes (doesn't check tape→graph equivalence).
+    verify_bundle_with_profile(&tampered, VerificationProfile::Base).unwrap();
+
+    // Cert: fails — rendered graph bytes differ from modified search_graph.json.
+    let err =
+        verify_bundle_with_profile(&tampered, VerificationProfile::Cert).unwrap_err();
+    assert!(
+        matches!(err, BundleVerifyError::TapeGraphEquivalenceMismatch),
+        "expected TapeGraphEquivalenceMismatch under Cert, got {err:?}"
+    );
+}
