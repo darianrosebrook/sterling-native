@@ -283,6 +283,8 @@ pub enum TapeParseError {
     MissingTermination,
     /// Multiple termination records found.
     DuplicateTermination { record_index: u64 },
+    /// Record parser did not consume all bytes in the frame body.
+    FrameBodyNotFullyConsumed { record_index: u64, remaining: usize },
 }
 
 impl std::fmt::Display for TapeParseError {

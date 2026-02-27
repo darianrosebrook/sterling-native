@@ -82,31 +82,41 @@ pub fn read_tape(bytes: &[u8]) -> Result<SearchTapeV1, TapeParseError> {
             return Err(TapeParseError::RecordTruncated { record_index });
         }
 
-        let frame_end = cursor.pos + frame_len;
-        let record_type = cursor
+        // Extract bounded frame body and advance main cursor past the frame.
+        let frame_body = &bytes[cursor.pos..cursor.pos + frame_len];
+        cursor.pos += frame_len;
+
+        // Parse from a bounded sub-cursor so parsers cannot over-read.
+        let mut frame_cursor = Cursor::new(frame_body);
+
+        let record_type = frame_cursor
             .read_u8()
             .map_err(|()| TapeParseError::RecordTruncated { record_index })?;
 
         let record = match record_type {
             RECORD_TYPE_NODE_CREATION => {
-                TapeRecordV1::NodeCreation(parse_node_creation(&mut cursor, record_index)?)
+                TapeRecordV1::NodeCreation(parse_node_creation(&mut frame_cursor, record_index)?)
             }
             RECORD_TYPE_EXPANSION => {
-                TapeRecordV1::Expansion(parse_expansion(&mut cursor, record_index)?)
+                TapeRecordV1::Expansion(parse_expansion(&mut frame_cursor, record_index)?)
             }
             RECORD_TYPE_TERMINATION => {
-                TapeRecordV1::Termination(parse_termination(&mut cursor, record_index)?)
+                TapeRecordV1::Termination(parse_termination(&mut frame_cursor, record_index)?)
             }
             tag => {
                 return Err(TapeParseError::UnknownRecordType { tag, record_index });
             }
         };
 
-        // Ensure we consumed exactly the declared frame body
-        cursor.pos = frame_end;
+        // Reject if parser did not consume exactly all frame bytes.
+        if frame_cursor.remaining() > 0 {
+            return Err(TapeParseError::FrameBodyNotFullyConsumed {
+                record_index,
+                remaining: frame_cursor.remaining(),
+            });
+        }
 
         // Advance hash chain over the complete frame: [len:u32le][type:u8][body...]
-        // frame_start points to len prefix, frame_end = frame_start + 4 + frame_len
         let full_frame = &bytes[frame_start..frame_start + 4 + frame_len];
         chain_hash = raw_hash2(DOMAIN_SEARCH_TAPE_CHAIN, &chain_hash, full_frame);
 
@@ -1188,6 +1198,49 @@ mod tests {
                     }
             ),
             "expected ChainHashMismatch or UnknownEnumTag, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_frame_body_not_fully_consumed() {
+        // Build a valid tape, then inflate one frame's declared length
+        // by inserting extra bytes. The parser should reject with
+        // FrameBodyNotFullyConsumed before reaching the chain hash check.
+        let mut bytes = write_minimal_tape();
+
+        // Locate first record frame after header.
+        // Layout: magic(4) + version(2) + header_len(4) + header_bytes + records + footer
+        let header_len = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]) as usize;
+        let first_frame_pos = 10 + header_len;
+
+        // Read original frame_len
+        let orig_frame_len = u32::from_le_bytes([
+            bytes[first_frame_pos],
+            bytes[first_frame_pos + 1],
+            bytes[first_frame_pos + 2],
+            bytes[first_frame_pos + 3],
+        ]);
+
+        // Insert 4 garbage bytes right after the original frame body,
+        // and increase frame_len by 4 so the frame "contains" extra bytes.
+        let frame_body_end = first_frame_pos + 4 + orig_frame_len as usize;
+        let padding = [0xDE, 0xAD, 0xBE, 0xEF];
+        bytes.splice(frame_body_end..frame_body_end, padding);
+
+        // Update frame_len
+        let new_frame_len = orig_frame_len + 4;
+        bytes[first_frame_pos..first_frame_pos + 4].copy_from_slice(&new_frame_len.to_le_bytes());
+
+        let err = read_tape(&bytes).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                TapeParseError::FrameBodyNotFullyConsumed {
+                    record_index: 0,
+                    remaining: 4,
+                }
+            ),
+            "expected FrameBodyNotFullyConsumed, got: {err:?}"
         );
     }
 }
