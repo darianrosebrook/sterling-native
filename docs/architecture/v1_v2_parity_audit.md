@@ -1,7 +1,7 @@
 ---
-status: "Living audit — updated 2026-02-27"
+status: "Living audit — updated 2026-02-28"
 authority: architecture
-date: 2026-02-27
+date: 2026-02-28
 purpose: "Capability-level migration map from Sterling v1 to v2. Defines proof obligations for supersession. Drives both docs/reference/v1 cleanup and v2 roadmap."
 ---
 # V1→V2 Parity Audit (Capability Migration Map)
@@ -312,18 +312,271 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 ---
 
+## Capability Import Backlog
+
+v1 is not code to port — it is a catalog of proof obligations. Each group below identifies what v1 delivered, what the v2 substrate must host, and the first world or milestone that exercises it.
+
+### Import Group A: Truth-regime world diversity
+
+**Why**: Current worlds are deterministic lattice variants. They prove determinism and search evidence but do not force the hard semantics v1 cared about: tool rollback, partial observability, stochasticity. The clean sheet (`clean_sheet_architecture.md` §6) explicitly calls for a truth-regime suite.
+
+**Import obligations from v1**:
+
+| Truth regime | v1 source | What v2 must prove | First world |
+|-------------|-----------|--------------------|----|
+| Tool safety | `governance_certification_contract_v1.md` (tool transcript sections) | Transactional semantics (stage/commit/rollback) with auditable transcripts. Every external interaction has a transcript artifact bound into the bundle. | Transactional KV Store |
+| Partial observability | `core_features.md` (belief, probes), Mastermind test-scenario | Belief discipline via probe operators and trace-visible belief changes. Belief set monotonicity under probes. No hidden observation channels. | Mastermind-like world |
+| Stochastic certification | `conformance.md` (distributional evaluation) | Seed/witness binding so certification binds to evidence, not "the environment." Exact replay from recorded evidence; distributional evaluation over seed sets. | Slippery Grid world |
+
+**Guardrail (G6)**: Enforce "tools are modeled, not executed" initially. Stage/commit/rollback should be trace-visible contracts with transcripts; real side effects come later behind an explicit non-cert mode.
+
+### Import Group B: Operator registry + lifecycle
+
+**Why**: Without a registry, Rust proves deterministic search but the semantic authority for "what operators exist and what they mean" remains Python-only and unverifiable at the boundary. If operator identity lives in code structure (function names, match arms) rather than in data, every new operator gets added "the easy way" and you recreate the v1 drift pattern.
+
+**Import obligations from v1**:
+
+- **Stable operator identity** — external to code structure, content-addressed.
+- **Operator contract** — mechanically checkable at the boundary (preconditions, effects, args schema).
+- **Legality checking** — fail-closed on unknown operators, precondition failure.
+- **Operator-set digest** — bound into evidence so drift is detectable per-run.
+- **Packaging/install surface** — so operator sets are auditable, transferable artifacts.
+
+**v1 reference**: `operator_registry_contract_v1.md`, `operator_policy.md`, `core/operators/engine/registry.py`.
+
+**Guardrail (G7)**: This is Phase 0, not Phase 2. See §Operator Registry MVP below.
+
+### Import Group C: Governance / certification campaigns
+
+**Why**: The clean sheet argues for simplifying governance (DEV vs CERTIFIED, two modes, one policy object). The retrospective's "governance is the system" point means deterministic replay + refusal contracts + promotion gates are cognition infrastructure, not scaffolding.
+
+**Import obligations from v1**:
+
+- **Typed verdicts/refusals** as first-class artifacts (not log messages).
+- **Campaign notion** (even if simplified) binding: policy snapshot, operator set, evidence bundle(s), and acceptance criteria.
+- **Fail-closed enforcement** at the governance level (not just type-system fail-closed).
+
+**v1 reference**: `governance_certification_contract_v1.md`, `conformance.md`, `core/governance/gate_verdict.py`.
+
+**Guardrail (G1)**: Write an ADR pinning certification authority. If Python is the control plane, every Python cert must be reducible to a set of Rust-verified artifacts + explicit policy/campaign metadata.
+
+### Import Group D: Induction pipeline (collapsed)
+
+**Why**: The "scientific method loop" claim (rubric #8) requires a propose→evaluate→promote cycle. The clean sheet (`clean_sheet_architecture.md` §4) gives the compression target: 5 modules, evaluators are the extension point, promotion packaging is uniform.
+
+**Import obligations from v1**:
+
+- **Propose→evaluate→promote loop** producing promotable operators (or operator policies) with regression gates.
+- **Standard evaluation packet format** so future worlds slot in without bespoke pipelines.
+- Start with inducing a policy/scorer table; graduate to inducing operator definitions once the registry exists.
+
+**v1 reference**: `operator_induction_contract_v1.md`, `core/induction/`.
+
+### Import Group E: Memory MVP
+
+**Why**: Without memory artifacts, learning and transfer remain narratively true but mechanically absent. v1 had SWM, decay, landmarks, episode chaining. v2 does not need to port it wholesale — but it needs an MVP memory artifact suite that is content-addressed and replay-linked.
+
+**Import obligations from v1**:
+
+- **Episode identity + durable summaries** (landmarks or equivalent).
+- **Governed memory updates** (operators or explicit post-pass artifacts), not ad hoc mutable objects.
+- **Content-addressed, bundle-linked** memory artifacts.
+
+**v1 reference**: `semantic_working_memory_contract_v0.md`, `core_features.md` §landmarks.
+
+### Import Group F: Text boundary
+
+**Why**: Realization depends on higher-level linguistic structures the Rust substrate doesn't model. But parity still requires a minimal contract enforcing "surface is non-authoritative; IR is authoritative" (ADR 0003 already establishes this principle for neural components).
+
+**Import obligations from v1**:
+
+- A minimal text boundary demo: parse/render components as advisory, never authority.
+- A verifiable realization artifact surface (even if the realizer remains Python).
+
+**v1 reference**: `text_io_contract_v1.md`, `text_hard_ir_contract_v1.md`, `linguistic_ir_contract_v0.md`.
+
+---
+
+## Guardrails
+
+Eight footgun risks identified during cross-codebase audit. These are authority and format problems that create long-lived drift if not addressed early.
+
+### G1. Two v2 codebases without a hard authority boundary
+
+**Risk**: "Rust owns the corridor; Python owns everything above" is workable, but becomes a corner if you don't force a single certification authority decision. Otherwise two quasi-authorities emerge: Rust verifies bundles, Python issues governance claims that may or may not be mechanically reducible to those bundles.
+
+**Guardrail**: Write an ADR pinning this as an invariant. If the decision is "Python is certification control plane, Rust is evidence generator + verifier," then the interface contract comes first: every Python cert must be reducible to a set of Rust-verified artifacts + explicit policy/campaign metadata. Moving more governance into Rust is a deliberate phase change, not emergent creep.
+
+**Status**: Open decision #5.
+
+### G2. Competing evidence packaging (ArtifactBundleV1 vs H2/TD-12)
+
+**Risk**: The biggest long-term coherence risk. Rust bundles are clean, deterministic, fail-closed. Python's H2/TD-12 is a richer governance attestation system. If both evolve independently, you pay a permanent "translation tax" and every future claim must answer "which bundle is canonical?"
+
+**Guardrail options (choose one and document it)**:
+- **A) Nesting**: TD-12/H2 becomes a wrapper that *imports* an ArtifactBundleV1 digest basis as a required substrate artifact. Governance sits on top of a Rust bundle, never parallel.
+- **B) Parallel, disjoint scopes**: Rust bundles certify execution/search integrity only; Python certifies cross-run/campaign claims. Requires a strict "no overlapping claims" rule.
+
+**Status**: Open decision #6.
+
+### G3. Cross-codebase compatibility without equivalence harness
+
+**Risk**: Docs assert shared wire formats and compatibility. Without mechanical enforcement, drift appears in tiny places (domain prefix registries, canonical JSON edge cases, schema descriptor differences), and docs quietly become aspirational again.
+
+**Guardrail**: Treat cross-codebase equivalence as a first-class capability with lock tests. See §Cross-Codebase Equivalence Harness below.
+
+### G4. Hash domain prefix registry fragmentation
+
+**Risk**: Domain constants defined across crates (`kernel/src/proof/hash.rs`, `harness/src/bundle.rs`, `search/src/node.rs`). New domains get added opportunistically → eventual collision or accidental semantic changes.
+
+**Guardrail**: Create a single canonical "hash domain registry" doc plus a lock test that enumerates all `DOMAIN_*` constants and fails on duplicates or unregistered additions.
+
+### G5. Search evidence schema ossification before truth-regime worlds land
+
+**Risk**: SearchGraphV1 / SearchTapeV1 are canonical surfaces. Once tool-use / partial observability / stochastic worlds land, you may need additional binding fields or event types that don't fit without version churn.
+
+**Guardrail**: Decide the extension mechanism now:
+- **Strict version bumps** with explicit migration rules (fine, but commit to it), OR
+- **Extension blocks** with domain-separated sub-records that remain canonical but don't force schema breaks.
+
+Don't pretend the current schema won't face extension pressure once worlds diversify.
+
+**Status**: Open decision #7.
+
+### G6. Tool worlds executing real side effects
+
+**Risk**: A transactional tool world can be modeled as pure state transitions, but only if "tool I/O" is an evidence artifact (transcript) bound into the verification story. If you implement tool worlds that actually perform side effects at runtime ("just for the demo"), you'll fight your own determinism model.
+
+**Guardrail**: Enforce "tools are modeled, not executed" at first. Stage/commit/rollback should be trace-visible contracts with transcripts. Real side effects come later behind an explicit non-cert mode.
+
+### G7. Delaying operator registry too long
+
+**Risk**: You can build truth-regime worlds with a minimal operator surface, but if stable operator IDs + signature legality + packaging are postponed, semantics get encoded into "world-specific candidate enumeration." Later induction/promotion will have nothing stable to hook into.
+
+**Guardrail**: Operator registry MVP is Phase 0. See §Operator Registry MVP. Don't import the whole v1 operator universe; instead define a very small registry that makes governance and learning possible later: stable IDs, signature masks, legality checks, minimal packaging/export surface.
+
+### G8. Parallel docs without enforcement
+
+**Risk**: Two parallel documents drift: parity audit in sterling-native and supersession map in sterling.
+
+**Guardrail**: This parity audit is the primary source of truth for cross-codebase capability mapping. Sterling's `v1_v2_supersession_map.md` links to it and only summarizes.
+
+---
+
+## Operator Registry MVP
+
+This is Phase 0 — prerequisite to truth-regime worlds and all subsequent phases. The goal is not to import the whole v1 operator universe, but to make operator identity and contract mechanically checkable so governance and learning can hook in later.
+
+### Design
+
+**1. OperatorRegistryV1 as normative artifact**
+
+A canonical, content-addressed JSON artifact included in every bundle and bound into verification.
+
+```
+{
+  "schema_version": "operator_registry.v1",
+  "operator_set_digest": "<sha256:...>",
+  "operators": [
+    {
+      "op_id": <stable integer or hash-derived ID>,
+      "name": "SET_SLOT",
+      "category": "S",
+      "args_schema": { ... },
+      "preconditions": { "identity_mask": ..., "status_mask": ... },
+      "effects": { "identity_mask": ..., "status_mask": ... },
+      "cost_model": null,
+      "contract_epoch": 1
+    }
+  ]
+}
+```
+
+Key: the registry is authoritative data. Rust code is an implementation of entries in that data. This decouples extensibility from crate/module churn.
+
+**2. apply() requires registry snapshot (fail-closed)**
+
+```
+apply(state, op_id, op_args, registry: &OperatorRegistryV1) -> Result<(new_state, step_record), ApplyError>
+```
+
+Fail-closed on: unknown `op_id`, args decode mismatch vs `args_schema`, precondition failure, reserved fields. No implicit "current registry" and no "default operator set." The registry snapshot is part of the evidence chain.
+
+**3. Bind operator-set identity into evidence**
+
+Same pattern as policy/scorer binding:
+- `verification_report.json`: include `operator_registry_digest`
+- `search_graph.json` metadata: include `operator_registry_digest`
+- `SearchTapeV1` header: include `operator_registry_digest`
+
+This prevents the most subtle drift: "same tape/graph shape, different operator meanings."
+
+**4. Dispatch is implementation, not contract**
+
+In Rust: `BTreeMap<OpId, &'static dyn OperatorImpl>` for builtins. Later: `InstalledOperatorBundle` for induced/imported operators. The dispatch map satisfies the registry; it is not the registry. Verification can assert "every registry entry used in this run had an implementation present."
+
+**5. Lock tests**
+
+- **No apply without registry**: grep/deny calling lower-level apply paths that bypass registry checking.
+- **Registry digest binding**: tamper registry bytes → bundle verification fails.
+- **Stable ordering**: canonical JSON ordering invariance for the registry.
+- **Unknown op fail-closed**: applying a non-existent `op_id` is a typed error, never a no-op or panic.
+- **Operator contract mismatch**: if implementation returns effects outside declared masks, fail.
+
+### MVP sequence
+
+1. Create `OperatorRegistryV1` schema + canonical doc (in `docs/canonical/`).
+2. Add `operator_registry.json` as normative bundle artifact + bind digest in report/graph/tape header.
+3. Refactor `SET_SLOT` to be a registered operator invoked via `op_id`.
+4. Add lock tests (above).
+
+### What this avoids
+
+If "operator MVP" is not explicitly a registry (data + identity + verification) and is instead "a few ops wired into `apply()`," you recreate the v1 drift pattern: call sites quietly become the schema, ad hoc conventions accrete, and later "real registry work" becomes a breaking migration.
+
+---
+
+## Truth Regime Matrix
+
+All worlds must run under the same harness contract (`WorldHarnessV1` + `SearchWorldV1`). This matrix tracks which rubric claims each world is designed to falsify.
+
+| World | Type | Rubric #1 (replay) | #2 (trace) | #3 (drift) | #4 (tool) | #5 (transfer) | #6 (belief) | #7 (stochastic) | #8 (learning) | #9 (ML demotion) |
+|-------|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **RomeMini** | Carrier fixture | X | — | X | — | — | — | — | — | — |
+| **RomeMiniSearch** | Search fixture | X | X | X | — | X | — | — | — | X |
+| **SlotLatticeSearch** (6 regimes) | Stress test | X | X | X | — | X | — | — | — | X |
+| *Transactional KV Store* | Tool safety | X | X | X | **X** | X | — | — | — | X |
+| *Mastermind-like* | Partial obs. | X | X | X | — | X | **X** | — | — | X |
+| *Slippery Grid* | Stochastic | X | X | X | — | X | — | **X** | — | X |
+
+*Italic* = planned, not yet built. **Bold X** = the primary claim this world is designed to falsify. Plain X = claim also exercised as a side effect.
+
+---
+
+## Cross-Codebase Equivalence Harness
+
+Sterling (Python) and sterling-native (Rust) share wire formats (.bst1, canonical JSON, Code32 layout). Claiming compatibility without mechanical enforcement is a footgun (G3). This harness makes it testable.
+
+**Minimal fixture set where both codebases must produce byte-identical artifacts**:
+
+| Artifact | Python produces | Rust produces | Comparison |
+|----------|----------------|---------------|------------|
+| `compile()` output bytes | `core/carrier/compiler.py` | `kernel/src/carrier/compile.rs` | Byte-identical ByteStateV1 |
+| ByteTrace bytes | `core/carrier/bytetrace.py` | `kernel/src/carrier/trace_writer.rs` | Byte-identical .bst1 |
+| Payload hash + step chain digest | `core/proofs/` | `kernel/src/proof/trace_hash.rs` | Identical SHA-256 digests |
+| SearchGraph canonical JSON | (Python StateGraph, if applicable) | `search/src/graph.rs` | Byte-identical canonical JSON |
+| Tape header bindings | N/A (Python has no tape) | `search/src/tape.rs` | One-sided; verify Rust consistency |
+| Bundle digest basis | N/A (Python uses H2 bundles) | `harness/src/bundle.rs` | One-sided; verify Rust consistency |
+
+**Implementation**: A small set of golden fixtures (payloads + schemas + registries) checked into both repos. CI in each repo verifies its output against the golden fixtures. The golden fixtures are the shared truth — not either codebase's output.
+
+---
+
 ## Supersession Plan
 
-### Phase 1: Declare what is already superseded (immediate)
+### Phase 1: Declare what is already superseded (DONE)
 
-For each v1 doc whose capability is **Implemented**, add a header note to the v1 file:
-
-```
-> **Superseded by v2**: {v2 canonical doc} + {code locations}
-> v2 evidence: {CAWS spec} + {lock test files}
-```
-
-**Target v1 docs for Phase 1 annotation:**
+9 v1 docs annotated with supersession headers (commit `e745fc6`):
 
 | v1 doc | Superseded by |
 |--------|--------------|
@@ -337,18 +590,22 @@ For each v1 doc whose capability is **Implemented**, add a header note to the v1
 | `core_constraints_v1.md` | `docs/canonical/core_constraints.md` |
 | `north_star.md` | Still valid as thesis; v2 search engine is the realization |
 
-### Phase 2: Close parity gaps for the endgame narrative
+### Phase 2: Build order for closing parity gaps
 
-Priority order (each unlocks a success-rubric claim):
+Each phase unlocks success-rubric claims. Phases are ordered so earlier phases create the infrastructure later phases need.
 
-| Priority | Capability | Unlocks | Estimated scope |
-|----------|-----------|---------|-----------------|
-| 1 | Tool truth-regime world | Rubric #4 (tool safety) | New world + 10-15 lock tests |
-| 2 | Partial observability world | Rubric #6 (belief discipline) | New world + probe operators + 10-15 lock tests |
-| 3 | Stochastic world | Rubric #7 (seed/witness certification) | New world + seed binding + 10-15 lock tests |
-| 4 | Induction MVP | Rubric #8 (learning) | New module + propose/evaluate/promote pipeline |
-| 5 | Memory substrate MVP | Strengthens #5 and #8 | Landmark-like compression as governed operator output |
-| 6 | Text boundary MVP | Endgame narrative completeness | Minimal text IO demo enforcing surface non-authority |
+| Phase | Capability | Unlocks | Key deliverables | Falsifiers |
+|-------|-----------|---------|------------------|------------|
+| **0** | **Operator Registry MVP** | Stable operator identity for all subsequent phases | `OperatorRegistryV1` schema + artifact, SET_SLOT migration, digest binding in report/graph/tape, lock tests | Unknown op_id not fail-closed; operator contract mismatch undetected; registry digest not bound |
+| **1a** | Transactional Tool World | Rubric #4 (tool safety) | KV-store world: STAGE/COMMIT/ROLLBACK/READ/VERIFY operators; tool transcript artifact; 10-15 lock tests | Tool action without transcript; side effect without commit; rollback unverifiable |
+| **1b** | Partial Observability World | Rubric #6 (belief discipline) | Mastermind-like world: probe operators; belief-size monotonicity in trace; 10-15 lock tests | Belief inflation after probe; hidden observation channel; probe results not bound to evidence |
+| **1c** | Stochastic World | Rubric #7 (seed/witness certification) | Slippery Grid world: seed/witness binding; exact replay from evidence; distributional eval over seed sets; 10-15 lock tests | Cannot replay recorded trajectory; cert depends on rerunning environment; no statistical protocol |
+| **2** | Induction MVP | Rubric #8 (learning) | Propose→evaluate→promote cycle; standard evaluation packet; start with scorer/policy table induction | Promoted operator breaks previously certified claims; evaluators modified per-case |
+| **3** | Memory MVP | Strengthens #5, #8 | Landmark candidates from traces → content-addressed artifacts; governed memory updates | Memory artifact not content-addressed; memory update not governed by operator |
+| **4** | Text boundary MVP | Endgame narrative | Minimal parse/render demo; verifiable realization artifact surface (realizer stays in Python) | Surface treated as authority; IR bypass |
+| **∥** | Cross-codebase equivalence harness | Validates "shared wire formats" claim | Golden fixtures in both repos; CI-verified byte-identical outputs | Any wire format drift between Python and Rust |
+
+Phase ∥ (equivalence harness) can run in parallel with any phase.
 
 ### Phase 3: Formal deprecation
 
@@ -367,12 +624,16 @@ These must be resolved to complete parity. Each should become a decision record 
 2. **Memory substrate**: Is SWM a first-class artifact suite (content-addressed, bundle-linked) or an operator-defined side channel?
 3. **Text boundary**: Does v2 implement v1's four-partition IR (Surface/Syntax/Semantics/Hard) or design a new realization pipeline?
 4. **Governance depth**: Does Base/Cert expand into a richer certification campaign model, or remain minimal?
+5. **Certification authority location** *(force now — determines everything else)*: Option A: Python is certification control plane, Rust is evidence generator + verifier. Option B: Rust grows minimal governance surfaces (verdicts, gates, operator set binding), Python focuses on learning/ML + orchestration. Bias: start with A, but treat the Python↔Rust boundary as a governed interface with explicit artifact contracts and cross-repo equivalence tests. If you later move to B, do it as a deliberate phase change.
+6. **Evidence packaging relationship**: Nesting (TD-12/H2 wraps ArtifactBundleV1 digest basis as substrate artifact) vs parallel with disjoint scope (Rust certifies execution, Python certifies campaigns; strict "no overlapping claims" rule). Choose one and document before building governance campaigns.
+7. **Search schema extension mechanism**: Strict version bumps with explicit migration rules vs extension blocks with domain-separated sub-records. Decide before truth-regime worlds land, because those worlds will need additional binding fields or event types that the current schema may not express cleanly.
 
 ---
 
 ## Relationship to other documents
 
 - **[`v1_contract_promotion_queue.md`](v1_contract_promotion_queue.md)**: Tracks doc-level promotion status. This audit tracks capability-level parity.
-- **[`v2_success_rubric.md`](v2_success_rubric.md)**: The scorecard this audit's supersession plan is designed to advance.
+- **[`v2_success_rubric.md`](v2_success_rubric.md)**: The scorecard this audit's build order is designed to advance.
 - **[`clean_sheet_architecture.md`](clean_sheet_architecture.md)**: The target architecture. This audit measures progress against that target.
 - **[`docs/canonical/search_evidence_contract.md`](../canonical/search_evidence_contract.md)**: The v2 canonical doc that supersedes v1's proof/evidence system for the search layer.
+- **Sterling `docs/architecture/v1_v2_supersession_map.md`**: The Python-side view of this same mapping. This parity audit is the primary source of truth (G8); the supersession map summarizes and links here.

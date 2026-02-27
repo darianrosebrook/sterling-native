@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "5342dcbaabdc9acf",
+  "aggregate_hash": "37426fbfd57e55f0",
   "entry_count": 108,
   "entries": [
     {
@@ -106,9 +106,9 @@
       "path": "docs/architecture/v1_v2_parity_audit.md",
       "title": "V1→V2 Parity Audit (Capability Migration Map)",
       "authority": "architecture",
-      "status": "Living audit — updated 2026-02-27",
+      "status": "Living audit — updated 2026-02-28",
       "scope": null,
-      "content_hash": "d34935d171b1bf25",
+      "content_hash": "5971764990ebb611",
       "links": [
         {
           "text": "`v1_contract_promotion_queue.md`",
