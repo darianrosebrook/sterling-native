@@ -46,9 +46,13 @@ A capability is **superseded** only when:
 - Memory substrate (SWM, landmarks, decay, value-learning beyond simple scorers).
 - Text boundary/realization contracts.
 
+### What comes next (not "port more code" — "port more proof obligations")
+
+v1 is not a monolith to port. It is a catalog of *proof obligations* that the v2 substrate must eventually host — either natively in Rust, or as a Python control plane that consumes Rust evidence. The next work is not "port more v1 code to Rust"; it is "build truth-regime worlds and an operator registry so the substrate proves the next class of claims."
+
 ### Strategic conclusion
 
-v2 has built the verification-grade engine block. v1 supersession now depends on breadth capabilities and their governance: worlds, memory, induction, and text.
+v2 has built the verification-grade engine block. v1 supersession now depends on breadth capabilities and their governance: worlds, memory, induction, and text. Eight guardrails (§Guardrails below) prevent the next phase from creating long-lived drift.
 
 ---
 
@@ -97,8 +101,8 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 | CAWS spec | SPINE-001 M2 (operator dispatch), SC-001 M1 (search operators) |
 | Lock tests | `s1_m2_determinism.rs` (apply round-trip), `sc1_search_determinism.rs` (search operator legality) |
 | Parity target | **Contract parity** for operator contract shape; **Not started** for operator breadth. |
-| Gaps | v1 had 28 operators across 5 categories. v2 has SET_SLOT plus search-level expansion. No capability-gating policies, no induced operators, no operator lifecycle. |
-| Next tasks | Define operator-catalog roadmap: which v1 operators carry forward vs are historical. |
+| Gaps | v1 had 28 operators across 5 categories. v2 has SET_SLOT plus search-level expansion. No operator registry artifact, no capability-gating policies, no induced operators, no operator lifecycle. SET_SLOT is hardcoded in `apply()`, not invoked via stable op_id from a registry. |
+| Next tasks | **Operator Registry MVP (Phase 0)** — see §Operator Registry MVP below. Move SET_SLOT into a content-addressed `OperatorRegistryV1` artifact. This is prerequisite to all subsequent phases. |
 
 #### A4. Deterministic replay (carrier level)
 
