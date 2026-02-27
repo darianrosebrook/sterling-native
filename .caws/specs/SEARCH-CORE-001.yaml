@@ -575,7 +575,21 @@ milestones:
       - "Back-compat: Uniform runs remain 5-artifact bundles with no scorer fields"
   - id: M3.3
     title: "Search Health Metrics: deterministic diagnostics derived from SearchGraphV1"
-    status: not_started
+    status: complete
+    evidence:
+      commit: "3aec1d6"
+      tests: 8
+      total_workspace_tests: 407
+      acceptance_coverage:
+        - "SC1-M3.3-METRICS-PURE: sc1_m3_3_metrics_pure"
+        - "SC1-M3.3-METRICS-GOLDEN: sc1_m3_3_metrics_golden (10-run determinism + golden snapshot)"
+        - "SC1-M3.3-HISTOGRAMS-COVERAGE: sc1_m3_3_histograms_coverage"
+        - "SC1-M3.3-OUTCOME-EXHAUSTIVE: sc1_m3_3_outcome_exhaustive (hand-built 7-variant fixture)"
+        - "SC1-M3.3-NONBINDING: sc1_m3_3_nonbinding (tampered diagnostics pass verify_bundle)"
+      additional_tests:
+        - "sc1_m3_3_cross_check_metadata_counters"
+        - "sc1_m3_3_report_contains_health_metrics"
+        - "sc1_m3_3_persistence_roundtrip"
     scope: >-
       New SearchHealthMetricsV1 struct computed purely from SearchGraphV1;
       placed in verification report as DIAGNOSTIC (non-binding); no changes
@@ -588,8 +602,10 @@ milestones:
       - "frontier_high_water is excluded from health metrics (runtime counter, not graph-derivable)"
     touch_points:
       - path: search/src/graph.rs
-        change: "SearchHealthMetricsV1 struct + compute_health_metrics() impl"
-      - path: harness/src/bundle.rs
-        change: "Include health metrics under diagnostics.health_metrics in verification report JSON (DIAGNOSTIC)"
+        change: "SearchHealthMetricsV1 struct + compute_health_metrics() + to_json_value()"
+      - path: harness/src/runner.rs
+        change: "Wire health_metrics into build_search_verification_report under diagnostics.health_metrics"
       - path: tests/lock/tests/sc1_m3_3_health_metrics.rs
-        change: "Golden snapshot, determinism, histogram invariants, outcome exhaustiveness, non-binding proof"
+        change: "8 lock tests: golden snapshot, determinism, histogram invariants, outcome exhaustiveness, non-binding proof, metadata cross-check, report presence, persistence round-trip"
+      - path: tests/lock/tests/goldens/sc1_m3_3_regime_duplicates_metrics.json
+        change: "Golden snapshot for regime_duplicates health metrics canonical JSON"
