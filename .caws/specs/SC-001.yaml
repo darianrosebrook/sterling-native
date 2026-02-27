@@ -612,7 +612,7 @@ milestones:
         change: "Golden snapshot for regime_duplicates health metrics canonical JSON"
   - id: M3.4
     title: "Invariant gap lock tests"
-    status: in_progress
+    status: complete
     scope: >-
       Explicit lock tests for INV-SC-05 (identity-only fingerprint) and
       INV-SC-08 (runner-supplied registry). Closes the two invariant coverage
@@ -642,6 +642,14 @@ milestones:
         given: "a live search with restricted 2-value registry"
         when: "all graph candidates inspected"
         then: "no candidate uses ops/values outside supplied registry; total candidates less than full-registry run"
+    evidence:
+      total_tests: 419
+      new_tests: 6
+      acceptance_ids_anchored: 6
+      commits:
+        - "a09624b test(lock): add M3.4 invariant gap lock tests for INV-SC-05 and INV-SC-08 [SC-001]"
+      files_created:
+        - "tests/lock/tests/sc1_m3_4_invariant_gaps.rs"
     touch_points:
       - path: tests/lock/tests/sc1_m3_4_invariant_gaps.rs
-        change: "7 lock tests covering INV-SC-05 (3 tests) and INV-SC-08 (3 tests) plus search-level coherence"
+        change: "6 lock tests covering INV-SC-05 (3 tests) and INV-SC-08 (3 tests)"
