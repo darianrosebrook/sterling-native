@@ -10,67 +10,42 @@ created_at: '2026-02-27T03:03:20.350Z'
 updated_at: '2026-02-27T03:03:20.351Z'
 blast_radius:
   modules:
-    - kernel/proof/hash
     - search/tape
     - search/search
-    - harness/runner
     - benchmarks
   data_migration: false
 operational_rollback_slo: 5m
 scope:
   in:
-    - kernel/src/proof/hash.rs
     - search/src/tape.rs
     - search/src/tape_writer.rs
     - search/src/search.rs
-    - harness/src/runner.rs
     - benchmarks/
     - .caws/specs/TAPE-001.yaml
   out:
-    - kernel/  # except kernel/src/proof/hash.rs
+    - kernel/
     - search/src/node.rs
     - search/src/frontier.rs
     - search/src/graph.rs
     - search/src/contract.rs
-    - harness/src/bundle.rs
-    - harness/src/bundle_dir.rs
+    - harness/
     - tests/lock/
     - docs/
     - ml/
-scope_overlaps:
-  - spec: SEARCH-CORE-001
-    files:
-      - kernel/src/proof/hash.rs  # SEARCH-CORE-001 excludes kernel/, but TAPE-001 touches ContentHash internals
-      - harness/src/runner.rs     # SEARCH-CORE-001 includes harness/; TAPE-001 only adds lint allow on ScorerInputV1
-    reason: >-
-      TAPE-001 modifies ContentHash (kernel) and adds a clippy allow on ScorerInputV1 (harness)
-      as direct consequences of the raw_sha256 cache changing struct size. These are narrow,
-      well-bounded changes that do not alter SEARCH-CORE-001 semantics.
 threats:
-  - "ContentHash raw_sha256 cache alters struct size, triggering clippy large_enum_variant in downstream enums"
-  - "Leaking kernel error types into search crate public API (layering violation)"
   - "Tape-only invariants gating the non-tape search path (coupling footgun)"
   - "Pre-sizing buffer from untrusted policy values causing OOM"
-  - "Drive-by API shape changes (boxing enum variants) that are hard to back out"
+  - "Struct bloat in ubiquitous types (ContentHash) causing cache pressure regression — measured and reverted"
 invariants:
   - "INV-TO-01: Tape recording is optional; search without tape must not fail due to tape-only invariants"
-  - "INV-TO-02: ContentHash identity (Eq/Hash/Ord) is defined by the full string only; raw_sha256 cache is excluded"
   - "INV-TO-03: TapeWriteError variants are tape-local; no kernel error types exposed in search public API"
   - "INV-TO-04: Scratch buffer provides transactional atomicity: if body construction fails, buf is untouched"
   - "INV-TO-05: Pre-allocation is clamped to 256 MB regardless of policy input"
 acceptance:
-  - id: TO1-RAW-CACHE
-    given: "a ContentHash from canonical_hash()"
-    when: "raw_sha256() is called"
-    then: "returns Some with bytes matching hex_digest()"
-  - id: TO1-RAW-STRICT
-    given: "a ContentHash with non-sha256 algorithm or short digest"
-    when: "raw_sha256_strict() is called"
-    then: "returns appropriate ContentHashError"
   - id: TO1-NO-TAPE-NO-FAIL
     given: "search() called without tape (tape_sink is None)"
-    when: "any ContentHash has no raw cache"
-    then: "search completes normally; no tape-related errors"
+    when: "search completes"
+    then: "no tape-related errors; search_fn_total within ±3% of pre-TAPE-001 baseline"
   - id: TO1-SCRATCH-ATOMICITY
     given: "TapeWriter with scratch buffer"
     when: "body construction fails (e.g., OpArgsTooLong)"
@@ -78,19 +53,33 @@ acceptance:
   - id: TO1-ERROR-LAYERING
     given: "TapeWriteError enum"
     when: "inspected for kernel type dependencies"
-    then: "no ContentHashError variant; kernel errors mapped to tape-local variants"
+    then: "no kernel error types; content_hash_to_raw maps to tape-local InvalidHexDigest/UnsupportedHashAlgorithm"
   - id: TO1-PREALLOC-CAP
     given: "policy with max_expansions=u64::MAX"
     when: "estimate_tape_capacity() is called"
     then: "returns fallback (4096), not OOM"
+  - id: TO1-SHORT-DIGEST-REJECTION
+    given: "a ContentHash with sha256 algorithm but short hex digest"
+    when: "content_hash_to_raw() is called"
+    then: "returns TapeWriteError::InvalidHexDigest"
 non_functional:
-  performance: "Reduce tape overhead by >=20% at scale_1000 (measured via auditable_report bench)"
+  performance: "No regression on search_fn_total; tape overhead reduced ~5% via scratch buffer + prealloc"
   security: "Pre-allocation clamped to 256 MB; no untrusted-size allocations"
   accessibility: "N/A (internal optimization, no UI)"
 contracts:
   - type: project_setup
     path: .caws/specs/TAPE-001.yaml
     description: "Internal perf optimization; no external API contracts. Invariants defined in spec."
+reverted:
+  - change: "ContentHash raw_sha256 cache (Option<[u8;32]>)"
+    reason: >-
+      Struct bloat (~40→72 bytes) caused 18-23% regression in search_fn_total at
+      scale_1000 via cache pressure on SearchNodeV1/CandidateActionV1. Reverted in
+      commit df0b25b. Three-point A/B/C bisect confirmed the cache was the sole
+      cause. Scratch buffer + prealloc retained as regression-free wins.
+    commits:
+      - "69ceca3 (added)"
+      - "df0b25b (reverted)"
 change_budget:
   max_files: 8
   max_loc: 300

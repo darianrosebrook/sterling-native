@@ -32,15 +32,6 @@ scope:
     - ml/
     - reference/v1_impl/
     - .caws/
-scope_overlaps:
-  - spec: TAPE-001
-    files:
-      - kernel/src/proof/hash.rs  # TAPE-001 adds raw_sha256 cache to ContentHash
-      - harness/src/runner.rs     # TAPE-001 adds clippy allow on ScorerInputV1
-    reason: >-
-      TAPE-001 performance optimization adds a raw byte cache to ContentHash and a
-      lint allow for the resulting struct size increase. Narrow changes that do not
-      alter SPINE-001 kernel or harness semantics.
 threats:
   - "apply() smuggling semantics via untyped inputs (mitigated: op_args_bytes + op_args_descriptor)"
   - "determinism violations from floats, wall-clock, or memory addresses in ByteState"
