@@ -29,7 +29,7 @@ pub struct CandidateScoreV1 {
 /// Trait for candidate scoring.
 ///
 /// Implementations must return one score per candidate (same length as input).
-/// Scores are integers — SEARCH-CORE-001 is Cert-only.
+/// Scores are integers — SC-001 is Cert-only.
 pub trait ValueScorer: Send + Sync {
     /// Score a batch of candidates at a given node.
     ///

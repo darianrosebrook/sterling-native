@@ -89,7 +89,7 @@ reverted:
       commit df0b25b. Three-point A/B/C bisect confirmed the cache was the sole
       cause. Scratch buffer + prealloc retained as regression-free wins.
     commits:
-      - "69ceca3 (added, tagged [SPINE-001] [SEARCH-CORE-001])"
+      - "69ceca3 (added, tagged [SPINE-001] [SC-001])"
       - "df0b25b (reverted, tagged [TAPE-001] only — should also carry [SPINE-001] per convention since it touches kernel/)"
 evidence:
   bench_reports:

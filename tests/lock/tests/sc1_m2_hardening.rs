@@ -1,4 +1,4 @@
-//! SEARCH-CORE-001 M2 hardening lock tests.
+//! SC-001 M2 hardening lock tests.
 //!
 //! Tests for evidence preservation (panic/scorer/world contract violations),
 //! symmetric bundle verification, generic world wiring, candidate canonicalization,

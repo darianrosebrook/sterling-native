@@ -1,4 +1,4 @@
-//! SEARCH-CORE-001 lock tests: search determinism, graph completeness,
+//! SC-001 lock tests: search determinism, graph completeness,
 //! loop detection, dead-end semantics, budget enforcement, candidate legality,
 //! score provenance, frontier pruning, goal path reconstruction, and metadata binding.
 
@@ -550,15 +550,15 @@ fn goal_path_reconstruction() {
 
 #[test]
 fn governance_lint_finds_search_core_spec() {
-    // Verify that the SEARCH-CORE-001.yaml spec file exists and contains
+    // Verify that the SC-001.yaml spec file exists and contains
     // SC1-M1 acceptance IDs.
     let spec_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
         .parent()
         .unwrap()
-        .join(".caws/specs/SEARCH-CORE-001.yaml");
-    assert!(spec_path.exists(), "SEARCH-CORE-001.yaml should exist");
+        .join(".caws/specs/SC-001.yaml");
+    assert!(spec_path.exists(), "SC-001.yaml should exist");
 
     let content = std::fs::read_to_string(&spec_path).unwrap();
     assert!(

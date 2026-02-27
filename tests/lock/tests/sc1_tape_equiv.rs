@@ -1,4 +1,4 @@
-//! SEARCH-CORE-001 T1 lock tests: tape equivalence proofs.
+//! SC-001 T1 lock tests: tape equivalence proofs.
 //!
 //! These tests prove that `search_with_tape()` produces a binary tape whose
 //! rendered `SearchGraphV1` is byte-identical to the graph built by the

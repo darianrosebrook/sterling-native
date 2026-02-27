@@ -1,4 +1,4 @@
-//! SEARCH-CORE-001 M3.3 lock tests: search health metrics.
+//! SC-001 M3.3 lock tests: search health metrics.
 //!
 //! Each test targets a specific acceptance criterion from the M3.3 milestone.
 //! Health metrics are DIAGNOSTIC (INV-SC-M33-02): they do not participate in

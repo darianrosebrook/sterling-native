@@ -1,4 +1,4 @@
-id: SEARCH-CORE-001
+id: SC-001
 type: feature
 title: "Search Core: Frontier, SearchNodeV1, SearchGraphV1, ValueScorer, best-first search with deterministic audit trail"
 status: in_progress
@@ -25,10 +25,11 @@ scope:
     - tools/
   out:
     - kernel/
-    - docs/
     - ml/
     - reference/v1_impl/
-    - .caws/
+change_budget:
+  max_files: 20
+  max_loc: 1500
 threats:
   - "Search crate accidentally depending on harness (breaks one-way dependency invariant)"
   - "HashMap iteration order in frontier or visited set breaking determinism"
@@ -105,7 +106,7 @@ acceptance:
   - id: SC1-M1-GOV-LINT-MULTISPEC
     given: "the lint_acceptance_ids.py tool"
     when: "run on the workspace"
-    then: "scans all .caws/specs/*.yaml and validates references for both SPINE-001 and SEARCH-CORE-001"
+    then: "scans all .caws/specs/*.yaml and validates references for both SPINE-001 and SC-001"
   - id: SC1-M1-RESERVED-POLICY-HARDERROR
     given: "a SearchPolicyV1 selecting DedupKeyV1::FullState or PruneVisitedPolicyV1::ReleaseVisited"
     when: "search() is called"
@@ -296,10 +297,10 @@ non_functional:
 contracts:
   - type: architecture
     path: .claude/plans/snappy-booping-mccarthy.md
-    description: "SEARCH-CORE-001 M1 implementation plan with type definitions, invariants, and execution order"
+    description: "SC-001 M1 implementation plan with type definitions, invariants, and execution order"
   - type: architecture
     path: .claude/plans/scalable-petting-sloth.md
-    description: "SEARCH-CORE-001 M2 hardening plan: evidence preservation, symmetric verification, generic wiring, canonicalization"
+    description: "SC-001 M2 hardening plan: evidence preservation, symmetric verification, generic wiring, canonicalization"
 out_of_contract:
   - "Evidence preservation guarantees exclude process-level abort classes: OOM abort, explicit std::process::abort(), external SIGKILL, panic=abort profile override"
   - "catch_unwind depends on panic=unwind; workspace Cargo.toml pins this for dev and release profiles"

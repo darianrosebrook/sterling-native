@@ -1,4 +1,4 @@
-//! SEARCH-CORE-001 M3.0 lock tests: search bundle persistence round-trip.
+//! SC-001 M3.0 lock tests: search bundle persistence round-trip.
 //!
 //! These tests exercise `write_bundle_dir → read_bundle_dir → verify_bundle_dir`
 //! for search bundles (5 artifacts including `search_graph.json`).

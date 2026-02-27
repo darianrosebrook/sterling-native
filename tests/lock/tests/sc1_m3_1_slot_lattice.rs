@@ -1,4 +1,4 @@
-//! SEARCH-CORE-001 M3.1 lock tests: slot lattice world stress regimes.
+//! SC-001 M3.1 lock tests: slot lattice world stress regimes.
 //!
 //! Each test targets a specific acceptance criterion from the M3.1 milestone.
 //! Regime constructors return matched `(world, policy, expectations)` triples

@@ -1,4 +1,4 @@
-//! SEARCH-CORE-001 M3.2 lock tests: table scorer as auditable bundle artifact.
+//! SC-001 M3.2 lock tests: table scorer as auditable bundle artifact.
 //!
 //! Each test targets a specific acceptance criterion from the M3.2 milestone.
 //! Tests prove that scorer behavior is bound to a normative in-bundle artifact,

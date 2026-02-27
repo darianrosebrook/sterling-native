@@ -5,7 +5,7 @@ use crate::error::SearchError;
 /// Search-specific budget and dedup configuration.
 ///
 /// Extends the harness `PolicySnapshotV1` with search budgets.
-/// SEARCH-CORE-001 is Cert-only: integer scores, total ordering, bit-reproducible.
+/// SC-001 is Cert-only: integer scores, total ordering, bit-reproducible.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchPolicyV1 {
     /// Hard cap on node expansions.

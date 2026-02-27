@@ -1,7 +1,7 @@
 # Search Complexity Reference (v1)
 
 Algorithmic complexity analysis for the v1 best-first search implementation
-(SEARCH-CORE-001). All references are to `sterling-native` source files.
+(SC-001). All references are to `sterling-native` source files.
 
 ## Variables
 
