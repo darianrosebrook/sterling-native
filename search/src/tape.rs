@@ -629,19 +629,6 @@ pub(crate) fn note_to_tag(note: &ExpansionNoteV1) -> u8 {
 // Candidate/expansion view helpers for the writer
 // ---------------------------------------------------------------------------
 
-/// Extract the raw 32-byte fingerprint from a `CandidateRecordV1`'s outcome
-/// when it is `DuplicateSuppressed`. Returns the hex string to raw bytes.
-pub(crate) fn dup_fingerprint_to_raw(
-    outcome: &CandidateOutcomeV1,
-) -> Option<Result<[u8; 32], TapeWriteError>> {
-    match outcome {
-        CandidateOutcomeV1::DuplicateSuppressed {
-            existing_fingerprint,
-        } => Some(hex_str_to_raw(existing_fingerprint)),
-        _ => None,
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
