@@ -306,12 +306,15 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         ScorerInputV1::Table { artifact, .. } => Some(artifact.content_hash.as_str().to_string()),
     };
 
+    let health_metrics = search_result.graph.compute_health_metrics();
+
     let verification_report = build_search_verification_report(
         WorldHarnessV1::world_id(world),
         &policy_content_hash,
         &search_graph_content_hash,
         &codebook_hash,
         scorer_digest_for_report.as_deref(),
+        &health_metrics,
     )
     .map_err(SearchRunError::RunError)?;
 
@@ -367,10 +370,15 @@ fn build_search_verification_report(
     search_graph_content_hash: &ContentHash,
     codebook_hash: &ContentHash,
     scorer_digest: Option<&str>,
+    health_metrics: &sterling_search::graph::SearchHealthMetricsV1,
 ) -> Result<Vec<u8>, RunError> {
     let mut report = serde_json::json!({
         // DIAGNOSTIC: not verified by verify_bundle(); present for observability.
         "codebook_hash": codebook_hash.as_str(),
+        // DIAGNOSTIC: health metrics derived from SearchGraphV1 (INV-SC-M33-02).
+        "diagnostics": {
+            "health_metrics": health_metrics.to_json_value(),
+        },
         "mode": "search",
         // BINDING: verified against policy_snapshot.json content_hash.
         "policy_digest": policy_content_hash.as_str(),
