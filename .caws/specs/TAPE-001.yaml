@@ -1,11 +1,11 @@
 id: TAPE-001
-type: chore
+type: feature
 title: >-
   Tape Writer Hot-Path Optimization: eliminate avoidable work during search
   recording
 status: in_progress
 risk_tier: 2
-mode: chore
+mode: development
 created_at: '2026-02-27T03:03:20.350Z'
 updated_at: '2026-02-27T03:03:20.351Z'
 blast_radius:
@@ -37,6 +37,15 @@ scope:
     - tests/lock/
     - docs/
     - ml/
+scope_overlaps:
+  - spec: SEARCH-CORE-001
+    files:
+      - kernel/src/proof/hash.rs  # SEARCH-CORE-001 excludes kernel/, but TAPE-001 touches ContentHash internals
+      - harness/src/runner.rs     # SEARCH-CORE-001 includes harness/; TAPE-001 only adds lint allow on ScorerInputV1
+    reason: >-
+      TAPE-001 modifies ContentHash (kernel) and adds a clippy allow on ScorerInputV1 (harness)
+      as direct consequences of the raw_sha256 cache changing struct size. These are narrow,
+      well-bounded changes that do not alter SEARCH-CORE-001 semantics.
 threats:
   - "ContentHash raw_sha256 cache alters struct size, triggering clippy large_enum_variant in downstream enums"
   - "Leaking kernel error types into search crate public API (layering violation)"

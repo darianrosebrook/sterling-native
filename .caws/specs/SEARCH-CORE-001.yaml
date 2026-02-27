@@ -29,6 +29,15 @@ scope:
     - ml/
     - reference/v1_impl/
     - .caws/
+scope_overlaps:
+  - spec: TAPE-001
+    files:
+      - kernel/src/proof/hash.rs  # SEARCH-CORE-001 excludes kernel/, TAPE-001 modifies ContentHash
+      - harness/src/runner.rs     # both specs include harness/; TAPE-001 only adds lint allow
+    reason: >-
+      TAPE-001 adds a raw_sha256 cache to ContentHash and a clippy allow on ScorerInputV1.
+      These do not alter search semantics. kernel/src/proof/hash.rs remains in SEARCH-CORE-001
+      scope.out; TAPE-001 owns that change.
 threats:
   - "Search crate accidentally depending on harness (breaks one-way dependency invariant)"
   - "HashMap iteration order in frontier or visited set breaking determinism"
