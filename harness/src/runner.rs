@@ -189,12 +189,12 @@ pub fn build_table_scorer_input(
 /// Pipeline:
 /// 1. `encode_payload()` → `compile()` → root `ByteStateV1`
 /// 2. Build search policy + metadata bindings
-/// 3. `search(root_state, world, policy, scorer)` → `SearchResult`
-/// 4. Assemble bundle with `search_graph.json` (normative)
+/// 3. `search_with_tape(root_state, world, policy, scorer)` → `(SearchResult, TapeOutput)`
+/// 4. Assemble bundle with `search_graph.json` + `search_tape.stap` (both normative)
 ///
-/// For `ScorerInputV1::Table`, the bundle includes 6 artifacts (adding
+/// For `ScorerInputV1::Table`, the bundle includes 7 artifacts (adding
 /// `scorer.json` as normative). For `ScorerInputV1::Uniform`, the bundle
-/// remains at 5 artifacts with no scorer fields.
+/// has 6 artifacts.
 ///
 /// # Errors
 ///
@@ -270,13 +270,13 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         scorer_digest: scorer_digest_hex.clone(),
     };
 
-    // Phase 3: run search.
+    // Phase 3: run search (with tape).
     let scorer_ref: &dyn ValueScorer = match scorer_input {
         ScorerInputV1::Uniform => &sterling_search::scorer::UniformScorer,
         ScorerInputV1::Table { scorer, .. } => scorer,
     };
 
-    let search_result = sterling_search::search::search(
+    let (search_result, tape_output) = sterling_search::search::search_with_tape(
         compilation.state.clone(),
         world,
         &registry,
@@ -306,6 +306,9 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         ScorerInputV1::Table { artifact, .. } => Some(artifact.content_hash.as_str().to_string()),
     };
 
+    // Compute tape content hash once; reused for report binding and precomputed_hash.
+    let tape_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &tape_output.bytes);
+
     let health_metrics = search_result.graph.compute_health_metrics();
 
     let verification_report = build_search_verification_report(
@@ -315,6 +318,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         &codebook_hash,
         scorer_digest_for_report.as_deref(),
         &health_metrics,
+        &tape_content_hash,
     )
     .map_err(SearchRunError::RunError)?;
 
@@ -332,6 +336,12 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
             content: search_graph_bytes,
             normative: true,
             precomputed_hash: Some(search_graph_content_hash),
+        },
+        ArtifactInput {
+            name: "search_tape.stap".into(),
+            content: tape_output.bytes,
+            normative: true,
+            precomputed_hash: Some(tape_content_hash),
         },
         ("verification_report.json".into(), verification_report, true).into(),
     ];
@@ -371,6 +381,7 @@ fn build_search_verification_report(
     codebook_hash: &ContentHash,
     scorer_digest: Option<&str>,
     health_metrics: &sterling_search::graph::SearchHealthMetricsV1,
+    tape_content_hash: &ContentHash,
 ) -> Result<Vec<u8>, RunError> {
     let mut report = serde_json::json!({
         // DIAGNOSTIC: not verified by verify_bundle(); present for observability.
@@ -385,6 +396,8 @@ fn build_search_verification_report(
         "schema_version": "verification_report.v1",
         // BINDING: verified against search_graph.json content_hash.
         "search_graph_digest": search_graph_content_hash.as_str(),
+        // BINDING: verified against search_tape.stap content_hash.
+        "tape_digest": tape_content_hash.as_str(),
         // BINDING: cross-verified against search_graph.json metadata.world_id.
         "world_id": world_id,
     });
@@ -829,8 +842,9 @@ mod tests {
         assert!(bundle.artifacts.contains_key("compilation_manifest.json"));
         assert!(bundle.artifacts.contains_key("policy_snapshot.json"));
         assert!(bundle.artifacts.contains_key("search_graph.json"));
+        assert!(bundle.artifacts.contains_key("search_tape.stap"));
         assert!(bundle.artifacts.contains_key("verification_report.json"));
-        assert_eq!(bundle.artifacts.len(), 5);
+        assert_eq!(bundle.artifacts.len(), 6);
     }
 
     #[test]

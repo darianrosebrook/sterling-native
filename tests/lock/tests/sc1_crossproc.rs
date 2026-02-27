@@ -83,8 +83,8 @@ fn crossproc_determinism_four_env_variants() {
         "baseline output missing termination_reason=goal_reached"
     );
     assert!(
-        baseline.contains("artifact_count=5"),
-        "baseline output missing artifact_count=5"
+        baseline.contains("artifact_count=6"),
+        "baseline output missing artifact_count=6"
     );
     assert!(
         baseline.contains("search_graph_normative=true"),
