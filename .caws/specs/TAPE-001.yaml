@@ -20,6 +20,7 @@ scope:
     - search/src/tape.rs
     - search/src/tape_writer.rs
     - search/src/search.rs
+    - harness/src/runner.rs  # lint allow on ScorerInputV1 (ContentHash size consequence)
     - benchmarks/
     - .caws/specs/TAPE-001.yaml
   out:
@@ -28,10 +29,20 @@ scope:
     - search/src/frontier.rs
     - search/src/graph.rs
     - search/src/contract.rs
-    - harness/
+    - harness/src/bundle.rs
+    - harness/src/bundle_dir.rs
     - tests/lock/
     - docs/
     - ml/
+scope_overlaps:
+  - spec: SPINE-001
+    files:
+      - harness/src/runner.rs  # SPINE-001 includes harness/; TAPE-001 only added lint allow
+    reason: >-
+      TAPE-001 added #[allow(clippy::large_enum_variant)] on ScorerInputV1 in
+      e8b1844. This remains necessary after the ContentHash cache revert because
+      clippy still flags the Table variant size. The change is a single-line lint
+      annotation that does not alter SPINE-001 harness semantics.
 threats:
   - "Tape-only invariants gating the non-tape search path (coupling footgun)"
   - "Pre-sizing buffer from untrusted policy values causing OOM"
@@ -78,8 +89,8 @@ reverted:
       commit df0b25b. Three-point A/B/C bisect confirmed the cache was the sole
       cause. Scratch buffer + prealloc retained as regression-free wins.
     commits:
-      - "69ceca3 (added)"
-      - "df0b25b (reverted)"
+      - "69ceca3 (added, tagged [SPINE-001] [SEARCH-CORE-001])"
+      - "df0b25b (reverted, tagged [TAPE-001] only — should also carry [SPINE-001] per convention since it touches kernel/)"
 change_budget:
   max_files: 8
   max_loc: 300

@@ -32,6 +32,13 @@ scope:
     - ml/
     - reference/v1_impl/
     - .caws/
+scope_overlaps:
+  - spec: TAPE-001
+    files:
+      - harness/src/runner.rs  # TAPE-001 added lint allow on ScorerInputV1
+    reason: >-
+      Single-line #[allow(clippy::large_enum_variant)] annotation. Does not alter
+      harness semantics or ScorerInputV1 API shape.
 threats:
   - "apply() smuggling semantics via untyped inputs (mitigated: op_args_bytes + op_args_descriptor)"
   - "determinism violations from floats, wall-clock, or memory addresses in ByteState"
