@@ -385,13 +385,13 @@ fn parse_expansion(
     };
 
     let candidate_count = read_field!(read_u32, "candidate_count");
-    let mut candidates = Vec::with_capacity(candidate_count as usize);
+    let mut candidates = Vec::with_capacity((candidate_count as usize).min(cursor.remaining()));
     for _ in 0..candidate_count {
         candidates.push(parse_candidate(cursor, record_index)?);
     }
 
     let note_count = read_field!(read_u32, "note_count");
-    let mut notes = Vec::with_capacity(note_count as usize);
+    let mut notes = Vec::with_capacity((note_count as usize).min(cursor.remaining()));
     for _ in 0..note_count {
         notes.push(parse_note(cursor, record_index)?);
     }
@@ -574,7 +574,7 @@ fn parse_note(
                     record_index,
                     detail: "note.pruned_count",
                 })?;
-            let mut ids = Vec::with_capacity(count as usize);
+            let mut ids = Vec::with_capacity((count as usize).min(cursor.remaining()));
             for _ in 0..count {
                 ids.push(
                     cursor
