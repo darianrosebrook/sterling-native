@@ -23,7 +23,9 @@ use std::time::Instant;
 
 use serde::Serialize;
 
-use sterling_benchmarks::{build_table_scorer_for_regime, prepare_search_setup, run_search_only};
+use sterling_benchmarks::{
+    build_table_scorer_for_regime, prepare_search_setup, run_search_only, run_search_with_tape_only,
+};
 use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::slot_lattice_regimes::{
     regime_budget_limited, regime_duplicates, regime_exhaustive_dead_end, regime_frontier_pressure,
@@ -342,6 +344,50 @@ fn run_regime_benchmarks(
             measurement_kind: "search_fn_total".to_string(),
             timing,
             graph_metadata: graph_meta,
+            phase_timing: None,
+        });
+
+        // -- search_with_tape() total (tape writing overhead) --
+        for _ in 0..WARMUP_ITERATIONS {
+            let _ = run_search_with_tape_only(
+                &setup,
+                &spec.regime.world,
+                &spec.regime.policy,
+                &*scorer_ref,
+            );
+        }
+
+        let mut tape_durations_ns = Vec::with_capacity(TIMED_ITERATIONS);
+        let mut tape_bytes_len: Option<usize> = None;
+        for _ in 0..TIMED_ITERATIONS {
+            let start = Instant::now();
+            let (_result, tape_output) = run_search_with_tape_only(
+                &setup,
+                &spec.regime.world,
+                &spec.regime.policy,
+                &*scorer_ref,
+            );
+            let elapsed = start.elapsed();
+            tape_durations_ns.push(elapsed.as_nanos());
+            tape_bytes_len = Some(tape_output.bytes.len());
+        }
+
+        let tape_timing = compute_timing_stats(&mut tape_durations_ns);
+
+        eprintln!(
+            "  {}/{scorer_name}/search_fn_total_with_tape: p50={}ns p95={}ns tape_bytes={}",
+            spec.name,
+            tape_timing.p50_ns,
+            tape_timing.p95_ns,
+            tape_bytes_len.unwrap_or(0),
+        );
+
+        measurements.push(MeasurementV1 {
+            schema_id: "sterling.bench_measurement.v1",
+            input_snapshot_digest: snapshot_digest.clone(),
+            measurement_kind: "search_fn_total_with_tape".to_string(),
+            timing: tape_timing,
+            graph_metadata: None,
             phase_timing: None,
         });
 

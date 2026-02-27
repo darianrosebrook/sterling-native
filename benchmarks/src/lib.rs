@@ -11,6 +11,7 @@ use sterling_search::contract::SearchWorldV1;
 use sterling_search::policy::SearchPolicyV1;
 use sterling_search::scorer::ValueScorer;
 use sterling_search::search::{MetadataBindings, SearchResult};
+use sterling_search::tape::TapeOutput;
 
 use sterling_harness::bundle::DOMAIN_BUNDLE_ARTIFACT;
 use sterling_harness::contract::WorldHarnessV1;
@@ -94,6 +95,29 @@ pub fn run_search_only<W: SearchWorldV1>(
         &setup.bindings,
     )
     .expect("search should succeed in benchmarks")
+}
+
+/// Run `search_with_tape()` with prepared setup. Returns the full
+/// `SearchResult` and `TapeOutput`.
+///
+/// # Panics
+///
+/// Panics if `search_with_tape()` returns an error.
+pub fn run_search_with_tape_only<W: SearchWorldV1>(
+    setup: &SearchSetup,
+    world: &W,
+    policy: &SearchPolicyV1,
+    scorer: &dyn ValueScorer,
+) -> (SearchResult, TapeOutput) {
+    sterling_search::search::search_with_tape(
+        setup.root_state.clone(),
+        world,
+        &setup.registry,
+        policy,
+        scorer,
+        &setup.bindings,
+    )
+    .expect("search_with_tape should succeed in benchmarks")
 }
 
 /// Build a `ScorerInputV1::Table` from a regime's world.
