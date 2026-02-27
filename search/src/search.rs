@@ -392,10 +392,21 @@ fn search_impl(
             break;
         };
         let current_fp_hex = current.state_fingerprint.hex_digest().to_string();
-        // Pre-compute raw bytes once from the ContentHash cache (avoids hex decode per emission).
-        let current_fp_raw = *current.state_fingerprint.raw_sha256_strict().map_err(|e| {
-            SearchError::TapeWrite(crate::tape::TapeWriteError::ContentHashError(e))
-        })?;
+        // Pre-compute raw bytes once per expansion (cheap cache read, avoids hex decode per emission).
+        // Only required when tape is recording; non-tape path must not fail on tape invariants.
+        let current_fp_raw = if tape_sink.is_some() {
+            Some(content_hash_to_raw(&current.state_fingerprint)?)
+        } else {
+            None
+        };
+        // Closure to extract raw bytes inside tape emission sites (guaranteed Some when sink exists).
+        let current_fp_raw_or_err = || -> Result<[u8; 32], SearchError> {
+            current_fp_raw.ok_or_else(|| {
+                SearchError::TapeWrite(crate::tape::TapeWriteError::CanonError(
+                    "current_fp_raw missing with active tape sink".into(),
+                ))
+            })
+        };
         let pop_key = FrontierPopKeyV1 {
             f_cost: current.f_cost(),
             depth: current.depth,
@@ -422,7 +433,7 @@ fn search_impl(
             if let Some(sink) = &mut tape_sink {
                 sink.on_expansion(&ExpansionView {
                     expansion: &panic_expansion,
-                    state_fingerprint_raw: current_fp_raw,
+                    state_fingerprint_raw: current_fp_raw_or_err()?,
                 })
                 .map_err(SearchError::TapeWrite)?;
             }
@@ -476,7 +487,7 @@ fn search_impl(
                 if let Some(sink) = &mut tape_sink {
                     sink.on_expansion(&ExpansionView {
                         expansion: &arity_expansion,
-                        state_fingerprint_raw: current_fp_raw,
+                        state_fingerprint_raw: current_fp_raw_or_err()?,
                     })
                     .map_err(SearchError::TapeWrite)?;
                 }
@@ -507,7 +518,7 @@ fn search_impl(
                 if let Some(sink) = &mut tape_sink {
                     sink.on_expansion(&ExpansionView {
                         expansion: &scorer_panic_expansion,
-                        state_fingerprint_raw: current_fp_raw,
+                        state_fingerprint_raw: current_fp_raw_or_err()?,
                     })
                     .map_err(SearchError::TapeWrite)?;
                 }
@@ -686,7 +697,7 @@ fn search_impl(
                             if let Some(sink) = &mut tape_sink {
                                 sink.on_expansion(&ExpansionView {
                                     expansion: &panic_expansion,
-                                    state_fingerprint_raw: current_fp_raw,
+                                    state_fingerprint_raw: current_fp_raw_or_err()?,
                                 })
                                 .map_err(SearchError::TapeWrite)?;
                                 sink.on_termination(&TerminationView {
@@ -768,7 +779,7 @@ fn search_impl(
             if let Some(sink) = &mut tape_sink {
                 sink.on_expansion(&ExpansionView {
                     expansion: &violation_expansion,
-                    state_fingerprint_raw: current_fp_raw,
+                    state_fingerprint_raw: current_fp_raw_or_err()?,
                 })
                 .map_err(SearchError::TapeWrite)?;
             }
@@ -823,7 +834,7 @@ fn search_impl(
         if let Some(sink) = &mut tape_sink {
             sink.on_expansion(&ExpansionView {
                 expansion: &normal_expansion,
-                state_fingerprint_raw: current_fp_raw,
+                state_fingerprint_raw: current_fp_raw_or_err()?,
             })
             .map_err(SearchError::TapeWrite)?;
         }

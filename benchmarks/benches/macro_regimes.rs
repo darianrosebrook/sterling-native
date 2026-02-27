@@ -48,7 +48,7 @@ fn bench_search_fn_total(c: &mut Criterion) {
         let setup_t = prepare_search_setup(&regime.world, &regime.policy, &table_input);
         let scorer_ref: &dyn sterling_search::scorer::ValueScorer = match &table_input {
             ScorerInputV1::Uniform => &UniformScorer as &dyn sterling_search::scorer::ValueScorer,
-            ScorerInputV1::Table(t) => &t.scorer,
+            ScorerInputV1::Table { scorer, .. } => scorer,
         };
         group.bench_with_input(
             BenchmarkId::new(format!("{name}/table"), ""),

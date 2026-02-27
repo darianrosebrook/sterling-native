@@ -62,7 +62,7 @@ fn table_scorer_reorders_candidates_concretely() {
 
     // Extract the boosted hash for assertion.
     let boosted_hash = match &scorer_input {
-        ScorerInputV1::Table(t) => t.scorer.table().keys().next().unwrap().clone(),
+        ScorerInputV1::Table { scorer, .. } => scorer.table().keys().next().unwrap().clone(),
         ScorerInputV1::Uniform => panic!("expected Table scorer"),
     };
 
@@ -196,9 +196,9 @@ fn scorer_artifact_in_bundle() {
     );
 
     // Verify bytes are preserved (content matches what the input provided).
-    if let ScorerInputV1::Table(t) = &scorer_input {
+    if let ScorerInputV1::Table { artifact, .. } = &scorer_input {
         assert_eq!(
-            scorer_artifact.content, t.artifact.bytes,
+            scorer_artifact.content, artifact.bytes,
             "scorer.json bytes must match input artifact"
         );
     }

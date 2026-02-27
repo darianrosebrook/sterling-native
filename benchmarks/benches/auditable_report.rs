@@ -55,7 +55,7 @@ fn build_input_snapshot(
 ) -> (serde_json::Value, String) {
     let scorer_digest = match scorer_input {
         ScorerInputV1::Uniform => None,
-        ScorerInputV1::Table(t) => Some(t.artifact.content_hash.as_str().to_string()),
+        ScorerInputV1::Table { artifact, .. } => Some(artifact.content_hash.as_str().to_string()),
     };
 
     // Policy as canonical JSON for hashing
@@ -274,7 +274,7 @@ fn run_regime_benchmarks(
 
         let scorer_ref: Box<dyn ValueScorer> = match &scorer_input {
             ScorerInputV1::Uniform => Box::new(UniformScorer),
-            ScorerInputV1::Table(t) => Box::new(t.scorer.clone()),
+            ScorerInputV1::Table { scorer, .. } => Box::new(scorer.clone()),
         };
 
         // -- search() total (includes post-loop build_graph) --

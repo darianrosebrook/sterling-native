@@ -1,0 +1,79 @@
+id: TAPE-001
+type: feature
+title: >-
+  Tape Writer Hot-Path Optimization: eliminate avoidable work during search
+  recording
+status: in_progress
+risk_tier: 2
+mode: development
+created_at: '2026-02-27T03:03:20.350Z'
+updated_at: '2026-02-27T03:03:20.351Z'
+blast_radius:
+  modules:
+    - kernel/proof/hash
+    - search/tape
+    - search/search
+    - harness/runner
+    - benchmarks
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - kernel/src/proof/hash.rs
+    - search/src/tape.rs
+    - search/src/tape_writer.rs
+    - search/src/search.rs
+    - harness/src/runner.rs
+    - benchmarks/
+    - .caws/specs/TAPE-001.yaml
+  out:
+    - kernel/  # except kernel/src/proof/hash.rs
+    - search/src/node.rs
+    - search/src/frontier.rs
+    - search/src/graph.rs
+    - search/src/contract.rs
+    - harness/src/bundle.rs
+    - harness/src/bundle_dir.rs
+    - tests/lock/
+    - docs/
+    - ml/
+threats:
+  - "ContentHash raw_sha256 cache alters struct size, triggering clippy large_enum_variant in downstream enums"
+  - "Leaking kernel error types into search crate public API (layering violation)"
+  - "Tape-only invariants gating the non-tape search path (coupling footgun)"
+  - "Pre-sizing buffer from untrusted policy values causing OOM"
+  - "Drive-by API shape changes (boxing enum variants) that are hard to back out"
+invariants:
+  - "INV-TO-01: Tape recording is optional; search without tape must not fail due to tape-only invariants"
+  - "INV-TO-02: ContentHash identity (Eq/Hash/Ord) is defined by the full string only; raw_sha256 cache is excluded"
+  - "INV-TO-03: TapeWriteError variants are tape-local; no kernel error types exposed in search public API"
+  - "INV-TO-04: Scratch buffer provides transactional atomicity: if body construction fails, buf is untouched"
+  - "INV-TO-05: Pre-allocation is clamped to 256 MB regardless of policy input"
+acceptance:
+  - id: TO1-RAW-CACHE
+    given: "a ContentHash from canonical_hash()"
+    when: "raw_sha256() is called"
+    then: "returns Some with bytes matching hex_digest()"
+  - id: TO1-RAW-STRICT
+    given: "a ContentHash with non-sha256 algorithm or short digest"
+    when: "raw_sha256_strict() is called"
+    then: "returns appropriate ContentHashError"
+  - id: TO1-NO-TAPE-NO-FAIL
+    given: "search() called without tape (tape_sink is None)"
+    when: "any ContentHash has no raw cache"
+    then: "search completes normally; no tape-related errors"
+  - id: TO1-SCRATCH-ATOMICITY
+    given: "TapeWriter with scratch buffer"
+    when: "body construction fails (e.g., OpArgsTooLong)"
+    then: "self.buf is unchanged from before the on_* call"
+  - id: TO1-ERROR-LAYERING
+    given: "TapeWriteError enum"
+    when: "inspected for kernel type dependencies"
+    then: "no ContentHashError variant; kernel errors mapped to tape-local variants"
+  - id: TO1-PREALLOC-CAP
+    given: "policy with max_expansions=u64::MAX"
+    when: "estimate_tape_capacity() is called"
+    then: "returns fallback (4096), not OOM"
+change_budget:
+  max_files: 8
+  max_loc: 300

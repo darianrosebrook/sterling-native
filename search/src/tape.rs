@@ -151,16 +151,20 @@ pub(crate) fn raw_hash2(domain: &[u8], a: &[u8], b: &[u8]) -> [u8; 32] {
 
 /// Extract the raw 32-byte SHA-256 digest from a `ContentHash`.
 ///
-/// Uses the cached raw bytes when available (zero-cost for canonical hashes).
-/// Falls back to hex decode only for parsed hashes without a valid cache.
-///
-/// Returns `Err` if the hash is not `sha256:` prefixed or the digest is not 64 hex chars.
+/// Uses the cached raw bytes via `raw_sha256_strict()`. Returns an error
+/// (mapped to tape-local variants) if the hash is not a valid full SHA-256 digest.
 pub(crate) fn content_hash_to_raw(
     hash: &sterling_kernel::proof::hash::ContentHash,
 ) -> Result<[u8; 32], TapeWriteError> {
     match hash.raw_sha256_strict() {
         Ok(raw) => Ok(*raw),
-        Err(e) => Err(TapeWriteError::ContentHashError(e)),
+        Err(sterling_kernel::proof::hash::ContentHashError::NotSha256) => {
+            Err(TapeWriteError::UnsupportedHashAlgorithm)
+        }
+        Err(
+            sterling_kernel::proof::hash::ContentHashError::InvalidDigestLength { .. }
+            | sterling_kernel::proof::hash::ContentHashError::InvalidHexChars,
+        ) => Err(TapeWriteError::InvalidHexDigest),
     }
 }
 
@@ -199,8 +203,6 @@ pub enum TapeWriteError {
     UnsupportedHashAlgorithm,
     /// Hex digest string is not valid lowercase hex or wrong length.
     InvalidHexDigest,
-    /// `ContentHash` does not have valid raw SHA-256 bytes.
-    ContentHashError(sterling_kernel::proof::hash::ContentHashError),
     /// Canonical JSON serialization failed.
     CanonError(String),
     /// Termination was already written.
@@ -219,7 +221,6 @@ impl std::fmt::Display for TapeWriteError {
                 write!(f, "only sha256 hashes are supported in tape V1")
             }
             Self::InvalidHexDigest => write!(f, "invalid hex digest string"),
-            Self::ContentHashError(e) => write!(f, "content hash error: {e}"),
             Self::CanonError(detail) => write!(f, "canonical JSON error: {detail}"),
             Self::AlreadyTerminated => write!(f, "termination already written"),
             Self::NotTerminated => {
@@ -690,9 +691,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             content_hash_to_raw(&hash),
-            Err(TapeWriteError::ContentHashError(
-                sterling_kernel::proof::hash::ContentHashError::NotSha256
-            ))
+            Err(TapeWriteError::UnsupportedHashAlgorithm)
         );
     }
 

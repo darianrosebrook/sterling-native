@@ -110,21 +110,17 @@ pub struct ScorerArtifactV1 {
 ///
 /// Invalid states (e.g., `TableScorer` without artifact) are unrepresentable.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum ScorerInputV1 {
     /// Uniform scoring (bonus=0 for all candidates). No scorer artifact.
     Uniform,
     /// Table scoring with a bundled artifact.
-    /// Boxed to avoid large enum variant size difference with `Uniform`.
-    Table(Box<ScorerInputTable>),
-}
-
-/// Inner data for `ScorerInputV1::Table`.
-#[derive(Debug, Clone)]
-pub struct ScorerInputTable {
-    /// The scorer implementation.
-    pub scorer: TableScorer,
-    /// The artifact for bundle inclusion.
-    pub artifact: ScorerArtifactV1,
+    Table {
+        /// The scorer implementation.
+        scorer: TableScorer,
+        /// The artifact for bundle inclusion.
+        artifact: ScorerArtifactV1,
+    },
 }
 
 /// Build a `ScorerInputV1::Table` from a score table.
@@ -181,10 +177,7 @@ pub fn build_table_scorer_input(
         hex_digest,
     };
 
-    Ok(ScorerInputV1::Table(Box::new(ScorerInputTable {
-        scorer,
-        artifact,
-    })))
+    Ok(ScorerInputV1::Table { scorer, artifact })
 }
 
 /// Run a search world through the search pipeline, producing a bundle.
@@ -264,7 +257,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
     // Extract scorer digest for metadata bindings (Table mode only).
     let scorer_digest_hex = match scorer_input {
         ScorerInputV1::Uniform => None,
-        ScorerInputV1::Table(t) => Some(t.artifact.hex_digest.clone()),
+        ScorerInputV1::Table { artifact, .. } => Some(artifact.hex_digest.clone()),
     };
 
     // Binding format: raw hex (no algorithm prefix). See bundle.rs::binding_hex().
@@ -280,7 +273,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
     // Phase 3: run search.
     let scorer_ref: &dyn ValueScorer = match scorer_input {
         ScorerInputV1::Uniform => &sterling_search::scorer::UniformScorer,
-        ScorerInputV1::Table(t) => &t.scorer,
+        ScorerInputV1::Table { scorer, .. } => scorer,
     };
 
     let search_result = sterling_search::search::search(
@@ -310,7 +303,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
 
     let scorer_digest_for_report = match scorer_input {
         ScorerInputV1::Uniform => None,
-        ScorerInputV1::Table(t) => Some(t.artifact.content_hash.as_str().to_string()),
+        ScorerInputV1::Table { artifact, .. } => Some(artifact.content_hash.as_str().to_string()),
     };
 
     let verification_report = build_search_verification_report(
@@ -341,8 +334,8 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
     ];
 
     // Include scorer artifact for Table mode (normative).
-    if let ScorerInputV1::Table(t) = scorer_input {
-        artifacts.push(("scorer.json".into(), t.artifact.bytes.clone(), true).into());
+    if let ScorerInputV1::Table { artifact, .. } = scorer_input {
+        artifacts.push(("scorer.json".into(), artifact.bytes.clone(), true).into());
     }
 
     build_bundle(artifacts).map_err(SearchRunError::BundleFailed)

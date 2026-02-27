@@ -23,9 +23,8 @@ scope:
     - Cargo.toml
     - .github/workflows/
     - tools/
-    - kernel/src/proof/hash.rs  # ContentHash raw_sha256 cache for tape hot-path optimization
   out:
-    - kernel/  # except kernel/src/proof/hash.rs (listed above)
+    - kernel/
     - docs/
     - ml/
     - reference/v1_impl/
