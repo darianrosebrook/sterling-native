@@ -35,6 +35,10 @@ pub struct TapeWriter {
     scratch: Vec<u8>,
 }
 
+/// Hard cap on tape buffer pre-allocation (256 MB).
+/// Prevents untrusted policy values from causing OOM.
+const MAX_PREALLOC_BYTES: usize = 256 * 1024 * 1024;
+
 impl TapeWriter {
     /// Create a new writer, writing magic + version + header.
     ///
@@ -42,10 +46,21 @@ impl TapeWriter {
     /// `h0 = raw_hash(DOMAIN_SEARCH_TAPE, header_bytes)`.
     #[must_use]
     pub fn new(header_json_bytes: &[u8]) -> Self {
+        Self::new_with_capacity(header_json_bytes, 4096)
+    }
+
+    /// Create a new writer with an explicit buffer capacity hint (in bytes).
+    ///
+    /// The hint is clamped to [`MAX_PREALLOC_BYTES`] to prevent OOM from
+    /// untrusted policy values. The actual allocation includes the fixed
+    /// header overhead (10 bytes + header length).
+    #[must_use]
+    pub fn new_with_capacity(header_json_bytes: &[u8], capacity_hint: usize) -> Self {
         let header_len = header_json_bytes.len();
+        let clamped = capacity_hint.min(MAX_PREALLOC_BYTES);
 
         // Pre-allocate: magic(4) + version(2) + header_len(4) + header + estimated records
-        let mut buf = Vec::with_capacity(10 + header_len + 4096);
+        let mut buf = Vec::with_capacity(10 + header_len + clamped);
 
         // Magic
         buf.extend_from_slice(&SEARCH_TAPE_MAGIC);

@@ -123,7 +123,13 @@ pub fn search_with_tape(
     let root_fp = canonical_hash(DOMAIN_SEARCH_NODE, &root_state.identity_bytes());
     let header_bytes = build_tape_header(metadata_bindings, root_fp.hex_digest(), policy)?;
 
-    let mut writer = TapeWriter::new(&header_bytes);
+    // Estimate tape buffer capacity from policy bounds.
+    // Per expansion: ~80 bytes header + ~80 bytes per candidate.
+    // Per node creation: ~73 bytes. Nodes ≈ expansions × candidates_per_node.
+    // Use checked arithmetic + clamp to avoid OOM from untrusted values.
+    let capacity_hint = estimate_tape_capacity(policy);
+
+    let mut writer = TapeWriter::new_with_capacity(&header_bytes, capacity_hint);
     let result = search_impl(
         root_state,
         world,
@@ -135,6 +141,42 @@ pub fn search_with_tape(
     )?;
     let tape_output = writer.finish().map_err(SearchError::TapeWrite)?;
     Ok((result, tape_output))
+}
+
+/// Estimate tape buffer capacity from policy bounds.
+///
+/// Uses checked arithmetic and clamps to 256 MB. Falls back to 4096
+/// if any overflow occurs (which means the policy values are absurd).
+fn estimate_tape_capacity(policy: &SearchPolicyV1) -> usize {
+    const BYTES_PER_EXPANSION_HEADER: u64 = 80;
+    const BYTES_PER_CANDIDATE: u64 = 80;
+    const BYTES_PER_NODE: u64 = 73;
+    const FALLBACK: usize = 4096;
+    const MAX_CAP: u64 = 256 * 1024 * 1024;
+
+    let expansions = policy.max_expansions;
+    let cands = policy.max_candidates_per_node;
+
+    // expansion_bytes = expansions * (header + cands * per_cand)
+    let per_expansion = cands
+        .checked_mul(BYTES_PER_CANDIDATE)
+        .and_then(|c| c.checked_add(BYTES_PER_EXPANSION_HEADER));
+    let expansion_bytes = per_expansion.and_then(|pe| expansions.checked_mul(pe));
+
+    // node_bytes = expansions * cands * per_node (upper bound: every candidate creates a node)
+    let node_count = expansions.checked_mul(cands);
+    let node_bytes = node_count.and_then(|nc| nc.checked_mul(BYTES_PER_NODE));
+
+    // total = expansion_bytes + node_bytes + footer
+    let total = expansion_bytes
+        .and_then(|e| node_bytes.and_then(|n| e.checked_add(n)))
+        .and_then(|t| t.checked_add(64)); // footer + termination
+
+    match total {
+        Some(t) if t <= MAX_CAP => usize::try_from(t).unwrap_or(FALLBACK),
+        Some(_) => usize::try_from(MAX_CAP).unwrap_or(FALLBACK),
+        None => FALLBACK,
+    }
 }
 
 /// Build canonical JSON header bytes for the tape.
