@@ -3,7 +3,7 @@ type: feature
 title: >-
   Tape Writer Hot-Path Optimization: eliminate avoidable work during search
   recording
-status: in_progress
+status: complete
 risk_tier: 2
 mode: development
 created_at: '2026-02-27T03:03:20.350Z'
@@ -91,6 +91,47 @@ reverted:
     commits:
       - "69ceca3 (added, tagged [SPINE-001] [SEARCH-CORE-001])"
       - "df0b25b (reverted, tagged [TAPE-001] only — should also carry [SPINE-001] per convention since it touches kernel/)"
+evidence:
+  bench_reports:
+    - path: target/bench_reports/bench_report_v1_pre_tape_opt.json
+      label: "A (pre-tape baseline)"
+    - path: target/bench_reports/bench_report_v1_post_tape_opt.json
+      label: "B (with ContentHash cache — regressed)"
+    - path: target/bench_reports/bench_report_v1_scratch_prealloc_only.json
+      label: "C (scratch+prealloc only — retained)"
+  scale_1000_uniform_p50:
+    A_pre_tape_ms: 73.6
+    B_with_cache_ms: 87.9
+    C_scratch_prealloc_ms: 73.6
+  scale_1000_uniform_tape_p50:
+    A_pre_tape_ms: 101.3
+    C_scratch_prealloc_ms: 100.0
+  conclusion: >-
+    A→B shows +19.4% regression on search_fn_total (uniform, scale_1000 p50)
+    caused solely by ContentHash struct bloat (~40→72 bytes). A→C shows no
+    regression: scratch buffer + prealloc are regression-free wins. Tape
+    overhead (C minus A on search_fn_total_with_tape minus search_fn_total)
+    reduced from ~27.7ms to ~26.4ms (~5% improvement from scratch+prealloc).
+  commits_shipped:
+    - "3339f74 — scratch buffer (eliminates per-record Vec allocs)"
+    - "3e61ed2 — pre-sized buffer from policy bounds"
+    - "e8b1844 — hardening (lint allow on ScorerInputV1)"
+    - "f507d69 — impossible-state fix + tape constant consolidation"
+  commits_reverted:
+    - "69ceca3 — ContentHash raw_sha256 cache (added)"
+    - "df0b25b — ContentHash raw_sha256 cache (reverted)"
+deferrals:
+  - item: "hex decode elimination (~26ms at scale_1000)"
+    reason: >-
+      Not pursued until tape is always-on and proven worth the API surface
+      change. The ~26ms overhead is dominated by hex::decode_to_slice in
+      content_hash_to_raw(), called per-node and per-candidate during tape
+      recording. Three non-bloat options documented for future consideration:
+      (a) canonical_hash() returns (ContentHash, [u8;32]) tuple — callers
+      that need raw keep it without inflating the type;
+      (b) tape-local optimized 64-hex→32-byte decoder;
+      (c) accept the decode cost as acceptable overhead.
+    blocked_by: "decision on whether tape becomes always-on vs opt-in"
 change_budget:
   max_files: 8
   max_loc: 300
