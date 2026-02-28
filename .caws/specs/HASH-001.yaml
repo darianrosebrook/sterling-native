@@ -1,0 +1,95 @@
+id: HASH-001
+type: chore
+title: Centralize hash domains into typed HashDomain enum + deny_unknown_fields lock
+status: in_progress
+risk_tier: 3
+mode: development
+created_at: '2026-02-28T03:19:22.020Z'
+updated_at: '2026-02-28T03:19:22.021Z'
+blast_radius:
+  modules:
+    - kernel/proof
+    - search
+    - harness
+    - benchmarks
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - kernel/src/proof/hash_domain.rs
+    - kernel/src/proof/hash.rs
+    - kernel/src/proof/mod.rs
+    - kernel/src/proof/trace_hash.rs
+    - kernel/src/carrier/compile.rs
+    - kernel/src/carrier/registry.rs
+    - kernel/src/operators/operator_registry.rs
+    - kernel/src/lib.rs
+    - search/src/node.rs
+    - search/src/graph.rs
+    - search/src/tape.rs
+    - search/src/tape_writer.rs
+    - search/src/tape_reader.rs
+    - search/src/search.rs
+    - search/src/frontier.rs
+    - search/src/policy.rs
+    - harness/src/bundle.rs
+    - harness/src/bundle_dir.rs
+    - harness/src/policy.rs
+    - harness/src/runner.rs
+    - benchmarks/benches/auditable_report.rs
+    - tests/lock/tests/
+    - tests/lock/src/
+    - docs/
+  out:
+    - kernel/src/carrier/bytestate.rs
+    - kernel/src/carrier/bytetrace.rs
+    - kernel/src/carrier/code32.rs
+    - kernel/src/carrier/trace_writer.rs
+    - kernel/src/carrier/trace_reader.rs
+    - kernel/src/proof/canon.rs
+    - kernel/src/proof/replay.rs
+    - ml/
+    - reference/v1_impl/
+change_budget:
+  max_files: 30
+  max_loc: 500
+invariants:
+  - All production domain byte literals exist in exactly one file (hash_domain.rs)
+  - All production hash computations select a domain via HashDomain (no untyped domains)
+  - Domain set is unique (no two variants share identical bytes)
+  - Domain strings are null-terminated and follow STERLING::*::V1 naming convention
+  - All existing content hashes remain unchanged (zero semantic change)
+  - No deny_unknown_fields in production code
+acceptance:
+  - given: A Rust source file calls canonical_hash
+    when: The domain parameter is inspected
+    then: It is always a HashDomain enum variant, never raw bytes
+  - given: A new DOMAIN_* constant is needed
+    when: A developer adds it
+    then: It must be a variant in hash_domain.rs (lock test enforces)
+  - given: Production Rust source in kernel/, search/, harness/
+    when: Scanned for deny_unknown_fields
+    then: Zero matches found
+acceptance_criteria:
+  - id: HASH-001-ENUM
+    description: HashDomain enum with macro-generated variants, as_bytes(), ALL, Display
+    status: pending
+  - id: HASH-001-SIGNATURE
+    description: canonical_hash takes HashDomain, not raw bytes; raw_hash/raw_hash2 likewise
+    status: pending
+  - id: HASH-001-MIGRATION
+    description: All call sites migrated; 2 inline violations fixed
+    status: pending
+  - id: HASH-001-LOCK
+    description: Lock tests for canonical set count, uniqueness, naming, no raw literals
+    status: pending
+  - id: HASH-001-DUF
+    description: deny_unknown_fields regression lock test
+    status: pending
+non_functional:
+  a11y: []
+  perf:
+    note: Zero-cost type wrapper; as_bytes() is a static deref
+  security: []
+contracts: []

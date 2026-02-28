@@ -4,5 +4,6 @@
 
 pub mod canon;
 pub mod hash;
+pub mod hash_domain;
 pub mod replay;
 pub mod trace_hash;

@@ -16,6 +16,7 @@
 //! Footer: `[record_count:u64le][final_chain_hash:32 bytes][footer_magic:u32le "PATS"]`.
 
 use sha2::{Digest, Sha256};
+use sterling_kernel::proof::hash::HashDomain;
 
 use crate::graph::{
     ApplyFailureKindV1, CandidateOutcomeV1, DeadEndReasonV1, ExpandEventV1, ExpansionNoteV1,
@@ -46,11 +47,11 @@ pub const FOOTER_SIZE: usize = 8 + 32 + 4;
 
 /// Domain prefix for tape header hashing (chain seed).
 /// `h0 = sha256(DOMAIN_SEARCH_TAPE || header_bytes)`
-pub const DOMAIN_SEARCH_TAPE: &[u8] = b"STERLING::SEARCH_TAPE::V1\0";
+pub const DOMAIN_SEARCH_TAPE: HashDomain = HashDomain::SearchTape;
 
 /// Domain prefix for tape chain step hashing.
 /// `h_i = sha256(DOMAIN_SEARCH_TAPE_CHAIN || h_{i-1} || record_frame_bytes)`
-pub const DOMAIN_SEARCH_TAPE_CHAIN: &[u8] = b"STERLING::SEARCH_TAPE_CHAIN::V1\0";
+pub const DOMAIN_SEARCH_TAPE_CHAIN: HashDomain = HashDomain::SearchTapeChain;
 
 // ---------------------------------------------------------------------------
 // Record type tags
@@ -122,9 +123,9 @@ pub const NOTE_FRONTIER_PRUNED: u8 = 1;
 
 /// SHA-256 with domain prefix, returning raw 32 bytes.
 /// Equivalent to `canonical_hash(domain, data)` but avoids the `ContentHash` wrapper.
-pub(crate) fn raw_hash(domain: &[u8], data: &[u8]) -> [u8; 32] {
+pub(crate) fn raw_hash(domain: HashDomain, data: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(domain);
+    hasher.update(domain.as_bytes());
     hasher.update(data);
     let result = hasher.finalize();
     let mut out = [0u8; 32];
@@ -134,9 +135,9 @@ pub(crate) fn raw_hash(domain: &[u8], data: &[u8]) -> [u8; 32] {
 
 /// SHA-256 with domain prefix and two data slices, returning raw 32 bytes.
 /// Used for hash chain: `h_i = raw_hash2(DOMAIN, h_{i-1}, record_frame_bytes)`.
-pub(crate) fn raw_hash2(domain: &[u8], a: &[u8], b: &[u8]) -> [u8; 32] {
+pub(crate) fn raw_hash2(domain: HashDomain, a: &[u8], b: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(domain);
+    hasher.update(domain.as_bytes());
     hasher.update(a);
     hasher.update(b);
     let result = hasher.finalize();
@@ -614,7 +615,7 @@ mod tests {
 
     #[test]
     fn raw_hash_matches_canonical_hash() {
-        let domain = b"STERLING::TEST_DOMAIN::V1\0";
+        let domain = HashDomain::SearchTape;
         let data = b"test data for hash verification";
 
         let raw = raw_hash(domain, data);

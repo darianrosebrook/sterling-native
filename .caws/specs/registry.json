@@ -28,7 +28,14 @@
       "status": "closed",
       "created_at": "2026-02-27T18:14:13.347Z",
       "updated_at": "2026-02-27T18:14:13.348Z"
+    },
+    "HASH-001": {
+      "path": "HASH-001.yaml",
+      "type": "feature",
+      "status": "draft",
+      "created_at": "2026-02-28T03:19:22.020Z",
+      "updated_at": "2026-02-28T03:19:22.021Z"
     }
   },
-  "lastUpdated": "2026-02-27T18:14:13.354Z"
+  "lastUpdated": "2026-02-28T03:19:22.026Z"
 }

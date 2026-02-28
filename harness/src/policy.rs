@@ -12,9 +12,10 @@
 use crate::contract::{ProgramStep, WorldHarnessV1};
 use sterling_kernel::carrier::code32::Code32;
 use sterling_kernel::proof::canon::canonical_json_bytes;
+use sterling_kernel::proof::hash::HashDomain;
 
 /// Domain prefix for policy snapshot hashing (harness-originated).
-pub const DOMAIN_POLICY_SNAPSHOT: &[u8] = b"STERLING::POLICY_SNAPSHOT::V1\0";
+pub const DOMAIN_POLICY_SNAPSHOT: HashDomain = HashDomain::PolicySnapshot;
 
 /// Default budget values for harness runs.
 const DEFAULT_MAX_STEPS: usize = 10;

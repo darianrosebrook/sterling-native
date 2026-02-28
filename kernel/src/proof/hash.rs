@@ -4,8 +4,11 @@
 //! Algorithm: SHA-256 for all V1 artifacts. Blake3 reserved for future V2.
 //!
 //! **Exactly one place defines canonical hashing** (SPINE-001 invariant).
+//! Domain bytes live in [`super::hash_domain::HashDomain`] — the single authority.
 
 use sha2::{Digest, Sha256};
+
+pub use super::hash_domain::HashDomain;
 
 /// A content-addressed hash with algorithm identifier.
 ///
@@ -88,52 +91,45 @@ impl ContentHash {
 // Domain separation constants.
 // These match v1 exactly: `core/carrier/bytestate.py` and `core/carrier/bytetrace.py`.
 // Each prefix is null-terminated.
+//
+// The canonical definition lives in `hash_domain::HashDomain`. These aliases
+// preserve existing import paths (`use …::hash::DOMAIN_IDENTITY_PLANE`).
 
 /// Domain prefix for `ByteState` identity plane hashing.
-pub const DOMAIN_IDENTITY_PLANE: &[u8] = b"STERLING::BYTESTATE_IDENTITY::V1\0";
+pub const DOMAIN_IDENTITY_PLANE: HashDomain = HashDomain::IdentityPlane;
 
 /// Domain prefix for `ByteState` evidence hashing (identity + status).
-pub const DOMAIN_EVIDENCE_PLANE: &[u8] = b"STERLING::BYTESTATE_EVIDENCE::V1\0";
+pub const DOMAIN_EVIDENCE_PLANE: HashDomain = HashDomain::EvidencePlane;
 
 /// Domain prefix for `ByteTrace` payload hashing.
-pub const DOMAIN_BYTETRACE: &[u8] = b"STERLING::BYTETRACE::V1\0";
+pub const DOMAIN_BYTETRACE: HashDomain = HashDomain::ByteTrace;
 
 /// Domain prefix for registry snapshot hashing.
-pub const DOMAIN_REGISTRY_SNAPSHOT: &[u8] = b"STERLING::REGISTRY_SNAPSHOT::V1\0";
+pub const DOMAIN_REGISTRY_SNAPSHOT: HashDomain = HashDomain::RegistrySnapshot;
 
 /// Domain prefix for schema bundle hashing.
-pub const DOMAIN_SCHEMA_BUNDLE: &[u8] = b"STERLING::BYTESTATE_SCHEMA_BUNDLE::V1\0";
+pub const DOMAIN_SCHEMA_BUNDLE: HashDomain = HashDomain::SchemaBundleHash;
 
 /// Domain prefix for compilation payload commitment.
-///
-/// This is a Native-originated prefix (not from v1) — the `compile()` boundary
-/// is a new concept. Using a dedicated prefix prevents domain collapse between
-/// "payload commitment in compilation manifest" and "identity plane digest."
-pub const DOMAIN_COMPILATION_PAYLOAD: &[u8] = b"STERLING::COMPILATION_PAYLOAD::V1\0";
+pub const DOMAIN_COMPILATION_PAYLOAD: HashDomain = HashDomain::CompilationPayload;
 
 /// Domain prefix for step hash chain: initial step commitment.
-///
-/// Native-originated (v1 has no step chain). Used for divergence localization.
-/// `chain_0 = sha256(DOMAIN_TRACE_STEP || frame_0_bytes)`
-pub const DOMAIN_TRACE_STEP: &[u8] = b"STERLING::TRACE_STEP::V1\0";
+pub const DOMAIN_TRACE_STEP: HashDomain = HashDomain::TraceStep;
 
 /// Domain prefix for step hash chain: chained step commitment.
-///
-/// Native-originated (v1 has no step chain). Used for divergence localization.
-/// `chain_i = sha256(DOMAIN_TRACE_STEP_CHAIN || chain_{i-1} || frame_i_bytes)`
-pub const DOMAIN_TRACE_STEP_CHAIN: &[u8] = b"STERLING::TRACE_STEP_CHAIN::V1\0";
+pub const DOMAIN_TRACE_STEP_CHAIN: HashDomain = HashDomain::TraceStepChain;
 
 /// Compute the canonical hash of a byte slice with domain separation.
 ///
 /// Algorithm: SHA-256 (V1-compatible).
 /// Computes `sha256(domain_prefix || data)` and returns `"sha256:<hex_digest>"`.
 ///
-/// The domain prefix must include the null terminator (all `DOMAIN_*` constants
-/// in this module already do). This matches v1's hashing exactly.
+/// The domain prefix is obtained from [`HashDomain::as_bytes()`] and includes
+/// the null terminator. This matches v1's hashing exactly.
 #[must_use]
-pub fn canonical_hash(domain: &[u8], data: &[u8]) -> ContentHash {
+pub fn canonical_hash(domain: HashDomain, data: &[u8]) -> ContentHash {
     let mut hasher = Sha256::new();
-    hasher.update(domain);
+    hasher.update(domain.as_bytes());
     hasher.update(data);
     let digest = hasher.finalize();
     let hex = hex::encode(digest);
@@ -175,23 +171,25 @@ mod tests {
 
     #[test]
     fn domain_prefixes_are_null_terminated() {
-        assert!(DOMAIN_IDENTITY_PLANE.ends_with(&[0]));
-        assert!(DOMAIN_EVIDENCE_PLANE.ends_with(&[0]));
-        assert!(DOMAIN_BYTETRACE.ends_with(&[0]));
-        assert!(DOMAIN_REGISTRY_SNAPSHOT.ends_with(&[0]));
-        assert!(DOMAIN_SCHEMA_BUNDLE.ends_with(&[0]));
-        assert!(DOMAIN_COMPILATION_PAYLOAD.ends_with(&[0]));
-        assert!(DOMAIN_TRACE_STEP.ends_with(&[0]));
-        assert!(DOMAIN_TRACE_STEP_CHAIN.ends_with(&[0]));
+        // Comprehensive null-termination is verified in hash_domain::tests.
+        // These spot-check the kernel aliases.
+        assert!(DOMAIN_IDENTITY_PLANE.as_bytes().ends_with(&[0]));
+        assert!(DOMAIN_EVIDENCE_PLANE.as_bytes().ends_with(&[0]));
+        assert!(DOMAIN_BYTETRACE.as_bytes().ends_with(&[0]));
+        assert!(DOMAIN_REGISTRY_SNAPSHOT.as_bytes().ends_with(&[0]));
+        assert!(DOMAIN_SCHEMA_BUNDLE.as_bytes().ends_with(&[0]));
+        assert!(DOMAIN_COMPILATION_PAYLOAD.as_bytes().ends_with(&[0]));
+        assert!(DOMAIN_TRACE_STEP.as_bytes().ends_with(&[0]));
+        assert!(DOMAIN_TRACE_STEP_CHAIN.as_bytes().ends_with(&[0]));
     }
 
     #[test]
     fn domain_prefixes_match_v1() {
         // Cross-reference with v1: core/carrier/bytestate.py lines 28-30
-        assert_eq!(DOMAIN_IDENTITY_PLANE, b"STERLING::BYTESTATE_IDENTITY::V1\0");
-        assert_eq!(DOMAIN_EVIDENCE_PLANE, b"STERLING::BYTESTATE_EVIDENCE::V1\0");
+        assert_eq!(DOMAIN_IDENTITY_PLANE.as_bytes(), b"STERLING::BYTESTATE_IDENTITY::V1\0");
+        assert_eq!(DOMAIN_EVIDENCE_PLANE.as_bytes(), b"STERLING::BYTESTATE_EVIDENCE::V1\0");
         // Cross-reference with v1: core/carrier/bytetrace.py line 36
-        assert_eq!(DOMAIN_BYTETRACE, b"STERLING::BYTETRACE::V1\0");
+        assert_eq!(DOMAIN_BYTETRACE.as_bytes(), b"STERLING::BYTETRACE::V1\0");
     }
 
     // --- V1 parity test vectors (S1-M1-HASH-V1-VECTORS) ---

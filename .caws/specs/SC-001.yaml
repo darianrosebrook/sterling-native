@@ -32,12 +32,9 @@ scope:
     - kernel/src/carrier/bytestate.rs
     - kernel/src/carrier/bytetrace.rs
     - kernel/src/carrier/code32.rs
-    - kernel/src/carrier/registry.rs
     - kernel/src/carrier/trace_writer.rs
     - kernel/src/carrier/trace_reader.rs
-    - kernel/src/proof/hash.rs
     - kernel/src/proof/canon.rs
-    - kernel/src/proof/trace_hash.rs
     - ml/
     - reference/v1_impl/
 change_budget:

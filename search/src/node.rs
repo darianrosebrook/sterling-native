@@ -2,14 +2,14 @@
 
 use sterling_kernel::carrier::bytestate::ByteStateV1;
 use sterling_kernel::carrier::code32::Code32;
-use sterling_kernel::proof::hash::ContentHash;
+use sterling_kernel::proof::hash::{ContentHash, HashDomain};
 
 /// Domain prefix for search node fingerprints.
-pub const DOMAIN_SEARCH_NODE: &[u8] = b"STERLING::SEARCH_NODE::V1\0";
+pub const DOMAIN_SEARCH_NODE: HashDomain = HashDomain::SearchNode;
 
 /// Domain prefix for candidate action content hashing.
 /// Distinct from `DOMAIN_SEARCH_NODE` to prevent cross-domain collisions.
-pub const DOMAIN_SEARCH_CANDIDATE: &[u8] = b"STERLING::SEARCH_CANDIDATE::V1\0";
+pub const DOMAIN_SEARCH_CANDIDATE: HashDomain = HashDomain::SearchCandidate;
 
 /// An immutable search node in the frontier.
 ///

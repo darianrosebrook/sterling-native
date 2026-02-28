@@ -20,22 +20,22 @@ use std::collections::BTreeMap;
 
 use sterling_kernel::carrier::trace_reader::bytes_to_trace;
 use sterling_kernel::proof::canon::canonical_json_bytes;
-use sterling_kernel::proof::hash::{canonical_hash, ContentHash};
+use sterling_kernel::proof::hash::{canonical_hash, ContentHash, HashDomain};
 use sterling_kernel::proof::trace_hash::{payload_hash, step_chain};
 use sterling_search::tape_reader::read_tape;
 use sterling_search::tape_render::render_graph;
 
 /// Domain prefix for bundle artifact content hashing (harness-originated).
-pub const DOMAIN_BUNDLE_ARTIFACT: &[u8] = b"STERLING::BUNDLE_ARTIFACT::V1\0";
+pub const DOMAIN_BUNDLE_ARTIFACT: HashDomain = HashDomain::BundleArtifact;
 
 /// Domain prefix for bundle digest computation (harness-originated).
-pub const DOMAIN_BUNDLE_DIGEST: &[u8] = b"STERLING::BUNDLE_DIGEST::V1\0";
+pub const DOMAIN_BUNDLE_DIGEST: HashDomain = HashDomain::BundleDigest;
 
 /// Domain prefix for harness fixture hashing (harness-originated).
-pub const DOMAIN_HARNESS_FIXTURE: &[u8] = b"STERLING::HARNESS_FIXTURE::V1\0";
+pub const DOMAIN_HARNESS_FIXTURE: HashDomain = HashDomain::HarnessFixture;
 
 /// Domain prefix for codebook hash computation (harness-originated).
-pub const DOMAIN_CODEBOOK_HASH: &[u8] = b"STERLING::CODEBOOK_HASH::V1\0";
+pub const DOMAIN_CODEBOOK_HASH: HashDomain = HashDomain::CodebookHash;
 
 /// A single artifact in the bundle.
 #[derive(Debug, Clone, PartialEq, Eq)]

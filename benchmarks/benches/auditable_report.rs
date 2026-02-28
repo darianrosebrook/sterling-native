@@ -32,14 +32,14 @@ use sterling_harness::worlds::slot_lattice_regimes::{
     regime_scale_1000, regime_truncation, Regime,
 };
 use sterling_kernel::proof::canon::canonical_json_bytes;
-use sterling_kernel::proof::hash::canonical_hash;
+use sterling_kernel::proof::hash::{canonical_hash, HashDomain};
 use sterling_search::scorer::{UniformScorer, ValueScorer};
 
 // ---------------------------------------------------------------------------
 // Domain constant for input snapshot hashing
 // ---------------------------------------------------------------------------
 
-const DOMAIN_BENCH_INPUT: &[u8] = b"STERLING::BENCH_INPUT::V1\0";
+const DOMAIN_BENCH_INPUT: HashDomain = HashDomain::BenchInput;
 
 // ---------------------------------------------------------------------------
 // Input Snapshot (canonical, hashable)
@@ -485,7 +485,7 @@ fn run_regime_benchmarks(
 
 /// Quick SHA-256 hex string for determinism guard.
 fn sha2_digest(data: &[u8]) -> String {
-    canonical_hash(b"STERLING::BENCH_GUARD\0", data)
+    canonical_hash(HashDomain::BenchGuard, data)
         .hex_digest()
         .to_string()
 }

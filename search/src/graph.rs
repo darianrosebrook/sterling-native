@@ -6,9 +6,10 @@
 use crate::node::CandidateActionV1;
 use crate::policy::{DedupKeyV1, PruneVisitedPolicyV1};
 use crate::scorer::CandidateScoreV1;
+use sterling_kernel::proof::hash::HashDomain;
 
 /// Domain prefix for search graph content hashing.
-pub const DOMAIN_SEARCH_GRAPH: &[u8] = b"STERLING::SEARCH_GRAPH::V1\0";
+pub const DOMAIN_SEARCH_GRAPH: HashDomain = HashDomain::SearchGraph;
 
 /// The complete search audit trail.
 #[derive(Debug, Clone)]

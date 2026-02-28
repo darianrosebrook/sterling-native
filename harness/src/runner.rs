@@ -40,7 +40,7 @@ use sterling_kernel::carrier::trace_writer::trace_to_bytes;
 use sterling_kernel::operators::apply::apply;
 use sterling_kernel::operators::operator_registry::{kernel_operator_registry, OperatorRegistryV1};
 use sterling_kernel::proof::canon::canonical_json_bytes;
-use sterling_kernel::proof::hash::{canonical_hash, ContentHash};
+use sterling_kernel::proof::hash::{canonical_hash, ContentHash, HashDomain};
 use sterling_kernel::proof::replay::replay_verify;
 use sterling_kernel::proof::trace_hash::{payload_hash, step_chain};
 
@@ -742,7 +742,7 @@ fn build_codebook_hash(world: &dyn WorldHarnessV1) -> Result<ContentHash, RunErr
 
 /// Build a deterministic suite identity from the world ID.
 fn build_suite_identity(world_id: &str) -> ContentHash {
-    canonical_hash(b"STERLING::SUITE_IDENTITY::V1\0", world_id.as_bytes())
+    canonical_hash(HashDomain::SuiteIdentity, world_id.as_bytes())
 }
 
 /// Build the verification report JSON (canonical JSON bytes).
