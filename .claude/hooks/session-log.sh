@@ -281,7 +281,7 @@ for i, turn in enumerate(turns):
     md_lines = [f"# Turn {num}", ""]
 
     if turn["user"]:
-        md_lines.extend([f"> ---user---\n{turn['user']}\n---\/user---", ""])
+        md_lines.extend([f"> ---user---\n{turn['user']}\n---/user---", ""])
 
     for event in turn["timeline"]:
         kind = event["kind"]
@@ -360,13 +360,20 @@ for i, turn in enumerate(turns):
             n = event.get("name", "")
             tool_summary[n] = tool_summary.get(n, 0) + 1
 
+    def group_by_ext(paths):
+        groups = {}
+        for p in paths:
+            ext = os.path.splitext(p)[1] or "(no ext)"
+            groups.setdefault(ext, []).append(p)
+        return groups
+
     turn_json = {
         "turn": num,
         "user": turn["user"],
         "timeline": turn["timeline"],
         "tool_summary": tool_summary,
-        "files_edited": turn["edits"],
-        "files_read": turn["reads"],
+        "files_edited": group_by_ext(turn["edits"]),
+        "files_read": group_by_ext(turn["reads"]),
         "searches": turn["searches"],
         "commands": [c["cmd"] for c in turn["commands"]],
     }
