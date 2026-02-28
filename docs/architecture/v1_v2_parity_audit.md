@@ -441,7 +441,7 @@ Eight footgun risks identified during cross-codebase audit. These are authority 
 
 Don't pretend the current schema won't face extension pressure once worlds diversify.
 
-**Status**: Open decision #7.
+**Status**: Resolved — ADR 0008. Additive fields within a version; breaking changes require bumps.
 
 ### G6. Tool worlds executing real side effects
 
@@ -529,6 +529,21 @@ In Rust: `BTreeMap<OpId, &'static dyn OperatorImpl>` for builtins. Later: `Insta
 2. Add `operator_registry.json` as normative bundle artifact + bind digest in report/graph/tape header.
 3. Refactor `SET_SLOT` to be a registered operator invoked via `op_id`.
 4. Add lock tests (above).
+
+### Naming disambiguation
+
+Two "registries" coexist as distinct artifacts:
+
+| Name | Type | Field in metadata | What it is |
+|------|------|-------------------|------------|
+| `RegistryV1` | `kernel/src/carrier/registry.rs` | `registry_digest` | Code32↔ConceptID bijective mapping (compilation boundary) |
+| `OperatorRegistryV1` | New | `operator_set_digest` | Operator catalog: op_ids, signatures, legality contracts |
+
+These are different artifacts with different digests. `registry_digest` is the concept/codebook digest. `operator_set_digest` is the operator catalog digest. Do not overload the field name. Both are normative bundle artifacts; both are bound into report/graph/tape.
+
+### No-bypass invariant
+
+There is no callable path that applies an operator without providing a registry snapshot. This is the operator analogue of ADR 0001 (compilation boundary): `apply()` requires the registry, and the registry is part of the evidence chain. No implicit "current operator set," no defaults, no "temporary shortcuts."
 
 ### What this avoids
 
@@ -626,7 +641,7 @@ These must be resolved to complete parity. Each should become a decision record 
 4. **Governance depth**: Does Base/Cert expand into a richer certification campaign model, or remain minimal?
 5. **Certification authority location** — **Resolved: ADR 0006.** Python is certification control plane; Rust is evidence generator + verifier. Every Python cert must reference a Rust-verified artifact set by digest. Migration to Rust governance requires a new ADR.
 6. **Evidence packaging relationship** — **Resolved: ADR 0007.** Nesting: TD-12/H2 must import ArtifactBundleV1 digest basis as required substrate artifact. Governance sits on top of Rust bundles, never parallel.
-7. **Search schema extension mechanism**: Strict version bumps with explicit migration rules vs extension blocks with domain-separated sub-records. Decide before truth-regime worlds land, because those worlds will need additional binding fields or event types that the current schema may not express cleanly.
+7. **Search schema extension mechanism** — **Resolved: ADR 0008.** Additive fields within a schema version; breaking changes require version bumps. No extension block indirection. Canonical JSON sorting makes additive fields safe. `operator_set_digest` is the first concrete test of this mechanism.
 
 ---
 

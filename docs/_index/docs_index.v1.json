@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "792b7a7a971ff9c2",
-  "entry_count": 110,
+  "aggregate_hash": "52fa1328773a8932",
+  "entry_count": 111,
   "entries": [
     {
       "path": "docs/README.md",
@@ -76,12 +76,21 @@
       "links": []
     },
     {
+      "path": "docs/adr/0008-schema-extension-additive-fields.md",
+      "title": "ADR 0008: Schema Extension via Additive Fields",
+      "authority": "adr",
+      "status": "Accepted",
+      "scope": null,
+      "content_hash": "f335105a98752938",
+      "links": []
+    },
+    {
       "path": "docs/adr/README.md",
       "title": "Architecture Decision Records (ADRs)",
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "d727e9010c01f013",
+      "content_hash": "c50ddcea8f4b5f69",
       "links": []
     },
     {
@@ -126,7 +135,7 @@
       "authority": "architecture",
       "status": "Living audit — updated 2026-02-28",
       "scope": null,
-      "content_hash": "4f93e8182ea6a3a6",
+      "content_hash": "5ca1569926b6bf84",
       "links": [
         {
           "text": "`v1_contract_promotion_queue.md`",

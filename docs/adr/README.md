@@ -19,3 +19,4 @@ Start here:
 - 0005-v1-is-oracle-not-dependency.md
 - 0006-certification-authority-boundary.md
 - 0007-evidence-packaging-nesting.md
+- 0008-schema-extension-additive-fields.md
