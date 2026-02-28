@@ -263,6 +263,20 @@ pub enum BundleVerifyError {
         total_expansions: u64,
         termination_reason: String,
     },
+    /// Report declares `operator_set_digest` but `operator_registry.json` artifact is missing.
+    OperatorRegistryArtifactMissing,
+    /// `operator_registry.json` recomputed content hash does not match report
+    /// `operator_set_digest`.
+    OperatorRegistryDigestMismatch { declared: String, recomputed: String },
+    /// `operator_registry.json` artifact exists but report is missing
+    /// `operator_set_digest`.
+    OperatorRegistryDigestMissing,
+    /// `operator_set_digest` in `search_graph.json` metadata does not match
+    /// `operator_registry.json`'s `content_hash`.
+    MetadataBindingOperatorRegistryMismatch { in_graph: String, in_artifact: String },
+    /// `search_graph.json` metadata has `operator_set_digest` but
+    /// `operator_registry.json` is absent.
+    MetadataBindingOperatorRegistryMissing,
     /// Canonical JSON error during verification.
     CanonError { detail: String },
     /// Cert profile requires `search_tape.stap` but it is absent.
@@ -428,7 +442,13 @@ pub fn verify_bundle_with_profile(
     // Step 15: Candidate score source consistency with scorer artifact.
     verify_candidate_scorer_consistency(bundle)?;
 
-    // Step 16: Tape verification (profile-dependent).
+    // Step 16: Operator set digest binding (report ↔ operator_registry.json).
+    verify_operator_set_digest_binding(bundle)?;
+
+    // Step 17: Operator set digest in graph metadata ↔ operator_registry.json.
+    verify_metadata_operator_set_binding(bundle)?;
+
+    // Step 18: Tape verification (profile-dependent).
     verify_tape(bundle, profile)?;
 
     Ok(())
@@ -881,6 +901,87 @@ fn verify_policy_digest_binding(bundle: &ArtifactBundleV1) -> Result<(), BundleV
     Ok(())
 }
 
+/// Verify operator set digest binding between report and `operator_registry` artifact.
+///
+/// Fail-closed invariants:
+/// - If report has `operator_set_digest`, `operator_registry.json` must exist and match.
+/// - If `operator_registry.json` exists, report `operator_set_digest` is mandatory.
+fn verify_operator_set_digest_binding(
+    bundle: &ArtifactBundleV1,
+) -> Result<(), BundleVerifyError> {
+    let report_artifact = bundle.artifacts.get("verification_report.json");
+    let registry_artifact = bundle.artifacts.get("operator_registry.json");
+
+    let (Some(report_art), registry_opt) = (report_artifact, registry_artifact) else {
+        return Ok(());
+    };
+
+    let report: serde_json::Value = serde_json::from_slice(&report_art.content).map_err(|e| {
+        BundleVerifyError::ReportParseError {
+            detail: format!("{e:?}"),
+        }
+    })?;
+
+    let report_digest = report
+        .get("operator_set_digest")
+        .and_then(|v| v.as_str());
+
+    match (report_digest, registry_opt) {
+        (Some(_), None) => Err(BundleVerifyError::OperatorRegistryArtifactMissing),
+        (None, Some(_)) => Err(BundleVerifyError::OperatorRegistryDigestMissing),
+        (Some(declared), Some(reg_art)) => {
+            if reg_art.content_hash.as_str() != declared {
+                return Err(BundleVerifyError::OperatorRegistryDigestMismatch {
+                    declared: declared.to_string(),
+                    recomputed: reg_art.content_hash.as_str().to_string(),
+                });
+            }
+            Ok(())
+        }
+        (None, None) => Ok(()),
+    }
+}
+
+/// Cross-verify `operator_set_digest` in `search_graph.json` metadata against
+/// `operator_registry.json`.
+fn verify_metadata_operator_set_binding(
+    bundle: &ArtifactBundleV1,
+) -> Result<(), BundleVerifyError> {
+    let Some(graph_artifact) = bundle.artifacts.get("search_graph.json") else {
+        return Ok(());
+    };
+
+    let graph: serde_json::Value =
+        serde_json::from_slice(&graph_artifact.content).map_err(|e| {
+            BundleVerifyError::CanonError {
+                detail: format!("{e:?}"),
+            }
+        })?;
+
+    let graph_digest = graph
+        .get("metadata")
+        .and_then(|m| m.get("operator_set_digest"))
+        .and_then(|v| v.as_str());
+    let registry_artifact = bundle.artifacts.get("operator_registry.json");
+
+    match (graph_digest, registry_artifact) {
+        (Some(_), None) | (None, Some(_)) => {
+            Err(BundleVerifyError::MetadataBindingOperatorRegistryMissing)
+        }
+        (Some(in_graph), Some(reg_art)) => {
+            let reg_hex = binding_hex(&reg_art.content_hash);
+            if reg_hex != in_graph {
+                return Err(BundleVerifyError::MetadataBindingOperatorRegistryMismatch {
+                    in_graph: in_graph.to_string(),
+                    in_artifact: reg_hex.to_string(),
+                });
+            }
+            Ok(())
+        }
+        (None, None) => Ok(()),
+    }
+}
+
 /// Tape verification pipeline (profile-dependent).
 ///
 /// Base: if tape present, verify digest binding + parse + header bindings + mode coherence.
@@ -1019,6 +1120,42 @@ fn verify_tape(
             }
         }
         // Neither: Uniform mode, fine.
+        (None, None) => {}
+    }
+
+    // operator_set_digest: authoritative source is operator_registry.json content_hash.
+    let registry_artifact = bundle.artifacts.get("operator_registry.json");
+    let tape_op_digest = header
+        .get("operator_set_digest")
+        .and_then(|v| v.as_str());
+
+    match (tape_op_digest, registry_artifact) {
+        (Some(_), None) => {
+            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                field: "operator_set_digest",
+                in_tape: tape_op_digest.unwrap_or("").to_string(),
+                in_artifact: "<absent>".to_string(),
+            });
+        }
+        (None, Some(_)) => {
+            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                field: "operator_set_digest",
+                in_tape: "<absent>".to_string(),
+                in_artifact: registry_artifact
+                    .map(|a| binding_hex(&a.content_hash).to_string())
+                    .unwrap_or_default(),
+            });
+        }
+        (Some(tape_val), Some(reg_art)) => {
+            let artifact_hex = binding_hex(&reg_art.content_hash);
+            if tape_val != artifact_hex {
+                return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                    field: "operator_set_digest",
+                    in_tape: tape_val.to_string(),
+                    in_artifact: artifact_hex.to_string(),
+                });
+            }
+        }
         (None, None) => {}
     }
 

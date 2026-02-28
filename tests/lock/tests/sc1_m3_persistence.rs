@@ -39,12 +39,12 @@ fn search_bundle_roundtrip_produces_equivalent_bundle() {
     assert_eq!(loaded.manifest, bundle.manifest);
     assert_eq!(loaded.digest_basis, bundle.digest_basis);
 
-    // All 6 artifacts must match.
+    // All 7 artifacts must match.
     assert_eq!(loaded.artifacts.len(), bundle.artifacts.len());
     assert_eq!(
         loaded.artifacts.len(),
-        6,
-        "search bundle should have 6 artifacts"
+        7,
+        "search bundle should have 7 artifacts"
     );
 
     for (name, artifact) in &bundle.artifacts {

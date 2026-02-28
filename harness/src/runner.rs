@@ -225,6 +225,14 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         .registry()
         .map_err(|e| SearchRunError::RunError(RunError::WorldError(e)))?;
     let operator_registry = kernel_operator_registry();
+    let operator_registry_bytes =
+        operator_registry
+            .canonical_bytes()
+            .map_err(|e| SearchRunError::CanonFailed {
+                detail: format!("operator_registry canonical: {e:?}"),
+            })?;
+    let operator_registry_content_hash =
+        canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &operator_registry_bytes);
 
     let compilation = compile(&payload_bytes, &schema, &concept_registry).map_err(|e| {
         SearchRunError::RunError(RunError::CompilationFailed {
@@ -270,7 +278,9 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         policy_snapshot_digest: policy_content_hash.hex_digest().to_string(),
         search_policy_digest: search_policy_digest.hex_digest().to_string(),
         scorer_digest: scorer_digest_hex.clone(),
-        operator_set_digest: None,
+        operator_set_digest: Some(
+            operator_registry_content_hash.hex_digest().to_string(),
+        ),
     };
 
     // Phase 3: run search (with tape).
@@ -320,6 +330,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         &search_graph_content_hash,
         &codebook_hash,
         scorer_digest_for_report.as_deref(),
+        Some(operator_registry_content_hash.as_str()),
         &health_metrics,
         &tape_content_hash,
     )
@@ -349,6 +360,14 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         ("verification_report.json".into(), verification_report, true).into(),
     ];
 
+    // Include operator registry artifact (normative, always present).
+    artifacts.push(ArtifactInput {
+        name: "operator_registry.json".into(),
+        content: operator_registry_bytes,
+        normative: true,
+        precomputed_hash: Some(operator_registry_content_hash),
+    });
+
     // Include scorer artifact for Table mode (normative).
     if let ScorerInputV1::Table { artifact, .. } = scorer_input {
         artifacts.push(("scorer.json".into(), artifact.bytes.clone(), true).into());
@@ -377,12 +396,14 @@ fn search_policy_to_json(policy: &SearchPolicyV1) -> serde_json::Value {
 }
 
 /// Build a search-mode verification report.
+#[allow(clippy::too_many_arguments)]
 fn build_search_verification_report(
     world_id: &str,
     policy_content_hash: &ContentHash,
     search_graph_content_hash: &ContentHash,
     codebook_hash: &ContentHash,
     scorer_digest: Option<&str>,
+    operator_set_digest: Option<&str>,
     health_metrics: &sterling_search::graph::SearchHealthMetricsV1,
     tape_content_hash: &ContentHash,
 ) -> Result<Vec<u8>, RunError> {
@@ -404,6 +425,11 @@ fn build_search_verification_report(
         // BINDING: cross-verified against search_graph.json metadata.world_id.
         "world_id": world_id,
     });
+
+    // BINDING: verified against operator_registry.json content_hash.
+    if let Some(digest) = operator_set_digest {
+        report["operator_set_digest"] = serde_json::json!(digest);
+    }
 
     // BINDING: verified against scorer.json content_hash (Table mode only).
     if let Some(digest) = scorer_digest {
@@ -851,8 +877,9 @@ mod tests {
         assert!(bundle.artifacts.contains_key("policy_snapshot.json"));
         assert!(bundle.artifacts.contains_key("search_graph.json"));
         assert!(bundle.artifacts.contains_key("search_tape.stap"));
+        assert!(bundle.artifacts.contains_key("operator_registry.json"));
         assert!(bundle.artifacts.contains_key("verification_report.json"));
-        assert_eq!(bundle.artifacts.len(), 6);
+        assert_eq!(bundle.artifacts.len(), 7);
     }
 
     #[test]

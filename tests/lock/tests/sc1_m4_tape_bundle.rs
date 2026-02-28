@@ -399,9 +399,9 @@ fn artifact_count_uniform() {
     let bundle = search_bundle();
     assert_eq!(
         bundle.artifacts.len(),
-        6,
-        "uniform search bundle must have 6 artifacts: fixture, compilation_manifest, \
-         policy_snapshot, search_graph, verification_report, search_tape"
+        7,
+        "uniform search bundle must have 7 artifacts: fixture, compilation_manifest, \
+         policy_snapshot, search_graph, verification_report, search_tape, operator_registry"
     );
 }
 
@@ -437,9 +437,9 @@ fn artifact_count_table() {
         run_search(&regime.world, &regime.policy, &scorer_input).unwrap();
     assert_eq!(
         bundle.artifacts.len(),
-        7,
-        "table scorer bundle must have 7 artifacts: fixture, compilation_manifest, \
-         policy_snapshot, search_graph, verification_report, search_tape, scorer"
+        8,
+        "table scorer bundle must have 8 artifacts: fixture, compilation_manifest, \
+         policy_snapshot, search_graph, verification_report, search_tape, operator_registry, scorer"
     );
 }
 
@@ -568,7 +568,7 @@ fn table_mode_bundle_persistence_with_tape() {
     // Tape + scorer survive round-trip.
     assert!(loaded.artifacts.contains_key("search_tape.stap"));
     assert!(loaded.artifacts.contains_key("scorer.json"));
-    assert_eq!(loaded.artifacts.len(), 7);
+    assert_eq!(loaded.artifacts.len(), 8);
 
     // Full verification passes including tape on loaded bundle.
     verify_bundle(&loaded).unwrap();
