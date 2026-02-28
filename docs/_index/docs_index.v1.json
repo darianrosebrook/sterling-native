@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "52fa1328773a8932",
+  "aggregate_hash": "647f94f40c70f2d5",
   "entry_count": 111,
   "entries": [
     {
@@ -135,7 +135,7 @@
       "authority": "architecture",
       "status": "Living audit — updated 2026-02-28",
       "scope": null,
-      "content_hash": "5ca1569926b6bf84",
+      "content_hash": "78c48a516368dad3",
       "links": [
         {
           "text": "`v1_contract_promotion_queue.md`",

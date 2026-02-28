@@ -475,22 +475,28 @@ A canonical, content-addressed JSON artifact included in every bundle and bound 
 
 ```
 {
-  "schema_version": "operator_registry.v1",
-  "operator_set_digest": "<sha256:...>",
-  "operators": [
+  "entries": [
     {
-      "op_id": <stable integer or hash-derived ID>,
+      "arg_byte_count": 12,
+      "category": "M",
+      "contract_epoch": "v1",
+      "cost_model": "unit",
+      "effect_kind": "writes_one_slot_from_args",
+      "effect_mask": { "active": [], "dimensions": [0, 0], "values": [] },
       "name": "SET_SLOT",
-      "category": "S",
-      "args_schema": { ... },
-      "preconditions": { "identity_mask": ..., "status_mask": ... },
-      "effects": { "identity_mask": ..., "status_mask": ... },
-      "cost_model": null,
-      "contract_epoch": 1
+      "op_id": [1, 1, 1, 0],
+      "precondition_mask": { "active": [], "dimensions": [0, 0], "values": [] },
+      "status_effect_mask": { "dimensions": [0, 0], "values": [] }
     }
-  ]
+  ],
+  "schema_version": "operator_registry.v1"
 }
 ```
+
+Note: `operator_set_digest` is NOT embedded in `operator_registry.json`.
+It is computed externally as `canonical_hash(DOMAIN_BUNDLE_ARTIFACT, <bytes above>)`
+and bound into `verification_report.json`, `search_graph.json` metadata, and
+tape header. This avoids the self-referential digest problem.
 
 Key: the registry is authoritative data. Rust code is an implementation of entries in that data. This decouples extensibility from crate/module churn.
 
