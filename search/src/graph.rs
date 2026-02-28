@@ -137,6 +137,8 @@ pub struct SearchGraphMetadata {
     pub root_state_fingerprint: String,
     /// Scorer artifact digest (Table mode only; `None` for Uniform).
     pub scorer_digest: Option<String>,
+    /// Operator registry content-hash digest (`None` until wired).
+    pub operator_set_digest: Option<String>,
 
     // Counters
     pub total_expansions: u64,
@@ -359,6 +361,10 @@ fn metadata_to_json(m: &SearchGraphMetadata) -> serde_json::Value {
         "total_expansions": m.total_expansions,
         "world_id": m.world_id,
     });
+
+    if let Some(ref digest) = m.operator_set_digest {
+        obj["operator_set_digest"] = serde_json::json!(digest);
+    }
 
     if let Some(ref digest) = m.scorer_digest {
         obj["scorer_digest"] = serde_json::json!(digest);
@@ -635,6 +641,7 @@ mod tests {
                 search_policy_digest: "ghi789".into(),
                 root_state_fingerprint: "root_fp".into(),
                 scorer_digest: None,
+                operator_set_digest: None,
                 total_expansions: 0,
                 total_candidates_generated: 0,
                 total_duplicates_suppressed: 0,

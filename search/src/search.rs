@@ -206,6 +206,10 @@ fn build_tape_header(
         "world_id": bindings.world_id,
     });
 
+    if let Some(ref digest) = bindings.operator_set_digest {
+        obj["operator_set_digest"] = serde_json::json!(digest);
+    }
+
     if let Some(ref digest) = bindings.scorer_digest {
         obj["scorer_digest"] = serde_json::json!(digest);
     }
@@ -896,6 +900,8 @@ pub struct MetadataBindings {
     pub search_policy_digest: String,
     /// Scorer artifact digest (Table mode only; `None` for Uniform).
     pub scorer_digest: Option<String>,
+    /// Operator registry content-hash digest (`None` until M2b wires it).
+    pub operator_set_digest: Option<String>,
 }
 
 /// Reconstruct the path from root to a goal node.
@@ -971,6 +977,7 @@ fn build_graph(
             search_policy_digest: bindings.search_policy_digest.clone(),
             root_state_fingerprint: root_fp_hex.to_string(),
             scorer_digest: bindings.scorer_digest.clone(),
+            operator_set_digest: bindings.operator_set_digest.clone(),
             total_expansions,
             total_candidates_generated,
             total_duplicates_suppressed,

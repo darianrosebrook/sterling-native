@@ -31,6 +31,7 @@ fn default_bindings() -> MetadataBindings {
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
         scorer_digest: None,
+        operator_set_digest: None,
     }
 }
 
@@ -682,6 +683,7 @@ fn frontier_invariant_stage_serializes_in_json() {
             policy_snapshot_digest: "0".repeat(64),
             search_policy_digest: "0".repeat(64),
             scorer_digest: None,
+        operator_set_digest: None,
             total_expansions: 0,
             total_candidates_generated: 0,
             total_duplicates_suppressed: 0,

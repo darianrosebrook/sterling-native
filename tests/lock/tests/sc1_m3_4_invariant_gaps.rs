@@ -35,6 +35,7 @@ fn default_bindings() -> MetadataBindings {
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
         scorer_digest: None,
+        operator_set_digest: None,
     }
 }
 
@@ -150,6 +151,7 @@ fn inv_sc_05_search_dedup_uses_identity_fingerprint() {
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
         scorer_digest: None,
+        operator_set_digest: None,
     };
 
     let result = search(

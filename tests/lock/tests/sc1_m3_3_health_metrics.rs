@@ -33,6 +33,7 @@ fn bindings_for(regime: &Regime) -> MetadataBindings {
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
         scorer_digest: None,
+        operator_set_digest: None,
     }
 }
 
@@ -165,6 +166,7 @@ fn make_outcome_exhaustive_fixture() -> SearchGraphV1 {
             search_policy_digest: "ghi789".into(),
             root_state_fingerprint: "root_fp".into(),
             scorer_digest: None,
+        operator_set_digest: None,
             total_expansions: 1,
             total_candidates_generated: 7,
             total_duplicates_suppressed: 1,

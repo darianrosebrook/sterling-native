@@ -23,6 +23,7 @@ fn default_bindings() -> MetadataBindings {
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
         scorer_digest: None,
+        operator_set_digest: None,
     }
 }
 
@@ -209,6 +210,7 @@ fn loop_detection_terminates_without_infinite_expansion() {
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
         scorer_digest: None,
+        operator_set_digest: None,
     };
 
     let result = search(
@@ -273,6 +275,7 @@ fn exhaustive_dead_end_tagged_correctly() {
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
         scorer_digest: None,
+        operator_set_digest: None,
     };
 
     let result = search(
@@ -317,6 +320,7 @@ fn expansion_budget_overflow() {
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
         scorer_digest: None,
+        operator_set_digest: None,
     };
 
     let result = search(
@@ -378,6 +382,7 @@ fn illegal_candidate_triggers_world_contract_violation() {
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
         scorer_digest: None,
+        operator_set_digest: None,
     };
 
     // WorldContractViolation is now a soft termination — returns Ok with graph evidence

@@ -270,6 +270,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         policy_snapshot_digest: policy_content_hash.hex_digest().to_string(),
         search_policy_digest: search_policy_digest.hex_digest().to_string(),
         scorer_digest: scorer_digest_hex.clone(),
+        operator_set_digest: None,
     };
 
     // Phase 3: run search (with tape).

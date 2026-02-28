@@ -67,6 +67,7 @@ pub fn prepare_search_setup<W: SearchWorldV1 + WorldHarnessV1>(
         policy_snapshot_digest: policy_content_hash.hex_digest().to_string(),
         search_policy_digest: search_policy_digest.hex_digest().to_string(),
         scorer_digest: scorer_digest_hex,
+        operator_set_digest: None,
     };
 
     SearchSetup {
