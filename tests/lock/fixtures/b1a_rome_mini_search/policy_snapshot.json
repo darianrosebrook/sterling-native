@@ -1,0 +1,1 @@
+{"allowed_ops":[{"op_code_hex":"01010100"}],"budgets":{"max_artifact_bytes_total":1048576,"max_steps":10,"max_trace_bytes":65536},"determinism_contract":{"fixed_epoch":true,"no_env_reads":true,"no_wall_time":true},"schema_version":"policy.v1","world_id":"rome_mini_search"}

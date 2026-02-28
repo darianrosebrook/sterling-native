@@ -1,0 +1,58 @@
+id: B1A-001
+type: chore
+title: "B1a: Bundle surface parity — golden fixture + regeneration lock test"
+status: in_progress
+risk_tier: 3
+mode: development
+created_at: '2026-02-28T04:00:00.000Z'
+updated_at: '2026-02-28T04:00:00.000Z'
+blast_radius:
+  modules:
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 5m
+scope:
+  in:
+    - tests/lock/tests/
+    - tests/lock/src/
+    - tests/lock/fixtures/
+    - tests/lock/Cargo.toml
+    - .caws/specs/
+  out:
+    - kernel/src/carrier/bytestate.rs
+    - kernel/src/carrier/bytetrace.rs
+    - kernel/src/carrier/code32.rs
+    - kernel/src/proof/canon.rs
+    - ml/
+    - reference/v1_impl/
+change_budget:
+  max_files: 15
+  max_loc: 500
+invariants:
+  - Golden bundle is deterministic and self-verifying
+  - Regenerated bundle matches golden byte-for-byte
+  - All normative artifact content hashes match
+  - Bundle digest matches golden
+acceptance:
+  - given: The committed golden bundle directory
+    when: Read back via read_bundle_dir and verified via verify_bundle
+    then: Verification succeeds and artifact set matches expectations
+  - given: The same harness scenario run in-memory
+    when: Compared to the golden bundle
+    then: All artifacts match byte-for-byte and bundle digest is identical
+acceptance_criteria:
+  - id: B1A-001-GOLDEN
+    description: Committed golden fixture directory with 7 artifacts + 3 metadata files
+    status: pending
+  - id: B1A-001-SELF-VERIFY
+    description: Golden bundle passes verify_bundle and verify_bundle_dir
+    status: pending
+  - id: B1A-001-REGEN
+    description: In-memory regeneration matches golden byte-for-byte
+    status: pending
+non_functional:
+  a11y: []
+  perf:
+    note: Test runs a single search with small world; sub-second execution
+  security: []
+contracts: []
