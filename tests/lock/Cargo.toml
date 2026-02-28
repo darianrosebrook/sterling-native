@@ -39,3 +39,15 @@ path = "src/bin/policy_fixture.rs"
 [[bin]]
 name = "search_fixture"
 path = "src/bin/search_fixture.rs"
+
+[[bin]]
+name = "b1a_golden_generator"
+path = "src/bin/b1a_golden_generator.rs"
+
+[[bin]]
+name = "b1b_compile_golden_generator"
+path = "src/bin/b1b_compile_golden_generator.rs"
+
+[[bin]]
+name = "b1c_apply_golden_generator"
+path = "src/bin/b1c_apply_golden_generator.rs"
