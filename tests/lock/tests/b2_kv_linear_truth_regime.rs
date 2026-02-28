@@ -13,8 +13,9 @@ use sterling_harness::bundle::verify_bundle;
 use sterling_harness::contract::WorldHarnessV1;
 use sterling_harness::runner::run;
 use sterling_harness::worlds::transactional_kv_store::TransactionalKvStore;
+use sterling_kernel::carrier::code32::Code32;
 use sterling_kernel::carrier::compile::compile;
-use sterling_kernel::operators::apply::apply;
+use sterling_kernel::operators::apply::{apply, set_slot_args, ApplyFailure, OP_SET_SLOT};
 use sterling_kernel::operators::operator_registry::kernel_operator_registry;
 use sterling_search::contract::SearchWorldV1;
 
@@ -249,6 +250,61 @@ fn rollback_path_staged_residue_preserved() {
         staged_slot0, KV_V0,
         "staged slot 0 retains kv:v0 after rollback (residue is documented)"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Write-once negative control (kernel constraint falsifier)
+// ---------------------------------------------------------------------------
+
+/// Rewriting an already-Provisional slot must fail with `EffectContractViolation`.
+///
+/// This is the mechanical constraint that shapes B2.0: `apply_set_slot()` always
+/// sets `SlotStatus::Provisional`, and `validate_effect_kind(WritesOneSlotFromArgs)`
+/// requires exactly 1 status diff. If the slot is already Provisional, the status
+/// byte doesn't change → 0 status diffs → rejection.
+///
+/// If this test ever stops failing, it means the kernel's effect contract changed
+/// and B2's write-once assumption no longer holds. That's a B2.1 trigger.
+#[test]
+fn double_write_to_same_slot_is_rejected() {
+    let world = TransactionalKvStore::commit_world();
+    let payload = world.encode_payload().expect("encode_payload");
+    let schema = world.schema_descriptor();
+    let registry = world.registry().expect("registry");
+    let compiled = compile(&payload, &schema, &registry).expect("compile");
+    let op_reg = kernel_operator_registry();
+
+    // First write: stage slot 0 with kv:v0 → succeeds (Hole→Provisional).
+    let (state_after_first, _) = apply(
+        &compiled.state,
+        OP_SET_SLOT,
+        &set_slot_args(1, 0, Code32::new(2, 1, 0)),
+        &op_reg,
+    )
+    .expect("first write must succeed");
+
+    // Second write: rewrite same slot with kv:v1 → must fail.
+    let result = apply(
+        &state_after_first,
+        OP_SET_SLOT,
+        &set_slot_args(1, 0, Code32::new(2, 1, 1)),
+        &op_reg,
+    );
+
+    match result {
+        Err(ApplyFailure::EffectContractViolation { detail, .. }) => {
+            assert!(
+                detail.contains("status"),
+                "failure must mention status diffs, got: {detail}"
+            );
+        }
+        Err(other) => {
+            panic!("expected EffectContractViolation, got: {other:?}");
+        }
+        Ok(_) => {
+            panic!("second write to already-Provisional slot must fail — kernel constraint changed!");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
