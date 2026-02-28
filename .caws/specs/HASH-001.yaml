@@ -1,7 +1,7 @@
 id: HASH-001
 type: chore
 title: Centralize hash domains into typed HashDomain enum + deny_unknown_fields lock
-status: in_progress
+status: closed
 risk_tier: 3
 mode: development
 created_at: '2026-02-28T03:19:22.020Z'
@@ -74,19 +74,25 @@ acceptance:
 acceptance_criteria:
   - id: HASH-001-ENUM
     description: HashDomain enum with macro-generated variants, as_bytes(), ALL, Display
-    status: pending
+    status: complete
   - id: HASH-001-SIGNATURE
     description: canonical_hash takes HashDomain, not raw bytes; raw_hash/raw_hash2 likewise
-    status: pending
+    status: complete
   - id: HASH-001-MIGRATION
     description: All call sites migrated; 2 inline violations fixed
-    status: pending
+    status: complete
   - id: HASH-001-LOCK
     description: Lock tests for canonical set count, uniqueness, naming, no raw literals
-    status: pending
+    status: complete
   - id: HASH-001-DUF
     description: deny_unknown_fields regression lock test
-    status: pending
+    status: complete
+evidence:
+  commits:
+    - e2ccfc0  # refactor(hash): centralize domain constants into HashDomain enum
+    - 70e26f5  # fix(lock): brace-depth tracking for cfg(test) scan
+  total_tests: 494
+  lock_tests: tests/lock/tests/hash_domain_lock.rs (6 tests)
 non_functional:
   a11y: []
   perf:

@@ -1,7 +1,7 @@
 ---
-status: "Living audit — updated 2026-02-28"
+status: "Living audit — updated 2026-02-27"
 authority: architecture
-date: 2026-02-28
+date: 2026-02-27
 purpose: "Capability-level migration map from Sterling v1 to v2. Defines proof obligations for supersession. Drives both docs/reference/v1 cleanup and v2 roadmap."
 ---
 # V1→V2 Parity Audit (Capability Migration Map)
@@ -87,8 +87,8 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 | Lock tests | `s1_m1_determinism.rs::one_canonical_json_impl` (greps for alternative impls), `s1_m1_determinism.rs::ordering_invariance`, `s1_m1_golden_fixtures.rs::hash_v1_vectors` |
 | Parity target | **Contract parity** — single canonicalizer invariant enforced by test. |
 | Proof obligations | Single canonicalizer. Domain separation registry enumerated. |
-| Gaps | Domain prefix constants are defined in two crates (`kernel/src/proof/hash.rs` and `harness/src/bundle.rs`). No single "domain registry" canonical doc. |
-| Next tasks | Document hash domain registry as a canonical page listing all `DOMAIN_*` constants. |
+| Gaps | ~~Domain prefix constants are defined in two crates.~~ **Resolved by HASH-001** (`e2ccfc0`): all 21 domains centralized in `HashDomain` enum (`kernel/src/proof/hash_domain.rs`). Lock test (`hash_domain_lock.rs`) enforces uniqueness, naming convention, and no raw `STERLING::` literals in production source. |
+| Next tasks | None — domain registry is mechanically enforced. |
 
 #### A3. Operator taxonomy + dispatch
 
@@ -101,8 +101,8 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 | CAWS spec | SPINE-001 M2 (operator dispatch), SC-001 M1 (search operators) |
 | Lock tests | `s1_m2_determinism.rs` (apply round-trip), `sc1_search_determinism.rs` (search operator legality) |
 | Parity target | **Contract parity** for operator contract shape; **Not started** for operator breadth. |
-| Gaps | v1 had 28 operators across 5 categories. v2 has SET_SLOT plus search-level expansion. No operator registry artifact, no capability-gating policies, no induced operators, no operator lifecycle. SET_SLOT is hardcoded in `apply()`, not invoked via stable op_id from a registry. |
-| Next tasks | **Operator Registry MVP (Phase 0)** — see §Operator Registry MVP below. Move SET_SLOT into a content-addressed `OperatorRegistryV1` artifact. This is prerequisite to all subsequent phases. |
+| Gaps | v1 had 28 operators across 5 categories. v2 has SET_SLOT plus search-level expansion. ~~No operator registry artifact.~~ **Phase 0 complete** (SC-001): `OperatorRegistryV1` is a normative artifact with `operator_set_digest` bound into report/graph/tape. `apply()` requires registry snapshot (fail-closed). No capability-gating policies, no induced operators, no operator lifecycle beyond SET_SLOT. |
+| Next tasks | Operator breadth: truth-regime worlds will require new operator categories (tool, probe). Induction pipeline is Phase 2. |
 
 #### A4. Deterministic replay (carrier level)
 
@@ -431,6 +431,8 @@ Eight footgun risks identified during cross-codebase audit. These are authority 
 
 **Guardrail**: Create a single canonical "hash domain registry" doc plus a lock test that enumerates all `DOMAIN_*` constants and fails on duplicates or unregistered additions.
 
+**Status**: **Resolved — HASH-001** (`e2ccfc0`). All 21 domains live in `HashDomain` enum (`kernel/src/proof/hash_domain.rs`). `canonical_hash()` accepts only `HashDomain`, not raw bytes. Lock test `hash_domain_lock.rs` enforces: canonical set count, byte uniqueness, null-termination, `STERLING::*::V1\0` naming, no raw `b"STERLING::"` literals in production source, no `deny_unknown_fields`.
+
 ### G5. Search evidence schema ossification before truth-regime worlds land
 
 **Risk**: SearchGraphV1 / SearchTapeV1 are canonical surfaces. Once tool-use / partial observability / stochastic worlds land, you may need additional binding fields or event types that don't fit without version churn.
@@ -591,6 +593,16 @@ Sterling (Python) and sterling-native (Rust) share wire formats (.bst1, canonica
 
 **Implementation**: A small set of golden fixtures (payloads + schemas + registries) checked into both repos. CI in each repo verifies its output against the golden fixtures. The golden fixtures are the shared truth — not either codebase's output.
 
+**Current state (B1A-001, closed)**: Three golden fixture directories are committed with generators and lock tests:
+
+| Fixture | Path | What it pins |
+|---------|------|-------------|
+| B1a (bundle) | `tests/lock/fixtures/b1a_rome_mini_search/` | Full 7-artifact bundle: self-verifies, regen matches byte-for-byte |
+| B1b (compile) | `tests/lock/fixtures/b1b_compile_rome_mini_search/` | Compile inputs (payload, schema, registry) → manifest + digests |
+| B1c (apply) | `tests/lock/fixtures/b1c_apply_rome_mini_search/` | Single SET_SLOT step → post-state bytes + step record + digests |
+
+Cross-fixture consistency: B1c's `pre_identity_digest` = B1b's `identity_digest`, proving the compile→apply chain is coherent. Evidence construction rule (`evidence == identity || status`) is explicitly tested. An external implementation can consume B1b inputs, run `compile()`, then consume B1c inputs, run `apply()`, and assert byte-identical outputs.
+
 ---
 
 ## Supersession Plan
@@ -617,14 +629,14 @@ Each phase unlocks success-rubric claims. Phases are ordered so earlier phases c
 
 | Phase | Capability | Unlocks | Key deliverables | Falsifiers |
 |-------|-----------|---------|------------------|------------|
-| **0** | **Operator Registry MVP** | Stable operator identity for all subsequent phases | `OperatorRegistryV1` schema + artifact, SET_SLOT migration, digest binding in report/graph/tape, lock tests | Unknown op_id not fail-closed; operator contract mismatch undetected; registry digest not bound |
+| **0** | **Operator Registry MVP** ✓ | Stable operator identity for all subsequent phases | `OperatorRegistryV1` schema + artifact, SET_SLOT migration, digest binding in report/graph/tape, lock tests. **Complete** (SC-001 M3.4+, `sc1_op_registry.rs`). | Unknown op_id not fail-closed; operator contract mismatch undetected; registry digest not bound |
 | **1a** | Transactional Tool World | Rubric #4 (tool safety) | KV-store world: STAGE/COMMIT/ROLLBACK/READ/VERIFY operators; tool transcript artifact; 10-15 lock tests | Tool action without transcript; side effect without commit; rollback unverifiable |
 | **1b** | Partial Observability World | Rubric #6 (belief discipline) | Mastermind-like world: probe operators; belief-size monotonicity in trace; 10-15 lock tests | Belief inflation after probe; hidden observation channel; probe results not bound to evidence |
 | **1c** | Stochastic World | Rubric #7 (seed/witness certification) | Slippery Grid world: seed/witness binding; exact replay from evidence; distributional eval over seed sets; 10-15 lock tests | Cannot replay recorded trajectory; cert depends on rerunning environment; no statistical protocol |
 | **2** | Induction MVP | Rubric #8 (learning) | Propose→evaluate→promote cycle; standard evaluation packet; start with scorer/policy table induction | Promoted operator breaks previously certified claims; evaluators modified per-case |
 | **3** | Memory MVP | Strengthens #5, #8 | Landmark candidates from traces → content-addressed artifacts; governed memory updates | Memory artifact not content-addressed; memory update not governed by operator |
 | **4** | Text boundary MVP | Endgame narrative | Minimal parse/render demo; verifiable realization artifact surface (realizer stays in Python) | Surface treated as authority; IR bypass |
-| **∥** | Cross-codebase equivalence harness | Validates "shared wire formats" claim | Golden fixtures in both repos; CI-verified byte-identical outputs | Any wire format drift between Python and Rust |
+| **∥** | Cross-codebase equivalence harness ✓ | Validates "shared wire formats" claim | Golden fixtures in both repos; CI-verified byte-identical outputs. **Rust-side complete** (B1A-001: B1a/B1b/B1c fixtures + lock tests). Python-side consumption pending. | Any wire format drift between Python and Rust |
 
 Phase ∥ (equivalence harness) can run in parallel with any phase.
 

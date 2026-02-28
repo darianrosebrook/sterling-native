@@ -1,7 +1,7 @@
 id: B1A-001
 type: chore
-title: "B1a: Bundle surface parity — golden fixture + regeneration lock test"
-status: in_progress
+title: "B1: Cross-codebase parity fixtures — bundle, compile, apply golden lock tests"
+status: closed
 risk_tier: 3
 mode: development
 created_at: '2026-02-28T04:00:00.000Z'
@@ -43,13 +43,34 @@ acceptance:
 acceptance_criteria:
   - id: B1A-001-GOLDEN
     description: Committed golden fixture directory with 7 artifacts + 3 metadata files
-    status: pending
+    status: complete
   - id: B1A-001-SELF-VERIFY
     description: Golden bundle passes verify_bundle and verify_bundle_dir
-    status: pending
+    status: complete
   - id: B1A-001-REGEN
     description: In-memory regeneration matches golden byte-for-byte
-    status: pending
+    status: complete
+  - id: B1B-001-COMPILE
+    description: Compile parity — golden inputs/outputs + digest/manifest/descriptor lock tests
+    status: complete
+  - id: B1C-001-APPLY
+    description: Apply parity — golden SET_SLOT step + post-state/step-record/evidence lock tests
+    status: complete
+evidence:
+  commits:
+    - 7711201  # B1a bundle surface parity
+    - 0b73e03  # B1b compile parity
+    - 3214d35  # B1c apply parity
+    - c3c364f  # B1b/B1c tightenings (descriptor echo + evidence construction rule)
+  total_tests: 494
+  lock_tests:
+    - tests/lock/tests/b1a_bundle_surface_parity.rs (7 tests)
+    - tests/lock/tests/b1b_compile_parity.rs (7 tests)
+    - tests/lock/tests/b1c_apply_parity.rs (7 tests)
+  fixtures:
+    - tests/lock/fixtures/b1a_rome_mini_search/ (10 files)
+    - tests/lock/fixtures/b1b_compile_rome_mini_search/ (5 files)
+    - tests/lock/fixtures/b1c_apply_rome_mini_search/ (12 files)
 non_functional:
   a11y: []
   perf:
