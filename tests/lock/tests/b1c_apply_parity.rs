@@ -7,6 +7,7 @@
 //! 4. Pre-state digests match B1b golden hashes (cross-fixture consistency)
 //! 5. Fixture inputs are self-consistent (`op_code` matches `step_record_op_code`, etc.)
 //! 6. Expected hashes has exactly the expected keys (fail-closed)
+//! 7. Evidence bytes construction rule: `evidence == identity || status`
 
 use sterling_harness::contract::WorldHarnessV1;
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
@@ -252,4 +253,61 @@ fn expected_hashes_has_exact_keys() {
             "missing expected key in expected_hashes: {key}"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// 7. Evidence bytes construction rule: identity || status
+// ---------------------------------------------------------------------------
+
+/// Assert that `evidence_bytes()` is exactly `identity_bytes() || status_bytes()`
+/// for both pre-state and post-state. Also assert the evidence digest is
+/// consistent with this construction. If the evidence layout ever changes,
+/// this test forces an explicit deliberate update.
+#[test]
+fn evidence_bytes_construction_rule() {
+    let world = RomeMiniSearch;
+    let payload_bytes = world.encode_payload().expect("encode_payload failed");
+    let schema = world.schema_descriptor();
+    let concept_registry = world.registry().expect("registry failed");
+    let compiled = compile(&payload_bytes, &schema, &concept_registry).expect("compile failed");
+
+    // Pre-state: evidence == identity || status.
+    let pre_identity = compiled.state.identity_bytes();
+    let pre_status = compiled.state.status_bytes();
+    let pre_evidence = compiled.state.evidence_bytes();
+    let mut pre_expected_evidence = pre_identity.clone();
+    pre_expected_evidence.extend_from_slice(&pre_status);
+    assert_eq!(
+        pre_evidence, pre_expected_evidence,
+        "pre-state: evidence_bytes != identity_bytes || status_bytes"
+    );
+
+    // Pre-state evidence digest matches.
+    let pre_evidence_digest = canonical_hash(HashDomain::EvidencePlane, &pre_evidence);
+    assert_eq!(
+        pre_evidence_digest.as_str(),
+        compiled.evidence_digest.as_str(),
+        "pre-state: recomputed evidence digest != compiled.evidence_digest"
+    );
+
+    // Post-state: evidence == identity || status.
+    let (post_state, _) = compile_and_apply();
+    let post_identity = post_state.identity_bytes();
+    let post_status = post_state.status_bytes();
+    let post_evidence = post_state.evidence_bytes();
+    let mut post_expected_evidence = post_identity.clone();
+    post_expected_evidence.extend_from_slice(&post_status);
+    assert_eq!(
+        post_evidence, post_expected_evidence,
+        "post-state: evidence_bytes != identity_bytes || status_bytes"
+    );
+
+    // Post-state evidence digest matches golden.
+    let hashes = expected_hashes();
+    let post_evidence_digest = canonical_hash(HashDomain::EvidencePlane, &post_evidence);
+    assert_eq!(
+        post_evidence_digest.as_str(),
+        hashes["post_evidence_digest"].as_str().unwrap(),
+        "post-state: recomputed evidence digest != golden"
+    );
 }

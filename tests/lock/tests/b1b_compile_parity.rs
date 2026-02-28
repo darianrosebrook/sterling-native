@@ -6,6 +6,8 @@
 //! 3. `compile()` from fixture inputs produces digests matching golden
 //! 4. Round-trip: load inputs from disk, compile, compare to in-memory compile
 //! 5. Manifest has no extra or missing keys (fail-closed schema)
+//! 6. Expected hashes has exactly the expected keys (fail-closed)
+//! 7. Returned descriptors echo fixture inputs (struct contract)
 
 use sterling_harness::contract::WorldHarnessV1;
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
@@ -206,4 +208,87 @@ fn expected_hashes_has_exact_keys() {
             "missing expected key in expected_hashes: {key}"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// 7. Returned descriptors echo fixture inputs (struct contract)
+// ---------------------------------------------------------------------------
+
+/// Assert that `compile()` echoes the input descriptors on its result struct,
+/// and that those echoed values are consistent with the manifest fields.
+/// Catches regressions where the struct fields diverge from the manifest.
+#[test]
+fn compile_echoes_descriptors() {
+    let world = RomeMiniSearch;
+    let payload_bytes = fixture_bytes("payload.json");
+    let schema = world.schema_descriptor();
+    let concept_registry = world.registry().expect("registry failed");
+
+    let result = compile(&payload_bytes, &schema, &concept_registry).expect("compile failed");
+
+    // Schema descriptor echoed on struct matches fixture input.
+    let fixture_schema: serde_json::Value = {
+        let bytes = fixture_bytes("schema_descriptor.json");
+        serde_json::from_slice(&bytes).expect("invalid schema_descriptor.json")
+    };
+    assert_eq!(
+        result.schema_descriptor.id,
+        fixture_schema["id"].as_str().unwrap(),
+        "echoed schema_descriptor.id differs from fixture"
+    );
+    assert_eq!(
+        result.schema_descriptor.version,
+        fixture_schema["version"].as_str().unwrap(),
+        "echoed schema_descriptor.version differs from fixture"
+    );
+    assert_eq!(
+        result.schema_descriptor.hash,
+        fixture_schema["hash"].as_str().unwrap(),
+        "echoed schema_descriptor.hash differs from fixture"
+    );
+
+    // Registry descriptor echoed on struct matches expected hashes.
+    let hashes = expected_hashes();
+    assert_eq!(
+        result.registry_descriptor.epoch,
+        hashes["registry_epoch"].as_str().unwrap(),
+        "echoed registry_descriptor.epoch differs from expected_hashes"
+    );
+
+    // Registry hash on struct matches externally computed hash.
+    let registry_bytes = concept_registry
+        .canonical_bytes()
+        .expect("registry canonical_bytes failed");
+    let registry_hash = canonical_hash(HashDomain::RegistrySnapshot, &registry_bytes);
+    assert_eq!(
+        result.registry_descriptor.hash,
+        registry_hash.as_str(),
+        "echoed registry_descriptor.hash differs from recomputed hash"
+    );
+
+    // Cross-check: manifest fields match echoed struct fields.
+    let manifest: serde_json::Value = {
+        let bytes = fixture_bytes("expected_compilation_manifest.json");
+        serde_json::from_slice(&bytes).expect("invalid manifest JSON")
+    };
+    assert_eq!(
+        result.schema_descriptor.id,
+        manifest["schema_id"].as_str().unwrap(),
+        "echoed schema_descriptor.id differs from manifest schema_id"
+    );
+    assert_eq!(
+        result.schema_descriptor.version,
+        manifest["schema_version"].as_str().unwrap(),
+        "echoed schema_descriptor.version differs from manifest schema_version"
+    );
+    assert_eq!(
+        result.registry_descriptor.epoch,
+        manifest["registry_epoch"].as_str().unwrap(),
+        "echoed registry_descriptor.epoch differs from manifest registry_epoch"
+    );
+    assert_eq!(
+        result.registry_descriptor.hash,
+        manifest["registry_hash"].as_str().unwrap(),
+        "echoed registry_descriptor.hash differs from manifest registry_hash"
+    );
 }
