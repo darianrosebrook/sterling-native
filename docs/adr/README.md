@@ -17,3 +17,5 @@ Start here:
 - 0003-neural-advisory-only.md
 - 0004-operator-taxonomy-names.md
 - 0005-v1-is-oracle-not-dependency.md
+- 0006-certification-authority-boundary.md
+- 0007-evidence-packaging-nesting.md

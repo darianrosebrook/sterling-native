@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "37426fbfd57e55f0",
-  "entry_count": 108,
+  "aggregate_hash": "792b7a7a971ff9c2",
+  "entry_count": 110,
   "entries": [
     {
       "path": "docs/README.md",
@@ -58,12 +58,30 @@
       "links": []
     },
     {
+      "path": "docs/adr/0006-certification-authority-boundary.md",
+      "title": "ADR 0006: Certification Authority Boundary (Python Control Plane, Rust Evidence)",
+      "authority": "adr",
+      "status": "Accepted",
+      "scope": null,
+      "content_hash": "18d38cddbad2be0e",
+      "links": []
+    },
+    {
+      "path": "docs/adr/0007-evidence-packaging-nesting.md",
+      "title": "ADR 0007: Evidence Packaging Relationship (Nesting, Not Parallel)",
+      "authority": "adr",
+      "status": "Accepted",
+      "scope": null,
+      "content_hash": "8404839027eeda94",
+      "links": []
+    },
+    {
       "path": "docs/adr/README.md",
       "title": "Architecture Decision Records (ADRs)",
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "9c8defd89302829b",
+      "content_hash": "d727e9010c01f013",
       "links": []
     },
     {
@@ -108,7 +126,7 @@
       "authority": "architecture",
       "status": "Living audit — updated 2026-02-28",
       "scope": null,
-      "content_hash": "5971764990ebb611",
+      "content_hash": "4f93e8182ea6a3a6",
       "links": [
         {
           "text": "`v1_contract_promotion_queue.md`",

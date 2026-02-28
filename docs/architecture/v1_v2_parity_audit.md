@@ -407,7 +407,7 @@ Eight footgun risks identified during cross-codebase audit. These are authority 
 
 **Guardrail**: Write an ADR pinning this as an invariant. If the decision is "Python is certification control plane, Rust is evidence generator + verifier," then the interface contract comes first: every Python cert must be reducible to a set of Rust-verified artifacts + explicit policy/campaign metadata. Moving more governance into Rust is a deliberate phase change, not emergent creep.
 
-**Status**: Open decision #5.
+**Status**: Resolved — ADR 0006.
 
 ### G2. Competing evidence packaging (ArtifactBundleV1 vs H2/TD-12)
 
@@ -417,7 +417,7 @@ Eight footgun risks identified during cross-codebase audit. These are authority 
 - **A) Nesting**: TD-12/H2 becomes a wrapper that *imports* an ArtifactBundleV1 digest basis as a required substrate artifact. Governance sits on top of a Rust bundle, never parallel.
 - **B) Parallel, disjoint scopes**: Rust bundles certify execution/search integrity only; Python certifies cross-run/campaign claims. Requires a strict "no overlapping claims" rule.
 
-**Status**: Open decision #6.
+**Status**: Resolved — ADR 0007.
 
 ### G3. Cross-codebase compatibility without equivalence harness
 
@@ -624,8 +624,8 @@ These must be resolved to complete parity. Each should become a decision record 
 2. **Memory substrate**: Is SWM a first-class artifact suite (content-addressed, bundle-linked) or an operator-defined side channel?
 3. **Text boundary**: Does v2 implement v1's four-partition IR (Surface/Syntax/Semantics/Hard) or design a new realization pipeline?
 4. **Governance depth**: Does Base/Cert expand into a richer certification campaign model, or remain minimal?
-5. **Certification authority location** *(force now — determines everything else)*: Option A: Python is certification control plane, Rust is evidence generator + verifier. Option B: Rust grows minimal governance surfaces (verdicts, gates, operator set binding), Python focuses on learning/ML + orchestration. Bias: start with A, but treat the Python↔Rust boundary as a governed interface with explicit artifact contracts and cross-repo equivalence tests. If you later move to B, do it as a deliberate phase change.
-6. **Evidence packaging relationship**: Nesting (TD-12/H2 wraps ArtifactBundleV1 digest basis as substrate artifact) vs parallel with disjoint scope (Rust certifies execution, Python certifies campaigns; strict "no overlapping claims" rule). Choose one and document before building governance campaigns.
+5. **Certification authority location** — **Resolved: ADR 0006.** Python is certification control plane; Rust is evidence generator + verifier. Every Python cert must reference a Rust-verified artifact set by digest. Migration to Rust governance requires a new ADR.
+6. **Evidence packaging relationship** — **Resolved: ADR 0007.** Nesting: TD-12/H2 must import ArtifactBundleV1 digest basis as required substrate artifact. Governance sits on top of Rust bundles, never parallel.
 7. **Search schema extension mechanism**: Strict version bumps with explicit migration rules vs extension blocks with domain-separated sub-records. Decide before truth-regime worlds land, because those worlds will need additional binding fields or event types that the current schema may not express cleanly.
 
 ---
