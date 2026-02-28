@@ -275,7 +275,7 @@ for i, turn in enumerate(turns):
     md_lines = [f"# Turn {num}", ""]
 
     if turn["user"]:
-        md_lines.extend([f"> **User:** {turn['user']}", ""])
+        md_lines.extend([f"> ---user---\n{turn['user']}\n---\/user---", ""])
 
     for event in turn["timeline"]:
         kind = event["kind"]
