@@ -125,27 +125,51 @@ fn scan_dir_for_pattern(
         if path
             .file_name()
             .and_then(|n| n.to_str())
-            .map_or(false, |n| n == authority_file)
+            == Some(authority_file)
         {
             continue;
         }
 
-        let content = match std::fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(_) => continue,
+        let Ok(content) = std::fs::read_to_string(path) else {
+            continue;
         };
 
-        // Skip #[cfg(test)] blocks — only scan production code.
-        let mut in_test_block = false;
+        // Skip #[cfg(test)] module blocks via brace-depth tracking.
+        let mut brace_depth: usize = 0;
+        let mut skip_depth: Option<usize> = None;
+        let mut cfg_test_pending = false;
+
         for (i, line) in content.lines().enumerate() {
             let trimmed = line.trim();
-            if trimmed == "#[cfg(test)]" {
-                in_test_block = true;
+
+            if trimmed.contains("#[cfg(test)]") {
+                cfg_test_pending = true;
                 continue;
             }
-            if in_test_block {
+
+            let opens = line.chars().filter(|&c| c == '{').count();
+            let closes = line.chars().filter(|&c| c == '}').count();
+
+            if cfg_test_pending && opens > 0 {
+                skip_depth = Some(brace_depth);
+                cfg_test_pending = false;
+            }
+
+            brace_depth = brace_depth.saturating_add(opens);
+            brace_depth = brace_depth.saturating_sub(closes);
+
+            if let Some(depth) = skip_depth {
+                if brace_depth <= depth {
+                    skip_depth = None;
+                }
                 continue;
             }
+
+            // Skip comment lines.
+            if trimmed.starts_with("//") {
+                continue;
+            }
+
             if trimmed.contains(pattern) {
                 violations.push(format!("  {}:{}: {}", path.display(), i + 1, trimmed));
             }
