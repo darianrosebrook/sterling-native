@@ -12,7 +12,7 @@ use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_kernel::carrier::bytestate::ByteStateV1;
 use sterling_kernel::carrier::code32::Code32;
-use sterling_kernel::carrier::registry::RegistryV1;
+use sterling_kernel::operators::operator_registry::{kernel_operator_registry, OperatorRegistryV1};
 use sterling_kernel::operators::apply::{set_slot_args, OP_SET_SLOT};
 use sterling_kernel::proof::canon::canonical_json_bytes;
 use sterling_kernel::proof::hash::canonical_hash;
@@ -22,8 +22,6 @@ use sterling_search::node::{candidate_canonical_hash, CandidateActionV1, DOMAIN_
 use sterling_search::policy::SearchPolicyV1;
 use sterling_search::scorer::{CandidateScoreV1, ScoreSourceV1, UniformScorer, ValueScorer};
 use sterling_search::search::{search, MetadataBindings};
-
-use sterling_harness::contract::WorldHarnessV1;
 
 fn default_bindings() -> MetadataBindings {
     MetadataBindings {
@@ -36,8 +34,8 @@ fn default_bindings() -> MetadataBindings {
     }
 }
 
-fn default_registry() -> RegistryV1 {
-    RomeMiniSearch.registry().unwrap()
+fn default_operator_registry() -> OperatorRegistryV1 {
+    kernel_operator_registry()
 }
 
 fn root_state() -> ByteStateV1 {
@@ -82,7 +80,7 @@ impl SearchWorldV1 for PanicEnumerateWorld {
     fn enumerate_candidates(
         &self,
         _state: &ByteStateV1,
-        _registry: &RegistryV1,
+        _operator_registry: &OperatorRegistryV1,
     ) -> Vec<CandidateActionV1> {
         panic!("test panic in enumerate_candidates");
     }
@@ -99,7 +97,7 @@ impl SearchWorldV1 for PanicGoalWorld {
     fn enumerate_candidates(
         &self,
         _state: &ByteStateV1,
-        _registry: &RegistryV1,
+        _operator_registry: &OperatorRegistryV1,
     ) -> Vec<CandidateActionV1> {
         vec![]
     }
@@ -126,7 +124,7 @@ impl SearchWorldV1 for PanicGoalExpansionWorld {
     fn enumerate_candidates(
         &self,
         _state: &ByteStateV1,
-        _registry: &RegistryV1,
+        _operator_registry: &OperatorRegistryV1,
     ) -> Vec<CandidateActionV1> {
         let op_args = set_slot_args(0, 0, Code32::new(2, 0, 0));
         vec![CandidateActionV1::new(OP_SET_SLOT, op_args)]
@@ -151,7 +149,7 @@ impl SearchWorldV1 for NoMovesWorld {
     fn enumerate_candidates(
         &self,
         _state: &ByteStateV1,
-        _registry: &RegistryV1,
+        _operator_registry: &OperatorRegistryV1,
     ) -> Vec<CandidateActionV1> {
         vec![]
     }
@@ -166,14 +164,14 @@ impl SearchWorldV1 for NoMovesWorld {
 
 #[test]
 fn scorer_panic_preserves_graph() {
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let policy = SearchPolicyV1::default();
     let bindings = default_bindings();
 
     let result = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &PanicScorer,
         &bindings,
@@ -220,7 +218,7 @@ fn scorer_panic_preserves_graph() {
 
 #[test]
 fn enumerate_panic_preserves_graph() {
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let policy = SearchPolicyV1::default();
     let mut bindings = default_bindings();
     bindings.world_id = "panic_enumerate_world".into();
@@ -228,7 +226,7 @@ fn enumerate_panic_preserves_graph() {
     let result = search(
         root_state(),
         &PanicEnumerateWorld,
-        &registry,
+        &operator_registry,
         &policy,
         &UniformScorer,
         &bindings,
@@ -254,7 +252,7 @@ fn enumerate_panic_preserves_graph() {
 
 #[test]
 fn is_goal_root_panic_preserves_graph() {
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let policy = SearchPolicyV1::default();
     let mut bindings = default_bindings();
     bindings.world_id = "panic_goal_world".into();
@@ -262,7 +260,7 @@ fn is_goal_root_panic_preserves_graph() {
     let result = search(
         root_state(),
         &PanicGoalWorld,
-        &registry,
+        &operator_registry,
         &policy,
         &UniformScorer,
         &bindings,
@@ -280,7 +278,7 @@ fn is_goal_root_panic_preserves_graph() {
 
 #[test]
 fn is_goal_expansion_panic_preserves_graph() {
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let policy = SearchPolicyV1::default();
     let mut bindings = default_bindings();
     bindings.world_id = "panic_goal_expansion_world".into();
@@ -289,7 +287,7 @@ fn is_goal_expansion_panic_preserves_graph() {
     let result = search(
         root_state(),
         &world,
-        &registry,
+        &operator_registry,
         &policy,
         &UniformScorer,
         &bindings,
@@ -316,14 +314,14 @@ fn is_goal_expansion_panic_preserves_graph() {
 
 #[test]
 fn scorer_wrong_arity_preserves_graph() {
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let policy = SearchPolicyV1::default();
     let bindings = default_bindings();
 
     let result = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &WrongArityScorer,
         &bindings,
@@ -368,7 +366,7 @@ fn scorer_wrong_arity_preserves_graph() {
 
 #[test]
 fn is_goal_reached_helper() {
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let policy = SearchPolicyV1::default();
     let bindings = default_bindings();
 
@@ -376,7 +374,7 @@ fn is_goal_reached_helper() {
     let goal_result = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &UniformScorer,
         &bindings,
@@ -390,7 +388,7 @@ fn is_goal_reached_helper() {
     let no_goal = search(
         root_state(),
         &NoMovesWorld,
-        &registry,
+        &operator_registry,
         &policy,
         &UniformScorer,
         &no_moves_bindings,
@@ -405,7 +403,7 @@ fn is_goal_reached_helper() {
 
 #[test]
 fn preflight_unsupported_mode_returns_err_no_graph() {
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let mut policy = SearchPolicyV1::default();
     policy.dedup_key = sterling_search::policy::DedupKeyV1::FullState; // reserved in M1
     let bindings = default_bindings();
@@ -413,7 +411,7 @@ fn preflight_unsupported_mode_returns_err_no_graph() {
     let err = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &UniformScorer,
         &bindings,
@@ -434,7 +432,7 @@ fn preflight_unsupported_mode_returns_err_no_graph() {
 
 #[test]
 fn termination_details_are_deterministic() {
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let policy = SearchPolicyV1::default();
     let bindings = default_bindings();
 
@@ -442,7 +440,7 @@ fn termination_details_are_deterministic() {
     let r1 = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &PanicScorer,
         &bindings,
@@ -451,7 +449,7 @@ fn termination_details_are_deterministic() {
     let r2 = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &PanicScorer,
         &bindings,

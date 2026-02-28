@@ -38,6 +38,7 @@ use sterling_kernel::carrier::code32::Code32;
 use sterling_kernel::carrier::compile::compile;
 use sterling_kernel::carrier::trace_writer::trace_to_bytes;
 use sterling_kernel::operators::apply::apply;
+use sterling_kernel::operators::operator_registry::{kernel_operator_registry, OperatorRegistryV1};
 use sterling_kernel::proof::canon::canonical_json_bytes;
 use sterling_kernel::proof::hash::{canonical_hash, ContentHash};
 use sterling_kernel::proof::replay::replay_verify;
@@ -220,11 +221,12 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         .encode_payload()
         .map_err(|e| SearchRunError::RunError(RunError::WorldError(e)))?;
     let schema = world.schema_descriptor();
-    let registry = world
+    let concept_registry = world
         .registry()
         .map_err(|e| SearchRunError::RunError(RunError::WorldError(e)))?;
+    let operator_registry = kernel_operator_registry();
 
-    let compilation = compile(&payload_bytes, &schema, &registry).map_err(|e| {
+    let compilation = compile(&payload_bytes, &schema, &concept_registry).map_err(|e| {
         SearchRunError::RunError(RunError::CompilationFailed {
             detail: format!("{e:?}"),
         })
@@ -246,7 +248,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         })?;
     let search_policy_digest = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &search_policy_bytes);
 
-    let registry_digest = registry.digest().map_err(|e| {
+    let registry_digest = concept_registry.digest().map_err(|e| {
         SearchRunError::RunError(RunError::CompilationFailed {
             detail: format!("registry digest: {e:?}"),
         })
@@ -279,7 +281,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
     let (search_result, tape_output) = sterling_search::search::search_with_tape(
         compilation.state.clone(),
         world,
-        &registry,
+        &operator_registry,
         search_policy,
         scorer_ref,
         &bindings,
@@ -452,14 +454,16 @@ pub fn run_with_policy(
     // Phase 1: compile + execute program.
     let payload_bytes = world.encode_payload().map_err(RunError::WorldError)?;
     let schema = world.schema_descriptor();
-    let registry = world.registry().map_err(RunError::WorldError)?;
+    let concept_registry = world.registry().map_err(RunError::WorldError)?;
+    let operator_registry = kernel_operator_registry();
 
-    let compilation =
-        compile(&payload_bytes, &schema, &registry).map_err(|e| RunError::CompilationFailed {
+    let compilation = compile(&payload_bytes, &schema, &concept_registry).map_err(|e| {
+        RunError::CompilationFailed {
             detail: format!("{e:?}"),
-        })?;
+        }
+    })?;
 
-    let frames = execute_program(world, &compilation.state)?;
+    let frames = execute_program(world, &compilation.state, &operator_registry)?;
 
     // Phase 2: build trace.
     let fixture_json = build_fixture_json(world, &payload_bytes)?;
@@ -473,7 +477,7 @@ pub fn run_with_policy(
     enforce_trace_bytes(&trace_bytes, config).map_err(RunError::PolicyViolation)?;
 
     // Phase 4: verify + hash + bundle.
-    verify_trace(&trace, &compilation, &payload_bytes)?;
+    verify_trace(&trace, &compilation, &payload_bytes, &operator_registry)?;
 
     let policy_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &policy_snapshot.bytes);
     let verification_report =
@@ -502,6 +506,7 @@ pub fn run_with_policy(
 fn execute_program(
     world: &dyn WorldHarnessV1,
     initial_state: &sterling_kernel::carrier::bytestate::ByteStateV1,
+    operator_registry: &OperatorRegistryV1,
 ) -> Result<Vec<ByteTraceFrameV1>, RunError> {
     let dims = world.dimensions();
     let program = world.program();
@@ -518,7 +523,7 @@ fn execute_program(
 
     for (i, step) in program.iter().enumerate() {
         let (new_state, record) =
-            apply(&current_state, step.op_code, &step.op_args).map_err(|e| {
+            apply(&current_state, step.op_code, &step.op_args, operator_registry).map_err(|e| {
                 RunError::ApplyFailed {
                     frame_index: i + 1,
                     detail: format!("{e:?}"),
@@ -588,6 +593,7 @@ fn verify_trace(
     trace: &ByteTraceV1,
     compilation: &sterling_kernel::carrier::compile::CompilationResultV1,
     payload_bytes: &[u8],
+    operator_registry: &OperatorRegistryV1,
 ) -> Result<(), RunError> {
     let trace_bundle = TraceBundleV1 {
         trace: trace.clone(),
@@ -595,9 +601,10 @@ fn verify_trace(
         input_payload: payload_bytes.to_vec(),
     };
 
-    let verdict = replay_verify(&trace_bundle).map_err(|e| RunError::ReplayFailed {
-        detail: format!("{e:?}"),
-    })?;
+    let verdict =
+        replay_verify(&trace_bundle, operator_registry).map_err(|e| RunError::ReplayFailed {
+            detail: format!("{e:?}"),
+        })?;
 
     match &verdict {
         ReplayVerdict::Match => Ok(()),

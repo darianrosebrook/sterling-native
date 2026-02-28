@@ -14,6 +14,7 @@ use sterling_kernel::carrier::bytetrace::{
 };
 use sterling_kernel::carrier::code32::Code32;
 use sterling_kernel::operators::apply::{apply, set_slot_args, OP_SET_SLOT, SET_SLOT_ARG_COUNT};
+use sterling_kernel::operators::operator_registry::kernel_operator_registry;
 
 /// Build the M2 canonical test trace.
 ///
@@ -40,7 +41,7 @@ pub fn canonical_test_trace() -> ByteTraceV1 {
     };
 
     let args = set_slot_args(0, 0, Code32::new(1, 1, 5));
-    let (new_state, _) = apply(&initial, OP_SET_SLOT, &args).unwrap();
+    let (new_state, _) = apply(&initial, OP_SET_SLOT, &args, &kernel_operator_registry()).unwrap();
     let frame_1 = ByteTraceFrameV1 {
         op_code: OP_SET_SLOT.to_le_bytes(),
         op_args: args,

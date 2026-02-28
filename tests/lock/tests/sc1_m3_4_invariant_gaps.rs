@@ -15,7 +15,7 @@ use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_harness::worlds::slot_lattice_regimes::regime_duplicates;
 use sterling_kernel::carrier::bytestate::{ByteStateV1, SlotStatus};
 use sterling_kernel::carrier::code32::Code32;
-use sterling_kernel::carrier::registry::RegistryV1;
+use sterling_kernel::operators::operator_registry::{kernel_operator_registry, OperatorRegistryV1};
 use sterling_kernel::proof::hash::canonical_hash;
 use sterling_search::contract::SearchWorldV1;
 use sterling_search::node::DOMAIN_SEARCH_NODE;
@@ -38,8 +38,8 @@ fn default_bindings() -> MetadataBindings {
     }
 }
 
-fn default_registry() -> RegistryV1 {
-    RomeMiniSearch.registry().unwrap()
+fn default_operator_registry() -> OperatorRegistryV1 {
+    kernel_operator_registry()
 }
 
 fn root_state() -> ByteStateV1 {
@@ -141,7 +141,7 @@ fn inv_sc_05_different_identity_produces_different_fingerprint() {
 fn inv_sc_05_search_dedup_uses_identity_fingerprint() {
     let regime = regime_duplicates();
     let scorer = UniformScorer;
-    let registry = regime.world.registry().unwrap();
+    let operator_registry = kernel_operator_registry();
     let sd = regime.world.schema_descriptor();
     let bindings = MetadataBindings {
         world_id: SearchWorldV1::world_id(&regime.world).to_string(),
@@ -155,7 +155,7 @@ fn inv_sc_05_search_dedup_uses_identity_fingerprint() {
     let result = search(
         ByteStateV1::new(1, 10),
         &regime.world,
-        &registry,
+        &operator_registry,
         &regime.policy,
         &scorer,
         &bindings,
@@ -220,79 +220,63 @@ fn inv_sc_05_search_dedup_uses_identity_fingerprint() {
 // INV-SC-08: Candidate enumeration uses runner-supplied registry only
 // ---------------------------------------------------------------------------
 
-/// Supplying a restricted registry to `enumerate_candidates` must reduce
-/// the candidate count. The world's internal registry is irrelevant —
-/// only the runner-supplied snapshot governs which ops/values are legal.
+/// Supplying an operator registry that contains `OP_SET_SLOT` produces
+/// candidates; an empty operator registry produces zero. The world's
+/// internal concept registry is irrelevant — only the runner-supplied
+/// operator registry governs which operators are legal (INV-SC-08).
 ///
 /// ACCEPTANCE: SC1-M3.4-INV-SC-08-RESTRICTED-REGISTRY
 #[test]
 fn inv_sc_08_restricted_registry_reduces_candidates() {
-    let full_registry = default_registry();
+    let full_operator_registry = default_operator_registry();
     let state = root_state();
 
-    // Full registry: get all candidates
-    let full_candidates = RomeMiniSearch.enumerate_candidates(&state, &full_registry);
+    // Full operator registry: get all candidates
+    let full_candidates = RomeMiniSearch.enumerate_candidates(&state, &full_operator_registry);
     assert!(
         full_candidates.len() > 1,
-        "precondition: full registry must produce multiple candidates"
+        "precondition: full operator registry must produce multiple candidates"
     );
 
-    // Build a restricted registry with only 1 value (instead of 4)
-    let op_set_slot = sterling_kernel::operators::apply::OP_SET_SLOT;
-    let restricted = RegistryV1::new(
-        "test".to_string(),
-        vec![
-            (op_set_slot, "SET_SLOT".to_string()),
-            (Code32::new(1, 0, 0), "val_0".to_string()),
-        ],
-    )
-    .unwrap();
-
-    let restricted_candidates = RomeMiniSearch.enumerate_candidates(&state, &restricted);
+    // Empty operator registry (no OP_SET_SLOT) → zero candidates
+    let empty = OperatorRegistryV1::new("empty.v1".into(), vec![]).unwrap();
+    let empty_candidates = RomeMiniSearch.enumerate_candidates(&state, &empty);
 
     assert!(
-        restricted_candidates.len() < full_candidates.len(),
-        "INV-SC-08: restricted registry ({} candidates) must produce fewer candidates than full ({} candidates)",
-        restricted_candidates.len(),
-        full_candidates.len(),
+        empty_candidates.is_empty(),
+        "INV-SC-08: empty operator registry must produce zero candidates, got {}",
+        empty_candidates.len(),
     );
 }
 
-/// An empty registry (no values registered) must produce zero candidates
-/// from `enumerate_candidates`, regardless of the world's internal knowledge.
+/// An empty operator registry must produce zero candidates from
+/// `enumerate_candidates`, regardless of the world's internal knowledge.
 ///
 /// ACCEPTANCE: SC1-M3.4-INV-SC-08-EMPTY-REGISTRY
 #[test]
 fn inv_sc_08_empty_registry_produces_zero_candidates() {
-    let empty_registry = RegistryV1::new("test".to_string(), vec![]).unwrap();
+    let empty_registry = OperatorRegistryV1::new("empty.v1".into(), vec![]).unwrap();
     let state = root_state();
 
     let candidates = RomeMiniSearch.enumerate_candidates(&state, &empty_registry);
 
     assert!(
         candidates.is_empty(),
-        "INV-SC-08: empty registry must produce zero candidates, got {}",
+        "INV-SC-08: empty operator registry must produce zero candidates, got {}",
         candidates.len(),
     );
 }
 
-/// In a live search with a restricted registry, the total candidate count
-/// in the graph must be consistent with the restricted set. No candidates
-/// should reference operations or values outside the supplied registry.
+/// In a live search with the kernel operator registry, every candidate in
+/// the graph must use `OP_SET_SLOT` (the only operator in the registry).
+/// Operator legality is now checked via `OperatorRegistryV1`, not concept
+/// `RegistryV1`.
 ///
 /// ACCEPTANCE: SC1-M3.4-INV-SC-08-SEARCH-COHERENCE
 #[test]
-fn inv_sc_08_search_with_restricted_registry() {
+fn inv_sc_08_search_with_operator_registry() {
     let op_set_slot = sterling_kernel::operators::apply::OP_SET_SLOT;
-    let restricted = RegistryV1::new(
-        "test".to_string(),
-        vec![
-            (op_set_slot, "SET_SLOT".to_string()),
-            (Code32::new(1, 0, 0), "val_0".to_string()),
-            (Code32::new(1, 0, 1), "val_1".to_string()),
-        ],
-    )
-    .unwrap();
+    let operator_registry = default_operator_registry();
 
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
@@ -301,50 +285,28 @@ fn inv_sc_08_search_with_restricted_registry() {
     let result = search(
         root_state(),
         &RomeMiniSearch,
-        &restricted,
+        &operator_registry,
         &policy,
         &scorer,
         &bindings,
     )
     .unwrap();
 
-    // Every candidate in the graph must use OP_SET_SLOT (the only op in our registry)
+    // Every candidate in the graph must use OP_SET_SLOT (the only op in the registry)
     for expansion in &result.graph.expansions {
         for cr in &expansion.candidates {
             assert_eq!(
                 cr.action.op_code, op_set_slot,
-                "INV-SC-08: candidate uses op_code not in runner-supplied registry",
+                "INV-SC-08: candidate uses op_code not in runner-supplied operator registry",
             );
         }
     }
 
-    // The candidate count per expansion should be at most 2 values * 2 slots = 4
-    // (with full registry it would be 4 values * 2 slots = 8)
-    for expansion in &result.graph.expansions {
-        let candidate_count = expansion.candidates.len();
-        assert!(
-            candidate_count <= 4,
-            "INV-SC-08: expansion has {candidate_count} candidates, expected at most 4 with 2-value registry",
-        );
-    }
-
-    // Cross-check: run with full registry and verify we get more expansions/candidates
-    let full_registry = default_registry();
-    let full_result = search(
-        root_state(),
-        &RomeMiniSearch,
-        &full_registry,
-        &policy,
-        &scorer,
-        &bindings,
-    )
-    .unwrap();
-
-    assert!(
-        full_result.graph.metadata.total_candidates_generated
-            > result.graph.metadata.total_candidates_generated,
-        "INV-SC-08: full registry ({}) should produce more total candidates than restricted ({})",
-        full_result.graph.metadata.total_candidates_generated,
-        result.graph.metadata.total_candidates_generated,
+    // All expansions should have 4 values * 2 slots = 8 candidates (unless already set)
+    let first_exp = &result.graph.expansions[0];
+    assert_eq!(
+        first_exp.candidates.len(),
+        8,
+        "INV-SC-08: first expansion should have 8 candidates (4 values × 2 slots)"
     );
 }

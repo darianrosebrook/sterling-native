@@ -17,6 +17,7 @@ use sterling_harness::worlds::slot_lattice_regimes::{
     regime_scale_1000, regime_truncation, Regime,
 };
 use sterling_kernel::carrier::bytestate::ByteStateV1;
+use sterling_kernel::operators::operator_registry::kernel_operator_registry;
 use sterling_search::contract::SearchWorldV1;
 use sterling_search::scorer::UniformScorer;
 use sterling_search::search::{search_with_tape, MetadataBindings};
@@ -44,13 +45,13 @@ fn bindings_for(regime: &Regime) -> MetadataBindings {
 
 /// Run `search_with_tape()` for a regime, returning (`SearchResult`, `TapeOutput`).
 fn run_with_tape(regime: &Regime) -> (sterling_search::search::SearchResult, TapeOutput) {
-    let registry = regime.world.registry().unwrap();
+    let operator_registry = kernel_operator_registry();
     let root = ByteStateV1::new(1, 10); // MAX_SLOTS = 10
     let bindings = bindings_for(regime);
     search_with_tape(
         root,
         &regime.world,
-        &registry,
+        &operator_registry,
         &regime.policy,
         &UniformScorer,
         &bindings,
@@ -94,7 +95,7 @@ fn assert_tape_equivalence(regime: &Regime, label: &str) {
 fn tape_equiv_rome_mini_search() {
     let world = RomeMiniSearch;
     let policy = sterling_search::policy::SearchPolicyV1::default();
-    let registry = world.registry().unwrap();
+    let operator_registry = kernel_operator_registry();
     let sd = world.schema_descriptor();
     let bindings = MetadataBindings {
         world_id: SearchWorldV1::world_id(&world).to_string(),
@@ -107,7 +108,7 @@ fn tape_equiv_rome_mini_search() {
     let root = ByteStateV1::new(1, 2);
 
     let (result, tape_output) =
-        search_with_tape(root, &world, &registry, &policy, &UniformScorer, &bindings)
+        search_with_tape(root, &world, &operator_registry, &policy, &UniformScorer, &bindings)
             .expect("search_with_tape should succeed for RomeMiniSearch");
 
     let tape = read_tape(&tape_output.bytes).expect("tape parse failed");

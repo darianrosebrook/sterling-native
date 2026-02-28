@@ -9,6 +9,7 @@ use crate::carrier::bytestate::ByteStateV1;
 use crate::carrier::bytetrace::{ReplayVerdict, TraceBundleV1};
 use crate::carrier::code32::Code32;
 use crate::operators::apply::{apply, ApplyFailure};
+use crate::operators::operator_registry::OperatorRegistryV1;
 
 /// Error during replay (distinct from a divergence verdict).
 ///
@@ -38,7 +39,10 @@ pub type ReplayResult = Result<ReplayVerdict, ReplayError>;
 ///
 /// Returns [`ReplayError`] if the bundle is malformed or an operator
 /// fails during replay.
-pub fn replay_verify(trace_bundle: &TraceBundleV1) -> ReplayResult {
+pub fn replay_verify(
+    trace_bundle: &TraceBundleV1,
+    operator_registry: &OperatorRegistryV1,
+) -> ReplayResult {
     let trace = &trace_bundle.trace;
 
     if trace.frames.is_empty() {
@@ -80,20 +84,38 @@ pub fn replay_verify(trace_bundle: &TraceBundleV1) -> ReplayResult {
         let op_code = Code32::from_le_bytes(frame.op_code);
 
         let (new_state, _record) =
-            apply(&current_state, op_code, &frame.op_args).map_err(|e| match e {
-                ApplyFailure::UnknownOperator { op_code: oc } => ReplayError::OperatorFailed {
-                    frame_index: i,
-                    detail: format!("unknown operator: {oc:?}"),
+            apply(&current_state, op_code, &frame.op_args, operator_registry).map_err(
+                |e| match e {
+                    ApplyFailure::UnknownOperator { op_code: oc } => {
+                        ReplayError::OperatorFailed {
+                            frame_index: i,
+                            detail: format!("unknown operator: {oc:?}"),
+                        }
+                    }
+                    ApplyFailure::OperatorNotImplemented { op_code: oc } => {
+                        ReplayError::OperatorFailed {
+                            frame_index: i,
+                            detail: format!("operator not implemented: {oc:?}"),
+                        }
+                    }
+                    ApplyFailure::PreconditionNotMet { detail } => {
+                        ReplayError::OperatorFailed {
+                            frame_index: i,
+                            detail: format!("precondition not met: {detail}"),
+                        }
+                    }
+                    ApplyFailure::ArgumentMismatch { detail } => ReplayError::OperatorFailed {
+                        frame_index: i,
+                        detail: format!("argument mismatch: {detail}"),
+                    },
+                    ApplyFailure::EffectContractViolation { detail, .. } => {
+                        ReplayError::OperatorFailed {
+                            frame_index: i,
+                            detail: format!("effect contract violation: {detail}"),
+                        }
+                    }
                 },
-                ApplyFailure::PreconditionNotMet { detail } => ReplayError::OperatorFailed {
-                    frame_index: i,
-                    detail: format!("precondition not met: {detail}"),
-                },
-                ApplyFailure::ArgumentMismatch { detail } => ReplayError::OperatorFailed {
-                    frame_index: i,
-                    detail: format!("argument mismatch: {detail}"),
-                },
-            })?;
+            )?;
 
         // Compare identity and status planes.
         let expected_identity = &frame.result_identity;
@@ -125,6 +147,11 @@ mod tests {
         ByteTraceEnvelopeV1, ByteTraceFooterV1, ByteTraceFrameV1, ByteTraceHeaderV1, ByteTraceV1,
     };
     use crate::operators::apply::{set_slot_args, OP_SET_SLOT};
+    use crate::operators::operator_registry::kernel_operator_registry;
+
+    fn op_reg() -> OperatorRegistryV1 {
+        kernel_operator_registry()
+    }
 
     fn test_envelope() -> ByteTraceEnvelopeV1 {
         ByteTraceEnvelopeV1 {
@@ -159,7 +186,7 @@ mod tests {
 
         // Apply SET_SLOT(0, 0, Code32::new(1,1,5)).
         let args = set_slot_args(0, 0, Code32::new(1, 1, 5));
-        let (new_state, _record) = apply(&initial, OP_SET_SLOT, &args).unwrap();
+        let (new_state, _record) = apply(&initial, OP_SET_SLOT, &args, &op_reg()).unwrap();
         let frame_1 = ByteTraceFrameV1 {
             op_code: OP_SET_SLOT.to_le_bytes(),
             op_args: args,
@@ -195,7 +222,7 @@ mod tests {
     #[test]
     fn replay_match_single_step() {
         let bundle = build_single_step_trace();
-        let verdict = replay_verify(&bundle).unwrap();
+        let verdict = replay_verify(&bundle, &op_reg()).unwrap();
         assert_eq!(verdict, ReplayVerdict::Match);
     }
 
@@ -204,7 +231,7 @@ mod tests {
         let mut bundle = build_single_step_trace();
         // Corrupt frame 1's identity bytes.
         bundle.trace.frames[1].result_identity[0] = 0xFF;
-        let verdict = replay_verify(&bundle).unwrap();
+        let verdict = replay_verify(&bundle, &op_reg()).unwrap();
         assert!(matches!(
             verdict,
             ReplayVerdict::Divergence { frame_index: 1, .. }
@@ -233,7 +260,7 @@ mod tests {
             compilation_manifest: vec![],
             input_payload: vec![],
         };
-        let err = replay_verify(&bundle).unwrap_err();
+        let err = replay_verify(&bundle, &op_reg()).unwrap_err();
         assert!(matches!(err, ReplayError::MalformedBundle { .. }));
     }
 
@@ -242,7 +269,7 @@ mod tests {
         let mut bundle = build_single_step_trace();
         // Change frame 0 op_code to something that isn't INITIAL_STATE.
         bundle.trace.frames[0].op_code = Code32::new(1, 1, 1).to_le_bytes();
-        let err = replay_verify(&bundle).unwrap_err();
+        let err = replay_verify(&bundle, &op_reg()).unwrap_err();
         assert!(matches!(err, ReplayError::MalformedBundle { .. }));
     }
 
@@ -251,7 +278,7 @@ mod tests {
         let mut bundle = build_single_step_trace();
         // Change frame 1's op_code to unknown operator.
         bundle.trace.frames[1].op_code = Code32::new(9, 9, 9).to_le_bytes();
-        let err = replay_verify(&bundle).unwrap_err();
+        let err = replay_verify(&bundle, &op_reg()).unwrap_err();
         assert!(matches!(
             err,
             ReplayError::OperatorFailed { frame_index: 1, .. }
@@ -261,9 +288,10 @@ mod tests {
     #[test]
     fn replay_deterministic_n10() {
         let bundle = build_single_step_trace();
-        let first = replay_verify(&bundle).unwrap();
+        let reg = op_reg();
+        let first = replay_verify(&bundle, &reg).unwrap();
         for _ in 0..10 {
-            assert_eq!(replay_verify(&bundle).unwrap(), first);
+            assert_eq!(replay_verify(&bundle, &reg).unwrap(), first);
         }
     }
 
@@ -272,7 +300,7 @@ mod tests {
         let mut bundle = build_single_step_trace();
         // Corrupt frame 1's status bytes — change Provisional to Certified.
         bundle.trace.frames[1].result_status[0] = 255; // Certified instead of Provisional
-        let verdict = replay_verify(&bundle).unwrap();
+        let verdict = replay_verify(&bundle, &op_reg()).unwrap();
         assert!(matches!(
             verdict,
             ReplayVerdict::Divergence { frame_index: 1, .. }

@@ -7,6 +7,7 @@ use sterling_harness::worlds::slot_lattice_regimes::Regime;
 use sterling_kernel::carrier::compile::compile;
 use sterling_kernel::proof::canon::canonical_json_bytes;
 use sterling_kernel::proof::hash::canonical_hash;
+use sterling_kernel::operators::operator_registry::{kernel_operator_registry, OperatorRegistryV1};
 use sterling_search::contract::SearchWorldV1;
 use sterling_search::policy::SearchPolicyV1;
 use sterling_search::scorer::ValueScorer;
@@ -21,8 +22,8 @@ use sterling_harness::policy::{build_policy, PolicyConfig};
 pub struct SearchSetup {
     /// The compiled root state.
     pub root_state: sterling_kernel::carrier::bytestate::ByteStateV1,
-    /// The world's operator registry.
-    pub registry: sterling_kernel::carrier::registry::RegistryV1,
+    /// The kernel operator registry for `apply()` and search.
+    pub operator_registry: OperatorRegistryV1,
     /// Pre-computed metadata bindings for search graph construction.
     pub bindings: MetadataBindings,
 }
@@ -70,7 +71,7 @@ pub fn prepare_search_setup<W: SearchWorldV1 + WorldHarnessV1>(
 
     SearchSetup {
         root_state: compilation.state,
-        registry,
+        operator_registry: kernel_operator_registry(),
         bindings,
     }
 }
@@ -89,7 +90,7 @@ pub fn run_search_only<W: SearchWorldV1>(
     sterling_search::search::search(
         setup.root_state.clone(),
         world,
-        &setup.registry,
+        &setup.operator_registry,
         policy,
         scorer,
         &setup.bindings,
@@ -112,7 +113,7 @@ pub fn run_search_with_tape_only<W: SearchWorldV1>(
     sterling_search::search::search_with_tape(
         setup.root_state.clone(),
         world,
-        &setup.registry,
+        &setup.operator_registry,
         policy,
         scorer,
         &setup.bindings,

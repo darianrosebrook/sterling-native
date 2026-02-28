@@ -9,7 +9,6 @@ use std::collections::BTreeMap;
 use lock_tests::bundle_test_helpers::rebuild_with_modified_graph;
 use sterling_harness::bundle::{build_bundle, verify_bundle, BundleVerifyError};
 use sterling_harness::bundle_dir::{read_bundle_dir, verify_bundle_dir, write_bundle_dir};
-use sterling_harness::contract::WorldHarnessV1;
 use sterling_harness::runner::{build_table_scorer_input, run_search, ScorerInputV1};
 use sterling_harness::worlds::slot_lattice_regimes::{regime_truncation, Regime};
 use sterling_kernel::carrier::bytestate::ByteStateV1;
@@ -28,8 +27,8 @@ use sterling_search::contract::SearchWorldV1;
 /// Then assigns `bonus=100` to the last candidate in that capped list.
 fn build_scorer_for_regime(regime: &Regime) -> ScorerInputV1 {
     let root = ByteStateV1::new(1, 10); // MAX_SLOTS = 10
-    let registry = regime.world.registry().unwrap();
-    let mut candidates = regime.world.enumerate_candidates(&root, &registry);
+    let operator_registry = sterling_kernel::operators::operator_registry::kernel_operator_registry();
+    let mut candidates = regime.world.enumerate_candidates(&root, &operator_registry);
     candidates.sort();
 
     // Apply cap.

@@ -3,6 +3,7 @@ use criterion::{black_box, criterion_group, criterion_main, BatchSize, Benchmark
 use sterling_kernel::carrier::bytestate::ByteStateV1;
 use sterling_kernel::carrier::code32::Code32;
 use sterling_kernel::operators::apply::{apply, set_slot_args, OP_SET_SLOT};
+use sterling_kernel::operators::operator_registry::kernel_operator_registry;
 use sterling_kernel::proof::hash::{canonical_hash, ContentHash};
 use sterling_search::frontier::BestFirstFrontier;
 use sterling_search::node::{CandidateActionV1, SearchNodeV1, DOMAIN_SEARCH_NODE};
@@ -138,11 +139,16 @@ fn bench_apply_fingerprint(c: &mut Criterion) {
     let op_code = OP_SET_SLOT;
     let op_args = set_slot_args(0, 0, Code32::new(1, 0, 0));
 
+    let operator_registry = kernel_operator_registry();
     c.bench_function("apply_fingerprint", |b| {
         b.iter(|| {
-            let (new_state, _record) =
-                apply(black_box(&state), black_box(op_code), black_box(&op_args))
-                    .expect("apply should succeed");
+            let (new_state, _record) = apply(
+                black_box(&state),
+                black_box(op_code),
+                black_box(&op_args),
+                black_box(&operator_registry),
+            )
+            .expect("apply should succeed");
             black_box(canonical_hash(
                 DOMAIN_SEARCH_NODE,
                 &new_state.identity_bytes(),

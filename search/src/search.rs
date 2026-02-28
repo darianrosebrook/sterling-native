@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use sterling_kernel::carrier::registry::RegistryV1;
 use sterling_kernel::operators::apply;
+use sterling_kernel::operators::operator_registry::OperatorRegistryV1;
 use sterling_kernel::proof::hash::canonical_hash;
 
 use crate::contract::SearchWorldV1;
@@ -85,7 +85,7 @@ fn build_not_evaluated_records(
 pub fn search(
     root_state: sterling_kernel::carrier::bytestate::ByteStateV1,
     world: &dyn SearchWorldV1,
-    registry: &RegistryV1,
+    operator_registry: &OperatorRegistryV1,
     policy: &SearchPolicyV1,
     scorer: &dyn ValueScorer,
     metadata_bindings: &MetadataBindings,
@@ -93,7 +93,7 @@ pub fn search(
     search_impl(
         root_state,
         world,
-        registry,
+        operator_registry,
         policy,
         scorer,
         metadata_bindings,
@@ -114,7 +114,7 @@ pub fn search(
 pub fn search_with_tape(
     root_state: sterling_kernel::carrier::bytestate::ByteStateV1,
     world: &dyn SearchWorldV1,
-    registry: &RegistryV1,
+    operator_registry: &OperatorRegistryV1,
     policy: &SearchPolicyV1,
     scorer: &dyn ValueScorer,
     metadata_bindings: &MetadataBindings,
@@ -133,7 +133,7 @@ pub fn search_with_tape(
     let result = search_impl(
         root_state,
         world,
-        registry,
+        operator_registry,
         policy,
         scorer,
         metadata_bindings,
@@ -219,7 +219,7 @@ fn build_tape_header(
 fn search_impl(
     root_state: sterling_kernel::carrier::bytestate::ByteStateV1,
     world: &dyn SearchWorldV1,
-    registry: &RegistryV1,
+    operator_registry: &OperatorRegistryV1,
     policy: &SearchPolicyV1,
     scorer: &dyn ValueScorer,
     metadata_bindings: &MetadataBindings,
@@ -400,7 +400,7 @@ fn search_impl(
 
         // Enumerate candidates from world (with panic protection)
         let candidates_result = catch_unwind(AssertUnwindSafe(|| {
-            world.enumerate_candidates(&current.state, registry)
+            world.enumerate_candidates(&current.state, operator_registry)
         }));
 
         let Ok(mut candidates) = candidates_result else {
@@ -547,7 +547,7 @@ fn search_impl(
 
         for (sorted_idx, &(_orig_idx, candidate, score)) in scored_candidates.iter().enumerate() {
             // INV-SC-02: check candidate legality
-            if !registry.contains(&candidate.op_code) {
+            if !operator_registry.contains(&candidate.op_code) {
                 candidate_records.push(CandidateRecordV1 {
                     index: sorted_idx as u64,
                     action: candidate.clone(),
@@ -570,18 +570,25 @@ fn search_impl(
             }
 
             // Apply the candidate
-            let apply_result = apply::apply(&current.state, candidate.op_code, &candidate.op_args);
+            let apply_result = apply::apply(
+                &current.state,
+                candidate.op_code,
+                &candidate.op_args,
+                operator_registry,
+            );
 
             match apply_result {
                 Err(fail) => {
                     let kind = match &fail {
-                        apply::ApplyFailure::PreconditionNotMet { .. } => {
+                        apply::ApplyFailure::PreconditionNotMet { .. }
+                        | apply::ApplyFailure::EffectContractViolation { .. } => {
                             ApplyFailureKindV1::PreconditionNotMet
                         }
                         apply::ApplyFailure::ArgumentMismatch { .. } => {
                             ApplyFailureKindV1::ArgumentMismatch
                         }
-                        apply::ApplyFailure::UnknownOperator { .. } => {
+                        apply::ApplyFailure::UnknownOperator { .. }
+                        | apply::ApplyFailure::OperatorNotImplemented { .. } => {
                             ApplyFailureKindV1::UnknownOperator
                         }
                     };

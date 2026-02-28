@@ -8,6 +8,7 @@ use lock_tests::m2_canonical_trace::canonical_test_trace;
 use sterling_kernel::carrier::bytetrace::{ReplayVerdict, TraceBundleV1};
 use sterling_kernel::carrier::trace_reader::bytes_to_trace;
 use sterling_kernel::carrier::trace_writer::trace_to_bytes;
+use sterling_kernel::operators::operator_registry::kernel_operator_registry;
 use sterling_kernel::proof::replay::replay_verify;
 use sterling_kernel::proof::trace_hash::{payload_hash, step_chain};
 
@@ -67,7 +68,7 @@ fn replay_deterministic_n10() {
         input_payload: vec![],
     };
     for _ in 0..10 {
-        let verdict = replay_verify(&bundle).unwrap();
+        let verdict = replay_verify(&bundle, &kernel_operator_registry()).unwrap();
         assert_eq!(verdict, ReplayVerdict::Match);
     }
 }

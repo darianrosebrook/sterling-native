@@ -10,6 +10,7 @@ use sterling_harness::contract::WorldHarnessV1;
 use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::slot_lattice_regimes::{regime_duplicates, Regime};
 use sterling_kernel::carrier::bytestate::ByteStateV1;
+use sterling_kernel::operators::operator_registry::kernel_operator_registry;
 use sterling_kernel::proof::canon::canonical_json_bytes;
 use sterling_search::contract::SearchWorldV1;
 use sterling_search::graph::{
@@ -38,13 +39,13 @@ fn bindings_for(regime: &Regime) -> MetadataBindings {
 /// Run search directly for `regime_duplicates`.
 fn run_duplicates_search() -> sterling_search::search::SearchResult {
     let regime = regime_duplicates();
-    let registry = regime.world.registry().unwrap();
+    let operator_registry = kernel_operator_registry();
     let root = ByteStateV1::new(1, 10);
     let bindings = bindings_for(&regime);
     search(
         root,
         &regime.world,
-        &registry,
+        &operator_registry,
         &regime.policy,
         &UniformScorer,
         &bindings,

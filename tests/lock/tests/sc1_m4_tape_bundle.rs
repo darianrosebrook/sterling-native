@@ -17,7 +17,6 @@ use sterling_harness::bundle::{
     verify_bundle, verify_bundle_with_profile, BundleVerifyError, VerificationProfile,
     ArtifactBundleV1,
 };
-use sterling_harness::contract::WorldHarnessV1;
 use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_search::policy::SearchPolicyV1;
@@ -142,7 +141,7 @@ fn tape_header_binding_coherence() {
         "uniform-mode tape must not have scorer_digest"
     );
     assert!(
-        bundle.artifacts.get("scorer.json").is_none(),
+        !bundle.artifacts.contains_key("scorer.json"),
         "uniform-mode bundle must not have scorer.json"
     );
 }
@@ -420,8 +419,8 @@ fn artifact_count_table() {
 
     let regime = regime_truncation();
     let root = ByteStateV1::new(1, 10);
-    let registry = regime.world.registry().unwrap();
-    let mut candidates = regime.world.enumerate_candidates(&root, &registry);
+    let operator_registry = sterling_kernel::operators::operator_registry::kernel_operator_registry();
+    let mut candidates = regime.world.enumerate_candidates(&root, &operator_registry);
     candidates.sort();
 
     #[allow(clippy::cast_possible_truncation)]
@@ -496,8 +495,8 @@ fn table_scorer_bundle() -> ArtifactBundleV1 {
 
     let regime = regime_truncation();
     let root = ByteStateV1::new(1, 10);
-    let registry = regime.world.registry().unwrap();
-    let mut candidates = regime.world.enumerate_candidates(&root, &registry);
+    let operator_registry = sterling_kernel::operators::operator_registry::kernel_operator_registry();
+    let mut candidates = regime.world.enumerate_candidates(&root, &operator_registry);
     candidates.sort();
 
     #[allow(clippy::cast_possible_truncation)]

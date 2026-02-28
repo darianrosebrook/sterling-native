@@ -19,6 +19,7 @@ use sterling_kernel::carrier::bytestate::{ByteStateV1, SchemaDescriptor};
 use sterling_kernel::carrier::code32::Code32;
 use sterling_kernel::carrier::registry::RegistryV1;
 use sterling_kernel::operators::apply::{set_slot_args, OP_SET_SLOT};
+use sterling_kernel::operators::operator_registry::OperatorRegistryV1;
 use sterling_kernel::proof::canon::canonical_json_bytes;
 
 use sterling_search::contract::SearchWorldV1;
@@ -279,10 +280,15 @@ impl SearchWorldV1 for SlotLatticeSearch {
     fn enumerate_candidates(
         &self,
         state: &ByteStateV1,
-        registry: &RegistryV1,
+        operator_registry: &OperatorRegistryV1,
     ) -> Vec<CandidateActionV1> {
         // Trap check: if trapped, return empty (forces exhaustive dead end).
         if self.is_trap(state) {
+            return Vec::new();
+        }
+
+        // INV-SC-02: all candidate op_codes must be in the operator registry.
+        if !operator_registry.contains(&OP_SET_SLOT) {
             return Vec::new();
         }
 
@@ -302,16 +308,10 @@ impl SearchWorldV1 for SlotLatticeSearch {
                 continue;
             }
 
+            // Concept values are identity codes (not operators) — hardcoded,
+            // not registry-dependent. INV-SC-08: use runner-supplied operator
+            // registry for operator legality, not self.registry().
             for &value in CONCEPT_VALUES.iter().take(v_count) {
-                // INV-SC-02: all candidate op_codes must be in the registry.
-                if !registry.contains(&OP_SET_SLOT) {
-                    continue;
-                }
-                // INV-SC-08: use runner-supplied registry, not self.registry().
-                if !registry.contains(&value) {
-                    continue;
-                }
-
                 #[allow(clippy::cast_possible_truncation)]
                 let op_args = set_slot_args(0, slot as u32, value);
                 candidates.push(CandidateActionV1::new(OP_SET_SLOT, op_args));
@@ -340,6 +340,11 @@ impl SearchWorldV1 for SlotLatticeSearch {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sterling_kernel::operators::operator_registry::kernel_operator_registry;
+
+    fn op_reg() -> OperatorRegistryV1 {
+        kernel_operator_registry()
+    }
 
     fn test_config() -> SlotLatticeConfig {
         SlotLatticeConfig {
@@ -357,9 +362,9 @@ mod tests {
     #[test]
     fn enumerate_candidates_uses_registry() {
         let world = test_world();
-        let registry = world.registry().unwrap();
+        let operator_registry = op_reg();
         let state = ByteStateV1::new(1, MAX_SLOTS);
-        let candidates = world.enumerate_candidates(&state, &registry);
+        let candidates = world.enumerate_candidates(&state, &operator_registry);
         // 3 active slots × 2 values = 6 candidates
         assert_eq!(candidates.len(), 6);
         for c in &candidates {
@@ -377,6 +382,7 @@ mod tests {
     #[test]
     fn goal_state_detected() {
         let world = test_world();
+        let operator_registry = op_reg();
         let mut state = ByteStateV1::new(1, MAX_SLOTS);
         // Fill all 3 active slots.
         for i in 0..3u32 {
@@ -384,6 +390,7 @@ mod tests {
                 &state,
                 OP_SET_SLOT,
                 &set_slot_args(0, i, CONCEPT_VALUES[0]),
+                &operator_registry,
             )
             .unwrap();
             state = new_state;
@@ -394,10 +401,10 @@ mod tests {
     #[test]
     fn enumeration_is_deterministic() {
         let world = test_world();
-        let registry = world.registry().unwrap();
+        let operator_registry = op_reg();
         let state = ByteStateV1::new(1, MAX_SLOTS);
-        let c1 = world.enumerate_candidates(&state, &registry);
-        let c2 = world.enumerate_candidates(&state, &registry);
+        let c1 = world.enumerate_candidates(&state, &operator_registry);
+        let c2 = world.enumerate_candidates(&state, &operator_registry);
         assert_eq!(c1, c2);
     }
 
@@ -410,7 +417,7 @@ mod tests {
             goal_profile: GoalProfile::AllNonzero,
         };
         let world = SlotLatticeSearch::new(config);
-        let registry = world.registry().unwrap();
+        let operator_registry = op_reg();
 
         // Set slot 0 to the trap value.
         let state = ByteStateV1::new(1, MAX_SLOTS);
@@ -418,10 +425,11 @@ mod tests {
             &state,
             OP_SET_SLOT,
             &set_slot_args(0, 0, CONCEPT_VALUES[0]),
+            &operator_registry,
         )
         .unwrap();
 
-        let candidates = world.enumerate_candidates(&trapped_state, &registry);
+        let candidates = world.enumerate_candidates(&trapped_state, &operator_registry);
         assert!(
             candidates.is_empty(),
             "trapped state should have zero candidates"

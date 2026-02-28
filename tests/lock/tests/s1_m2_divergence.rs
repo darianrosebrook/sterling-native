@@ -13,8 +13,13 @@ use sterling_kernel::carrier::code32::Code32;
 use sterling_kernel::carrier::trace_reader::bytes_to_trace;
 use sterling_kernel::carrier::trace_writer::trace_to_bytes;
 use sterling_kernel::operators::apply::{apply, set_slot_args, OP_SET_SLOT, SET_SLOT_ARG_COUNT};
+use sterling_kernel::operators::operator_registry::{kernel_operator_registry, OperatorRegistryV1};
 use sterling_kernel::proof::replay::replay_verify;
 use sterling_kernel::proof::trace_hash::{payload_hash, step_chain};
+
+fn op_reg() -> OperatorRegistryV1 {
+    kernel_operator_registry()
+}
 
 fn test_envelope() -> ByteTraceEnvelopeV1 {
     ByteTraceEnvelopeV1 {
@@ -37,6 +42,7 @@ fn build_four_step_trace() -> TraceBundleV1 {
     let layer_count = 1;
     let slot_count = 4;
     let arg_slot_count = SET_SLOT_ARG_COUNT;
+    let reg = op_reg();
 
     let initial = ByteStateV1::new(layer_count, slot_count);
     let frame_0 = ByteTraceFrameV1 {
@@ -51,7 +57,7 @@ fn build_four_step_trace() -> TraceBundleV1 {
 
     // Step 1: set slot 0 to Code32::new(1,1,1)
     let args1 = set_slot_args(0, 0, Code32::new(1, 1, 1));
-    let (s1, _) = apply(&state, OP_SET_SLOT, &args1).unwrap();
+    let (s1, _) = apply(&state, OP_SET_SLOT, &args1, &reg).unwrap();
     frames.push(ByteTraceFrameV1 {
         op_code: OP_SET_SLOT.to_le_bytes(),
         op_args: args1,
@@ -62,7 +68,7 @@ fn build_four_step_trace() -> TraceBundleV1 {
 
     // Step 2: set slot 1 to Code32::new(1,1,2)
     let args2 = set_slot_args(0, 1, Code32::new(1, 1, 2));
-    let (s2, _) = apply(&state, OP_SET_SLOT, &args2).unwrap();
+    let (s2, _) = apply(&state, OP_SET_SLOT, &args2, &reg).unwrap();
     frames.push(ByteTraceFrameV1 {
         op_code: OP_SET_SLOT.to_le_bytes(),
         op_args: args2,
@@ -73,7 +79,7 @@ fn build_four_step_trace() -> TraceBundleV1 {
 
     // Step 3: set slot 2 to Code32::new(1,1,3)
     let args3 = set_slot_args(0, 2, Code32::new(1, 1, 3));
-    let (s3, _) = apply(&state, OP_SET_SLOT, &args3).unwrap();
+    let (s3, _) = apply(&state, OP_SET_SLOT, &args3, &reg).unwrap();
     frames.push(ByteTraceFrameV1 {
         op_code: OP_SET_SLOT.to_le_bytes(),
         op_args: args3,
@@ -108,7 +114,7 @@ fn build_four_step_trace() -> TraceBundleV1 {
 #[test]
 fn four_step_trace_replays_clean() {
     let bundle = build_four_step_trace();
-    let verdict = replay_verify(&bundle).unwrap();
+    let verdict = replay_verify(&bundle, &op_reg()).unwrap();
     assert_eq!(verdict, ReplayVerdict::Match);
 }
 
@@ -117,7 +123,7 @@ fn mutation_at_frame_1_localized() {
     let mut bundle = build_four_step_trace();
     // Corrupt frame 1's identity: flip first byte.
     bundle.trace.frames[1].result_identity[0] ^= 0xFF;
-    let verdict = replay_verify(&bundle).unwrap();
+    let verdict = replay_verify(&bundle, &op_reg()).unwrap();
     match verdict {
         ReplayVerdict::Divergence { frame_index, .. } => assert_eq!(frame_index, 1),
         _ => panic!("expected divergence at frame 1"),
@@ -129,7 +135,7 @@ fn mutation_at_frame_2_localized() {
     let mut bundle = build_four_step_trace();
     // Corrupt frame 2's identity.
     bundle.trace.frames[2].result_identity[0] ^= 0xFF;
-    let verdict = replay_verify(&bundle).unwrap();
+    let verdict = replay_verify(&bundle, &op_reg()).unwrap();
     match verdict {
         ReplayVerdict::Divergence { frame_index, .. } => assert_eq!(frame_index, 2),
         _ => panic!("expected divergence at frame 2"),
@@ -141,7 +147,7 @@ fn mutation_at_frame_3_localized() {
     let mut bundle = build_four_step_trace();
     // Corrupt frame 3's status byte.
     bundle.trace.frames[3].result_status[0] ^= 0xFF;
-    let verdict = replay_verify(&bundle).unwrap();
+    let verdict = replay_verify(&bundle, &op_reg()).unwrap();
     match verdict {
         ReplayVerdict::Divergence { frame_index, .. } => assert_eq!(frame_index, 3),
         _ => panic!("expected divergence at frame 3"),
@@ -159,7 +165,7 @@ fn write_read_replay_round_trip() {
         compilation_manifest: vec![],
         input_payload: vec![],
     };
-    let verdict = replay_verify(&round_trip_bundle).unwrap();
+    let verdict = replay_verify(&round_trip_bundle, &op_reg()).unwrap();
     assert_eq!(verdict, ReplayVerdict::Match);
 }
 

@@ -15,6 +15,7 @@ use sterling_harness::worlds::slot_lattice_regimes::{
 };
 use sterling_harness::worlds::slot_lattice_search::{GoalProfile, SlotLatticeSearch};
 use sterling_kernel::carrier::bytestate::ByteStateV1;
+use sterling_kernel::operators::operator_registry::kernel_operator_registry;
 use sterling_search::contract::SearchWorldV1;
 use sterling_search::graph::{CandidateOutcomeV1, TerminationReasonV1};
 use sterling_search::policy::DedupKeyV1;
@@ -37,13 +38,13 @@ fn bindings_for(regime: &Regime) -> MetadataBindings {
 
 /// Run search directly for a regime (low-level — no bundle).
 fn run_regime_search(regime: &Regime) -> sterling_search::search::SearchResult {
-    let registry = regime.world.registry().unwrap();
+    let operator_registry = kernel_operator_registry();
     let root = ByteStateV1::new(1, 10); // MAX_SLOTS = 10
     let bindings = bindings_for(regime);
     search(
         root,
         &regime.world,
-        &registry,
+        &operator_registry,
         &regime.policy,
         &UniformScorer,
         &bindings,
@@ -240,13 +241,13 @@ fn frontier_pressure_is_reachable() {
 #[test]
 fn determinism_n10() {
     let regime = regime_duplicates(); // Use duplicates regime for broad exploration.
-    let registry = regime.world.registry().unwrap();
+    let operator_registry = kernel_operator_registry();
     let bindings = bindings_for(&regime);
 
     let first = search(
         ByteStateV1::new(1, 10),
         &regime.world,
-        &registry,
+        &operator_registry,
         &regime.policy,
         &UniformScorer,
         &bindings,
@@ -258,7 +259,7 @@ fn determinism_n10() {
         let other = search(
             ByteStateV1::new(1, 10),
             &regime.world,
-            &registry,
+            &operator_registry,
             &regime.policy,
             &UniformScorer,
             &bindings,
@@ -385,11 +386,11 @@ fn schema_descriptor_is_real_and_stable() {
 #[test]
 fn enumeration_is_deterministic() {
     let regime = regime_exhaustive_dead_end();
-    let registry = regime.world.registry().unwrap();
+    let operator_registry = kernel_operator_registry();
     let state = ByteStateV1::new(1, 10);
 
-    let c1 = regime.world.enumerate_candidates(&state, &registry);
-    let c2 = regime.world.enumerate_candidates(&state, &registry);
+    let c1 = regime.world.enumerate_candidates(&state, &operator_registry);
+    let c2 = regime.world.enumerate_candidates(&state, &operator_registry);
 
     assert_eq!(c1, c2, "enumerate_candidates must be deterministic");
     assert!(!c1.is_empty(), "initial state should have candidates");

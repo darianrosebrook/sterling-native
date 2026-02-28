@@ -17,6 +17,7 @@ use lock_tests::m2_canonical_trace::canonical_test_trace;
 use sterling_kernel::carrier::bytetrace::{ReplayVerdict, TraceBundleV1};
 use sterling_kernel::carrier::trace_reader::bytes_to_trace;
 use sterling_kernel::carrier::trace_writer::trace_to_bytes;
+use sterling_kernel::operators::operator_registry::kernel_operator_registry;
 use sterling_kernel::proof::replay::replay_verify;
 use sterling_kernel::proof::trace_hash::{payload_hash, step_chain};
 
@@ -46,7 +47,7 @@ fn main() {
         compilation_manifest: vec![],
         input_payload: vec![],
     };
-    let verdict = replay_verify(&bundle).unwrap();
+    let verdict = replay_verify(&bundle, &kernel_operator_registry()).unwrap();
     let verdict_str = match verdict {
         ReplayVerdict::Match => "Match",
         _ => "FAIL",

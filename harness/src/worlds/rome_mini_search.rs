@@ -11,6 +11,7 @@ use sterling_kernel::carrier::bytestate::ByteStateV1;
 use sterling_kernel::carrier::code32::Code32;
 use sterling_kernel::carrier::registry::RegistryV1;
 use sterling_kernel::operators::apply::{set_slot_args, OP_SET_SLOT};
+use sterling_kernel::operators::operator_registry::OperatorRegistryV1;
 
 use sterling_search::contract::SearchWorldV1;
 use sterling_search::node::CandidateActionV1;
@@ -101,12 +102,16 @@ impl SearchWorldV1 for RomeMiniSearch {
     fn enumerate_candidates(
         &self,
         _state: &ByteStateV1,
-        registry: &RegistryV1,
+        operator_registry: &OperatorRegistryV1,
     ) -> Vec<CandidateActionV1> {
+        // INV-SC-02: all candidate op_codes must be in the operator registry.
+        if !operator_registry.contains(&OP_SET_SLOT) {
+            return Vec::new();
+        }
+
         // Known concept values that can be assigned to slots.
-        // These are the identity codes (not operator codes) from the registry.
-        // Sorted by le bytes for deterministic enumeration.
-        // Filtered to those present in the runner-supplied registry (INV-SC-08).
+        // These are identity codes (not operator codes) — hardcoded, not
+        // registry-dependent. Sorted by LE bytes for deterministic enumeration.
         let known_values: [Code32; 4] = [
             Code32::new(1, 0, 0),
             Code32::new(1, 0, 1),
@@ -114,16 +119,9 @@ impl SearchWorldV1 for RomeMiniSearch {
             Code32::new(1, 1, 0),
         ];
 
-        let values: Vec<Code32> = known_values
-            .iter()
-            .filter(|c| registry.contains(c))
-            .take(MAX_VALUES_PER_SLOT)
-            .copied()
-            .collect();
-
         let mut candidates = Vec::new();
         for slot in 0..SLOT_COUNT {
-            for &value in &values {
+            for &value in known_values.iter().take(MAX_VALUES_PER_SLOT) {
                 #[allow(clippy::cast_possible_truncation)]
                 let op_args = set_slot_args(0, slot as u32, value);
                 candidates.push(CandidateActionV1::new(OP_SET_SLOT, op_args));
@@ -147,12 +145,17 @@ impl SearchWorldV1 for RomeMiniSearch {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sterling_kernel::operators::operator_registry::kernel_operator_registry;
+
+    fn op_reg() -> OperatorRegistryV1 {
+        kernel_operator_registry()
+    }
 
     #[test]
     fn enumerate_candidates_uses_registry() {
-        let registry = RomeMiniSearch.registry().unwrap();
+        let operator_registry = op_reg();
         let state = ByteStateV1::new(1, 2);
-        let candidates = RomeMiniSearch.enumerate_candidates(&state, &registry);
+        let candidates = RomeMiniSearch.enumerate_candidates(&state, &operator_registry);
         // 2 slots × 4 values = 8 candidates
         assert_eq!(candidates.len(), 8);
         // All use SET_SLOT
@@ -170,11 +173,11 @@ mod tests {
     #[test]
     fn goal_state_detected() {
         let state = ByteStateV1::new(1, 2);
-        // Apply SET_SLOT(0, 0, GOAL_VALUE) to reach goal
         let (goal_state, _) = sterling_kernel::operators::apply::apply(
             &state,
             OP_SET_SLOT,
             &set_slot_args(0, 0, GOAL_VALUE),
+            &op_reg(),
         )
         .unwrap();
         assert!(RomeMiniSearch.is_goal(&goal_state));
@@ -182,10 +185,10 @@ mod tests {
 
     #[test]
     fn enumeration_is_deterministic() {
-        let registry = RomeMiniSearch.registry().unwrap();
+        let operator_registry = op_reg();
         let state = ByteStateV1::new(1, 2);
-        let c1 = RomeMiniSearch.enumerate_candidates(&state, &registry);
-        let c2 = RomeMiniSearch.enumerate_candidates(&state, &registry);
+        let c1 = RomeMiniSearch.enumerate_candidates(&state, &operator_registry);
+        let c2 = RomeMiniSearch.enumerate_candidates(&state, &operator_registry);
         assert_eq!(c1, c2);
     }
 }

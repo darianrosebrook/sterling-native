@@ -3,12 +3,11 @@
 //! score provenance, frontier pruning, goal path reconstruction, and metadata binding.
 
 use sterling_harness::bundle::verify_bundle;
-use sterling_harness::contract::WorldHarnessV1;
 use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_kernel::carrier::bytestate::ByteStateV1;
 use sterling_kernel::carrier::code32::Code32;
-use sterling_kernel::carrier::registry::RegistryV1;
+use sterling_kernel::operators::operator_registry::{kernel_operator_registry, OperatorRegistryV1};
 use sterling_kernel::operators::apply::{set_slot_args, OP_SET_SLOT};
 use sterling_search::contract::SearchWorldV1;
 use sterling_search::node::CandidateActionV1;
@@ -27,8 +26,8 @@ fn default_bindings() -> MetadataBindings {
     }
 }
 
-fn default_registry() -> RegistryV1 {
-    RomeMiniSearch.registry().unwrap()
+fn default_operator_registry() -> OperatorRegistryV1 {
+    kernel_operator_registry()
 }
 
 fn root_state() -> ByteStateV1 {
@@ -43,13 +42,13 @@ fn root_state() -> ByteStateV1 {
 fn search_determinism_inproc_n10() {
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let bindings = default_bindings();
 
     let first = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &scorer,
         &bindings,
@@ -61,7 +60,7 @@ fn search_determinism_inproc_n10() {
         let other = search(
             root_state(),
             &RomeMiniSearch,
-            &registry,
+            &operator_registry,
             &policy,
             &scorer,
             &bindings,
@@ -125,13 +124,13 @@ fn graph_metadata_has_snapshot_bindings() {
 fn graph_completeness_every_pop_recorded() {
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let bindings = default_bindings();
 
     let result = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &scorer,
         &bindings,
@@ -182,7 +181,7 @@ impl SearchWorldV1 for CycleWorld {
     fn enumerate_candidates(
         &self,
         _state: &ByteStateV1,
-        _registry: &RegistryV1,
+        _operator_registry: &OperatorRegistryV1,
     ) -> Vec<CandidateActionV1> {
         // Always propose SET_SLOT(0, 0, Code32::new(1,0,0)) — same value as initial padding
         // This creates a state that's already visited after the first expansion.
@@ -197,8 +196,7 @@ impl SearchWorldV1 for CycleWorld {
 
 #[test]
 fn loop_detection_terminates_without_infinite_expansion() {
-    let registry =
-        RegistryV1::new("epoch-0".into(), vec![(OP_SET_SLOT, "op:set_slot".into())]).unwrap();
+    let operator_registry = kernel_operator_registry();
     let policy = SearchPolicyV1 {
         max_expansions: 100,
         ..SearchPolicyV1::default()
@@ -216,7 +214,7 @@ fn loop_detection_terminates_without_infinite_expansion() {
     let result = search(
         root_state(),
         &CycleWorld,
-        &registry,
+        &operator_registry,
         &policy,
         &scorer,
         &bindings,
@@ -253,7 +251,7 @@ impl SearchWorldV1 for NoMovesWorld {
     fn enumerate_candidates(
         &self,
         _state: &ByteStateV1,
-        _registry: &RegistryV1,
+        _operator_registry: &OperatorRegistryV1,
     ) -> Vec<CandidateActionV1> {
         vec![] // No moves possible
     }
@@ -265,8 +263,7 @@ impl SearchWorldV1 for NoMovesWorld {
 
 #[test]
 fn exhaustive_dead_end_tagged_correctly() {
-    let registry =
-        RegistryV1::new("epoch-0".into(), vec![(OP_SET_SLOT, "op:set_slot".into())]).unwrap();
+    let operator_registry = kernel_operator_registry();
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
     let bindings = MetadataBindings {
@@ -281,7 +278,7 @@ fn exhaustive_dead_end_tagged_correctly() {
     let result = search(
         root_state(),
         &NoMovesWorld,
-        &registry,
+        &operator_registry,
         &policy,
         &scorer,
         &bindings,
@@ -307,8 +304,7 @@ fn expansion_budget_overflow() {
     // The first expansion finds the goal among its candidates, so we
     // need a world where the goal is not reachable in 1 expansion.
     // Use CycleWorld which never reaches a goal.
-    let registry =
-        RegistryV1::new("epoch-0".into(), vec![(OP_SET_SLOT, "op:set_slot".into())]).unwrap();
+    let operator_registry = kernel_operator_registry();
     let policy = SearchPolicyV1 {
         max_expansions: 1,
         ..SearchPolicyV1::default()
@@ -326,7 +322,7 @@ fn expansion_budget_overflow() {
     let result = search(
         root_state(),
         &CycleWorld,
-        &registry,
+        &operator_registry,
         &policy,
         &scorer,
         &bindings,
@@ -358,7 +354,7 @@ impl SearchWorldV1 for IllegalCandidateWorld {
     fn enumerate_candidates(
         &self,
         _state: &ByteStateV1,
-        _registry: &RegistryV1,
+        _operator_registry: &OperatorRegistryV1,
     ) -> Vec<CandidateActionV1> {
         let illegal_code = Code32::new(99, 99, 99);
         let op_args = vec![0u8; 12];
@@ -372,8 +368,7 @@ impl SearchWorldV1 for IllegalCandidateWorld {
 
 #[test]
 fn illegal_candidate_triggers_world_contract_violation() {
-    let registry =
-        RegistryV1::new("epoch-0".into(), vec![(OP_SET_SLOT, "op:set_slot".into())]).unwrap();
+    let operator_registry = kernel_operator_registry();
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
     let bindings = MetadataBindings {
@@ -389,7 +384,7 @@ fn illegal_candidate_triggers_world_contract_violation() {
     let result = search(
         root_state(),
         &IllegalCandidateWorld,
-        &registry,
+        &operator_registry,
         &policy,
         &scorer,
         &bindings,
@@ -420,13 +415,13 @@ fn illegal_candidate_triggers_world_contract_violation() {
 fn score_provenance_recorded_for_all_candidates() {
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let bindings = default_bindings();
 
     let result = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &scorer,
         &bindings,
@@ -462,13 +457,13 @@ fn frontier_pruning_records_pruned_ids() {
         ..SearchPolicyV1::default()
     };
     let scorer = UniformScorer;
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let bindings = default_bindings();
 
     let result = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &scorer,
         &bindings,
@@ -505,13 +500,13 @@ fn frontier_pruning_records_pruned_ids() {
 fn goal_path_reconstruction() {
     let policy = SearchPolicyV1::default();
     let scorer = UniformScorer;
-    let registry = default_registry();
+    let operator_registry = default_operator_registry();
     let bindings = default_bindings();
 
     let result = search(
         root_state(),
         &RomeMiniSearch,
-        &registry,
+        &operator_registry,
         &policy,
         &scorer,
         &bindings,

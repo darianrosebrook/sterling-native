@@ -1,7 +1,7 @@
 //! Search world contract trait.
 
 use sterling_kernel::carrier::bytestate::ByteStateV1;
-use sterling_kernel::carrier::registry::RegistryV1;
+use sterling_kernel::operators::operator_registry::OperatorRegistryV1;
 
 use crate::node::CandidateActionV1;
 
@@ -12,12 +12,12 @@ use crate::node::CandidateActionV1;
 ///
 /// # Contract
 ///
-/// - `enumerate_candidates` must use the registry snapshot provided by the
-///   runner; it must NOT call `self.registry()` internally (INV-SC-08).
+/// - `enumerate_candidates` must use the operator registry snapshot provided
+///   by the runner; it must NOT call `self.registry()` internally (INV-SC-08).
 /// - All candidates must have `op_code` values that exist in the provided
-///   registry (INV-SC-02).
-/// - Enumeration must be deterministic: same `(state, registry)` → same
-///   candidates in the same order.
+///   operator registry (INV-SC-02).
+/// - Enumeration must be deterministic: same `(state, operator_registry)` →
+///   same candidates in the same order.
 pub trait SearchWorldV1 {
     /// Unique world identifier (must match `WorldHarnessV1::world_id()`).
     fn world_id(&self) -> &str;
@@ -25,11 +25,11 @@ pub trait SearchWorldV1 {
     /// Enumerate all legal candidate actions from the given state.
     ///
     /// The returned candidates must be deterministically ordered and use only
-    /// operator codes present in the provided `registry`.
+    /// operator codes present in the provided `operator_registry`.
     fn enumerate_candidates(
         &self,
         state: &ByteStateV1,
-        registry: &RegistryV1,
+        operator_registry: &OperatorRegistryV1,
     ) -> Vec<CandidateActionV1>;
 
     /// Test whether the given state satisfies the world's goal.
