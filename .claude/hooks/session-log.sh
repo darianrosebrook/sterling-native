@@ -254,12 +254,18 @@ for line in sys.stdin:
             display = content
             if name in ("Read", "Write", "Edit") and len(content) > 2000:
                 display = content[:2000] + "\n...(file content truncated)"
-            current["timeline"].append({
-                "kind": "tool_output",
-                "name": name,
-                "content": display,
-                "is_error": is_error,
-            })
+            # Graft result onto the original tool_call entry (not a separate timeline item)
+            if tool_info:
+                tool_info["output"] = display
+                tool_info["is_error"] = is_error
+            else:
+                # Orphan result (no matching call) — append standalone
+                current["timeline"].append({
+                    "kind": "tool_output",
+                    "name": name,
+                    "content": display,
+                    "is_error": is_error,
+                })
 
 if current["user"] or current["timeline"]:
     turns.append(current)
@@ -316,7 +322,21 @@ for i, turn in enumerate(turns):
                 md_lines.append(f"`{name}`")
             md_lines.append("")
 
+            # If tool result was grafted onto this call, render it inline
+            if "output" in event:
+                output = event["output"]
+                is_error = event.get("is_error", False)
+                label = "error" if is_error else "output"
+                md_lines.extend([
+                    f"**{name}** ({label}):",
+                    "```",
+                    output,
+                    "```",
+                    "",
+                ])
+
         elif kind == "tool_output":
+            # Orphan result (no matching call found) — render standalone
             content = event.get("content", "")
             name = event.get("name", "")
             is_error = event.get("is_error", False)
