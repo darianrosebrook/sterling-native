@@ -23,13 +23,26 @@ scope:
     - Cargo.toml
     - .github/workflows/
     - tools/
+    - kernel/src/operators/
+    - kernel/src/proof/replay.rs
+    - kernel/src/carrier/compile.rs
+    - kernel/src/lib.rs
+    - docs/
   out:
-    - kernel/
+    - kernel/src/carrier/bytestate.rs
+    - kernel/src/carrier/bytetrace.rs
+    - kernel/src/carrier/code32.rs
+    - kernel/src/carrier/registry.rs
+    - kernel/src/carrier/trace_writer.rs
+    - kernel/src/carrier/trace_reader.rs
+    - kernel/src/proof/hash.rs
+    - kernel/src/proof/canon.rs
+    - kernel/src/proof/trace_hash.rs
     - ml/
     - reference/v1_impl/
 change_budget:
-  max_files: 20
-  max_loc: 1500
+  max_files: 30
+  max_loc: 2500
 threats:
   - "Search crate accidentally depending on harness (breaks one-way dependency invariant)"
   - "HashMap iteration order in frontier or visited set breaking determinism"
