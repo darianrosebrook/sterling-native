@@ -1,0 +1,203 @@
+id: B2-001
+type: feature
+title: "B2.0 Truth-Regime World: Transactional KV Store (sequence-based, SET_SLOT-only)"
+status: in_progress
+risk_tier: 3
+mode: development
+created_at: '2026-02-28T06:00:00.000Z'
+updated_at: '2026-02-28T06:00:00.000Z'
+blast_radius:
+  modules:
+    - harness/src/worlds
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 5m
+
+purpose: >
+  Introduce a truth-regime world that models transactional semantics using a 2-layer
+  ByteStateV1 (layer 0 = committed, layer 1 = staged) without kernel changes. All
+  mutations use OP_SET_SLOT. Write-once per slot: each (layer, slot) pair transitions
+  from Hole→Provisional exactly once. Proof obligations are enforced at the world +
+  lock-test layer, not the kernel effect contract.
+
+non_goals:
+  - "No new kernel operators (no COMMIT/ROLLBACK opcodes in apply.rs dispatch table)."
+  - "No new EffectKind variants or validate_effect_kind changes."
+  - "No new artifact families; uses existing bundle artifacts (SearchGraph, SearchTape, etc.)."
+  - "No multi-write per slot (requires B2.1 OP_CLEAR_SLOT to reset status from Provisional→Hole)."
+  - "No 'staged layer cleared after commit/rollback' — residue is allowed; semantics are marker-driven."
+
+design:
+  kernel_constraint: >
+    apply_set_slot() always sets SlotStatus::Provisional. validate_effect_kind(WritesOneSlotFromArgs)
+    requires exactly 1 identity diff and 1 status diff. A slot that is already Provisional cannot be
+    rewritten (0 status diffs → EffectContractViolation). This makes all SET_SLOT usage write-once per
+    (layer, slot) pair: Hole→Provisional only.
+
+  state_model:
+    layers: 2
+    layer_0: "Committed store. A slot with identity != kv:empty is a committed key-value pair."
+    layer_1: "Staging area + control. Key slots hold staged values; txn_marker slot holds transaction outcome."
+    slot_layout: >
+      slot_count = N+1 where N = key slots. Slot N is the txn_marker (last slot on each layer).
+      Layer 1 txn_marker receives kv:commit or kv:rollback. Layer 0 txn_marker is unused (stays Hole).
+    initial_state: "All slots Hole/PADDING after compile(). First SET_SLOT to any (layer, slot) transitions Hole→Provisional."
+    status_semantics: >
+      SlotStatus is provenance only (not regime semantics). Hole = untouched, Provisional = written.
+      Transaction semantics are encoded in identity values and txn_marker, not status.
+
+  concepts:
+    kv_empty: "Registered Code32 value (e.g., Code32::new(2, 0, 0)). Initial identity for key slots. Distinguished from PADDING to avoid sentinel confusion."
+    kv_commit: "Registered Code32 value (e.g., Code32::new(2, 0, 1)). Written to txn_marker to signal commit."
+    kv_rollback: "Registered Code32 value (e.g., Code32::new(2, 0, 2)). Written to txn_marker to signal rollback."
+    kv_values: "Small fixed set of storable values (e.g., kv:v0, kv:v1, kv:v2)."
+
+  actions:
+    stage:
+      description: "SET_SLOT(layer=1, slot=k, value=v) where v is a kv_value and k is a key slot."
+      precondition: "Layer 1 slot k is Hole (write-once)."
+    commit_mark:
+      description: "SET_SLOT(layer=1, slot=txn_marker, value=kv:commit)."
+      precondition: "Layer 1 txn_marker is Hole (write-once). At least one key slot staged."
+    rollback_mark:
+      description: "SET_SLOT(layer=1, slot=txn_marker, value=kv:rollback)."
+      precondition: "Layer 1 txn_marker is Hole (write-once)."
+    commit_write:
+      description: "SET_SLOT(layer=0, slot=k, value=v) where v == staged value at layer 1 slot k."
+      precondition: "Layer 0 slot k is Hole (write-once). txn_marker == kv:commit."
+    note: >
+      COMMIT is a sequence: commit_mark, then per-slot commit_writes. ROLLBACK is a single
+      rollback_mark step (no slot writes needed — staged residue is ignored). Commit_writes
+      are only legal after commit_mark and must carry the exact staged value.
+
+  candidate_ordering: >
+    Deterministic enumeration: stage candidates (slot ascending, value ascending),
+    then commit_mark (if staging non-empty and marker unset),
+    then commit_writes (slot ascending, only if marker == kv:commit),
+    then rollback_mark (if staging non-empty and marker unset).
+
+  goal_definition: >
+    is_goal() checks layer 0 (committed store) only. A goal state has specific committed
+    values in target slots. Staged layer and txn_marker are irrelevant to goal evaluation.
+
+scope:
+  in:
+    - harness/src/worlds/transactional_kv_store.rs
+    - harness/src/worlds/mod.rs
+    - tests/lock/src/bin/
+    - tests/lock/tests/
+    - tests/lock/fixtures/
+    - tests/lock/Cargo.toml
+    - .caws/specs/
+  out:
+    - kernel/
+    - search/src/
+    - harness/src/bundle.rs
+    - harness/src/bundle_dir.rs
+    - harness/src/runner.rs
+    - harness/src/policy.rs
+    - ml/
+    - reference/
+
+change_budget:
+  max_files: 20
+  max_loc: 800
+
+invariants:
+  - "Kernel is untouched — no changes to apply.rs, operator_registry.rs, or any kernel source."
+  - "All SET_SLOT operations are write-once per (layer, slot) pair."
+  - "Committed writes require txn_marker == kv:commit in the trace before the write."
+  - "Rollback leaves committed layer byte-identical to pre-transaction state."
+  - "Staged residue after commit/rollback is explicitly documented as allowed."
+  - "Goal evaluation depends only on committed layer (layer 0)."
+  - "Candidate enumeration is deterministic."
+
+acceptance:
+  - given: "TransactionalKvStore compiled from canonical payload + schema + registry"
+    when: "Linear program stages slot 0 with kv:v0, marks commit, writes committed slot 0"
+    then:
+      - "Layer 0 slot 0 identity == kv:v0"
+      - "Layer 1 txn_marker identity == kv:commit"
+      - "All steps in ByteTrace, replay_verify succeeds"
+  - given: "TransactionalKvStore compiled from canonical payload + schema + registry"
+    when: "Linear program stages slot 0 with kv:v0, marks rollback (no committed writes)"
+    then:
+      - "Layer 0 slot 0 identity unchanged (PADDING or kv:empty depending on init)"
+      - "Layer 1 txn_marker identity == kv:rollback"
+      - "All steps in ByteTrace, replay_verify succeeds"
+  - given: "TransactionalKvStore used as SearchWorldV1"
+    when: "Search explores from initial state toward goal (committed target values)"
+    then:
+      - "Candidates enforce: no commit_write before commit_mark, no commit_mark without staged slots"
+      - "Search produces deterministic SearchGraph/SearchTape; bundle verifies"
+  - given: "Golden fixtures for linear commit/rollback and search execution"
+    when: "Regenerated from code"
+    then: "Byte-for-byte match with committed goldens"
+
+acceptance_criteria:
+  - id: B2-001-WORLD
+    description: "TransactionalKvStore world impl (WorldHarnessV1 + SearchWorldV1 traits)"
+    status: pending
+  - id: B2-001-LINEAR-COMMIT
+    description: "Linear lock tests proving commit path: stage→commit_mark→commit_write→verify"
+    status: pending
+  - id: B2-001-LINEAR-ROLLBACK
+    description: "Linear lock tests proving rollback path: stage→rollback_mark→verify (no committed writes)"
+    status: pending
+  - id: B2-001-SEARCH
+    description: "Search lock tests proving candidate legality gates and deterministic bundle"
+    status: pending
+
+milestones:
+  - id: M1
+    title: "World implementation — TransactionalKvStore"
+    status: planned
+    deliverables:
+      - "harness/src/worlds/transactional_kv_store.rs (new)"
+      - "harness/src/worlds/mod.rs (add pub mod)"
+    notes:
+      - "2-layer, N+1 slots (N key slots + 1 txn_marker), arg_slot_count=3"
+      - "Concept registry: kv:empty, kv:commit, kv:rollback, kv:v0..kv:v2, OP_SET_SLOT"
+      - "program() returns commit and rollback linear programs"
+      - "enumerate_candidates() enforces write-once + marker-gated commit_writes"
+      - "is_goal() checks committed layer only"
+
+  - id: M2
+    title: "Linear truth-regime lock tests + golden fixtures"
+    status: planned
+    deliverables:
+      - "tests/lock/src/bin/b2_kv_linear_golden_generator.rs (new)"
+      - "tests/lock/fixtures/b2_kv_linear_commit/ (new)"
+      - "tests/lock/fixtures/b2_kv_linear_rollback/ (new)"
+      - "tests/lock/tests/b2_kv_linear_truth_regime.rs (new)"
+    notes:
+      - "Commit path: stage→mark→write→verify (committed layer has values, trace replays)"
+      - "Rollback path: stage→mark→verify (committed layer unchanged, trace replays)"
+      - "Golden fixtures pin: pre/post state bytes, step records, expected hashes"
+      - "Cross-check: txn_marker value in trace matches expected path"
+
+  - id: M3
+    title: "Search truth-regime lock tests + golden bundle fixture"
+    status: planned
+    deliverables:
+      - "tests/lock/src/bin/b2_kv_search_golden_generator.rs (new)"
+      - "tests/lock/fixtures/b2_kv_search/ (new)"
+      - "tests/lock/tests/b2_kv_search_truth_regime.rs (new)"
+    notes:
+      - "Search from initial state toward committed target values"
+      - "Candidate legality: no commit_write before commit_mark, no double-write"
+      - "Bundle verifies (all artifacts round-trip)"
+      - "Deterministic SearchGraph/SearchTape golden fixture"
+
+evidence:
+  commits: []
+  total_tests: 0
+  lock_tests: []
+  fixtures: []
+
+non_functional:
+  a11y: []
+  perf:
+    note: "Small world (3 key slots + marker); sub-second test execution"
+  security: []
+contracts: []
