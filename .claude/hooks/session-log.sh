@@ -2,8 +2,8 @@
 # Session Logger for Claude Code → ChatGPT Context Transfer
 #
 # On Stop/PreCompact: reads the full transcript from ~/.claude/ and generates:
-#   session.md         — lightweight index (header + turn list + exploration + audit)
-#   turn-001.md        — per-turn markdown (user message + reasoning + key tool output)
+#   session.txt        — lightweight index (header + turn list + exploration + audit)
+#   turn-001.txt       — per-turn narrative (user message + reasoning + key tool output)
 #   turn-001.json      — per-turn structured data (reasoning + tools + edits + results)
 #
 # Output: ./tmp/<session-id>/
@@ -25,7 +25,7 @@ TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 LOG_DIR="${CWD}/tmp/${SESSION_ID}"
 mkdir -p "$LOG_DIR"
 
-SESSION_MD="$LOG_DIR/session.md"
+SESSION_MD="$LOG_DIR/session.txt"
 META_FILE="$LOG_DIR/.meta.json"
 
 # ============================================================
@@ -350,7 +350,7 @@ for i, turn in enumerate(turns):
             ])
 
     # Write turn markdown
-    with open(os.path.join(log_dir, f"turn-{padded}.md"), "w") as f:
+    with open(os.path.join(log_dir, f"turn-{padded}.txt"), "w") as f:
         f.write("\n".join(md_lines))
 
     # --- Build per-turn JSON: chronological timeline ---
@@ -395,7 +395,7 @@ for i, turn in enumerate(turns):
     })
 
 # ---- Write session.md index ----
-with open(os.path.join(log_dir, "session.md"), "w") as f:
+with open(os.path.join(log_dir, "session.txt"), "w") as f:
     f.write(f"# Session Log: {os.path.basename(cwd)}\n\n")
     f.write("| Field | Value |\n")
     f.write("|-------|-------|\n")
