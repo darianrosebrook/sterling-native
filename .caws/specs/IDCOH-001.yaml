@@ -1,11 +1,11 @@
 id: IDCOH-001
 type: feature
 title: 'Root State Digest Coherence in Search Evidence Corridor'
-status: in_progress
+status: closed
 risk_tier: 2
 mode: development
 created_at: '2026-02-28T23:00:00.000Z'
-updated_at: '2026-02-28T23:00:00.000Z'
+updated_at: '2026-02-28T23:59:00.000Z'
 blast_radius:
   modules:
     - search/search
@@ -77,27 +77,34 @@ invariants:
 acceptance:
   - id: IDCOH-001-POS
     description: "Positive: default bundle root digests match compilation manifest (both profiles)"
-    status: pending
+    status: met
+    evidence: "root_digests_match_compilation_manifest — commit 15ccd30"
   - id: IDCOH-001-IDENTITY-TAMPER
     description: "Negative: tampered manifest identity_digest triggers CompilationManifestIdentityMismatch"
-    status: pending
+    status: met
+    evidence: "tampered_compilation_manifest_identity_digest_rejected — commit 15ccd30"
   - id: IDCOH-001-EVIDENCE-TAMPER
     description: "Negative: tampered manifest evidence_digest triggers CompilationManifestEvidenceMismatch"
-    status: pending
+    status: met
+    evidence: "tampered_compilation_manifest_evidence_digest_rejected — commit 15ccd30"
   - id: IDCOH-001-GRAPH-MISSING-IDENTITY
     description: "Negative: missing graph root_identity_digest triggers CompilationManifestGraphMissingField (Cert)"
-    status: pending
+    status: met
+    evidence: "missing_graph_root_identity_digest_rejected — commit 15ccd30"
   - id: IDCOH-001-GRAPH-MISSING-EVIDENCE
     description: "Negative: missing graph root_evidence_digest triggers CompilationManifestGraphMissingField (Cert)"
-    status: pending
+    status: met
+    evidence: "missing_graph_root_evidence_digest_rejected — commit 15ccd30"
   - id: IDCOH-001-TAPE-HEADER
     description: "Positive: tape header carries root_identity_digest and root_evidence_digest matching graph metadata"
-    status: pending
+    status: met
+    evidence: "tape_header_carries_root_digests — commit 15ccd30"
 
 milestones:
   - id: M1
     title: "Thread root digest fields through production code"
-    status: in_progress
+    status: complete
+    evidence: "commit 4091c48 — MetadataBindings, SearchGraphMetadata, tape header, runner.rs recompute, golden regen"
     deliverables:
       - "search/src/search.rs (MetadataBindings fields, build_tape_header)"
       - "search/src/graph.rs (SearchGraphMetadata fields, metadata_to_json)"
@@ -106,16 +113,25 @@ milestones:
       - "All MetadataBindings construction sites updated"
   - id: M2
     title: "Verification checks, golden regen, lock tests"
-    status: pending
+    status: complete
+    evidence: "commit 15ccd30 — Step 12b checks 4-5, Step 18 tape header, 6 lock tests, 554 total tests"
     deliverables:
       - "harness/src/bundle.rs (Step 12b checks 4-5, Step 18 tape header checks)"
       - "tests/lock/fixtures/b1a_rome_mini_search/ (full regen)"
       - "tests/lock/tests/ (6 lock tests)"
 
 evidence:
-  commits: []
-  total_tests: 548
-  lock_tests: []
+  commits:
+    - "4091c48 — feat(bind): thread root_identity_digest and root_evidence_digest [IDCOH-001] (M1)"
+    - "15ccd30 — feat(bind): root state digest coherence checks + lock tests [IDCOH-001] (M2)"
+  total_tests: 554
+  lock_tests:
+    - root_digests_match_compilation_manifest
+    - tampered_compilation_manifest_identity_digest_rejected
+    - tampered_compilation_manifest_evidence_digest_rejected
+    - missing_graph_root_identity_digest_rejected
+    - missing_graph_root_evidence_digest_rejected
+    - tape_header_carries_root_digests
 
 non_functional:
   a11y: []
