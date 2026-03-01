@@ -122,7 +122,7 @@ milestones:
 evidence:
   commits:
     - b38baf3  # feat(bind): thread fixture_digest through search evidence corridor
-    - pending  # hardening: Cert enforcement, schema_descriptor Step 16d, omission tests
+    - cf05533  # hardening: Cert enforcement, schema_descriptor Step 16d, omission tests
   total_tests: 539
   lock_tests:
     - tests/lock/tests/fixture_digest_binding.rs (11 tests)
