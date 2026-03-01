@@ -304,6 +304,12 @@ pub enum BundleVerifyError {
     /// `payload_hash` in compilation manifest does not match recomputed hash
     /// from `fixture.json.initial_payload_hex`.
     CompilationManifestPayloadMismatch { in_manifest: String, recomputed: String },
+    /// `registry_hash` in compilation manifest (stripped to raw hex) does not match
+    /// `registry_digest` in `search_graph.json` metadata.
+    CompilationManifestRegistryMismatch { in_manifest_hex: String, in_graph_hex: String },
+    /// A required field is missing from `search_graph.json` metadata during
+    /// compilation manifest coherence checking.
+    CompilationManifestGraphMissingField { field: &'static str },
     /// Canonical JSON error during verification.
     CanonError { detail: String },
     /// Cert profile requires `search_tape.stap` but it is absent.
@@ -786,6 +792,11 @@ fn verify_metadata_bindings(
 /// Check 2 — Payload coherence: recomputed
 /// `canonical_hash(CompilationPayload, canonical(fixture.initial_payload_hex))`
 /// must equal `compilation_manifest.json`'s `payload_hash`.
+///
+/// Check 3 — Registry digest coherence: `compilation_manifest.json`'s
+/// `registry_hash` (stripped of `sha256:` prefix) must equal graph metadata
+/// `registry_digest` (raw hex).
+#[allow(clippy::too_many_lines)]
 fn verify_compilation_manifest_coherence(
     bundle: &ArtifactBundleV1,
 ) -> Result<(), BundleVerifyError> {
@@ -899,6 +910,36 @@ fn verify_compilation_manifest_coherence(
         return Err(BundleVerifyError::CompilationManifestPayloadMismatch {
             in_manifest: manifest_payload_hash.to_string(),
             recomputed: recomputed.as_str().to_string(),
+        });
+    }
+
+    // --- Check 3: Registry digest coherence ---
+    let manifest_registry_hash = manifest
+        .get("registry_hash")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestMissingField {
+            field: "registry_hash",
+        })?;
+
+    // INV-REGCOH-02: registry_hash MUST be ContentHash-format (sha256:<hex>).
+    let manifest_registry_hex = manifest_registry_hash
+        .strip_prefix("sha256:")
+        .ok_or(BundleVerifyError::CompilationManifestMissingField {
+            field: "registry_hash",
+        })?;
+
+    let graph_registry_hex = graph
+        .get("metadata")
+        .and_then(|m| m.get("registry_digest"))
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestGraphMissingField {
+            field: "registry_digest",
+        })?;
+
+    if manifest_registry_hex != graph_registry_hex {
+        return Err(BundleVerifyError::CompilationManifestRegistryMismatch {
+            in_manifest_hex: manifest_registry_hex.to_string(),
+            in_graph_hex: graph_registry_hex.to_string(),
         });
     }
 

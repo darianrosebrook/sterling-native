@@ -5,10 +5,12 @@
 //! - Schema identity (`schema_id:schema_version:schema_hash`) matches graph
 //!   metadata `schema_descriptor`.
 //! - `payload_hash` matches recomputed hash from `fixture.json.initial_payload_hex`.
+//! - `registry_hash` (stripped to raw hex) matches graph metadata `registry_digest`.
 //! - Missing `compilation_manifest.json` is fail-closed (not silently skipped).
 
 use lock_tests::bundle_test_helpers::{
-    rebuild_without_artifact, resign_bundle_with_modified_compilation_manifest,
+    rebuild_with_modified_graph, rebuild_without_artifact,
+    resign_bundle_with_modified_compilation_manifest,
 };
 use sterling_harness::bundle::{verify_bundle, BundleVerifyError};
 use sterling_harness::runner::{run_search, ScorerInputV1};
@@ -158,5 +160,122 @@ fn missing_compilation_manifest_rejected() {
     assert!(
         matches!(err, BundleVerifyError::CompilationManifestMissing),
         "expected CompilationManifestMissing, got: {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Registry digest coherence (RCOH-001)
+// ---------------------------------------------------------------------------
+
+/// Compilation manifest's `registry_hash` (stripped to raw hex) matches
+/// graph metadata `registry_digest`.
+#[test]
+fn registry_hash_matches_graph_registry_digest() {
+    let bundle = default_bundle();
+
+    // Parse compilation manifest.
+    let cm_art = bundle
+        .artifacts
+        .get("compilation_manifest.json")
+        .expect("compilation_manifest.json");
+    let cm: serde_json::Value = serde_json::from_slice(&cm_art.content).expect("valid JSON");
+    let registry_hash = cm["registry_hash"].as_str().expect("registry_hash");
+
+    // Strip sha256: prefix to get raw hex.
+    let manifest_hex = registry_hash
+        .strip_prefix("sha256:")
+        .expect("registry_hash must have sha256: prefix");
+
+    // Parse graph metadata.
+    let graph_art = bundle
+        .artifacts
+        .get("search_graph.json")
+        .expect("search_graph.json");
+    let graph: serde_json::Value =
+        serde_json::from_slice(&graph_art.content).expect("valid JSON");
+    let graph_hex = graph["metadata"]["registry_digest"]
+        .as_str()
+        .expect("registry_digest");
+
+    assert_eq!(
+        manifest_hex, graph_hex,
+        "compilation manifest registry_hash (stripped) must match graph metadata registry_digest"
+    );
+
+    // Full pipeline verification passes on both profiles.
+    verify_bundle(&bundle).expect("bundle must verify");
+}
+
+/// Tampered `registry_hash` in compilation manifest triggers
+/// `CompilationManifestRegistryMismatch`.
+#[test]
+fn tampered_compilation_manifest_registry_hash_rejected() {
+    let bundle = default_bundle();
+
+    // Verify the original bundle passes first.
+    verify_bundle(&bundle).expect("original must pass");
+
+    let tampered = resign_bundle_with_modified_compilation_manifest(&bundle, |cm| {
+        // Preserve sha256: prefix but change one hex nibble.
+        cm["registry_hash"] =
+            serde_json::json!("sha256:0000000000000000000000000000000000000000000000000000000000000000");
+    });
+
+    let err = verify_bundle(&tampered).expect_err("must fail");
+    assert!(
+        matches!(err, BundleVerifyError::CompilationManifestRegistryMismatch { .. }),
+        "expected CompilationManifestRegistryMismatch, got: {err:?}"
+    );
+}
+
+/// Missing `registry_hash` field in compilation manifest triggers
+/// `CompilationManifestMissingField`.
+#[test]
+fn missing_compilation_manifest_registry_hash_field_rejected() {
+    let bundle = default_bundle();
+
+    verify_bundle(&bundle).expect("original must pass");
+
+    let tampered = resign_bundle_with_modified_compilation_manifest(&bundle, |cm| {
+        cm.as_object_mut().unwrap().remove("registry_hash");
+    });
+
+    let err = verify_bundle(&tampered).expect_err("must fail");
+    assert!(
+        matches!(
+            err,
+            BundleVerifyError::CompilationManifestMissingField { field: "registry_hash" }
+        ),
+        "expected CompilationManifestMissingField for registry_hash, got: {err:?}"
+    );
+}
+
+/// Missing `registry_digest` in graph metadata triggers
+/// `CompilationManifestGraphMissingField`.
+///
+/// Uses `rebuild_with_modified_graph` so Step 10 (`search_graph_digest`) passes
+/// and the failure fires in Step 12b (compilation manifest coherence).
+#[test]
+fn missing_graph_registry_digest_field_rejected() {
+    let bundle = default_bundle();
+
+    verify_bundle(&bundle).expect("original must pass");
+
+    let tampered = rebuild_with_modified_graph(&bundle, |graph| {
+        graph["metadata"]
+            .as_object_mut()
+            .unwrap()
+            .remove("registry_digest");
+    });
+
+    let err = verify_bundle(&tampered).expect_err("must fail");
+    assert!(
+        matches!(
+            err,
+            BundleVerifyError::CompilationManifestGraphMissingField {
+                field: "registry_digest"
+            }
+        ),
+        "expected CompilationManifestGraphMissingField for registry_digest, got: {err:?}"
     );
 }

@@ -1,0 +1,103 @@
+id: RCOH-001
+type: feature
+title: 'Registry Digest Coherence in Compilation Manifest'
+status: in_progress
+risk_tier: 3
+mode: development
+created_at: '2026-02-28T22:00:00.000Z'
+updated_at: '2026-02-28T22:00:00.000Z'
+blast_radius:
+  modules:
+    - harness/bundle
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 5m
+
+purpose: >
+  compilation_manifest.json carries registry_hash (the concept registry's digest,
+  sha256:hex format) and search_graph.json metadata carries registry_digest (the
+  same concept registry's digest, raw hex format). Both are computed from the same
+  RegistryV1::digest() call in run_search(), but nothing in the verification pipeline
+  constrains them to agree. This creates a split-brain surface where the compilation
+  manifest and search graph can silently disagree about which concept registry was
+  used. Fix: extend Step 12b with a third coherence check that normalizes format
+  and compares the two values. Pure verification-side change, no new artifacts.
+
+non_goals:
+  - "No check of registry_epoch (label only; not required for cryptographic coherence)."
+  - "No new artifacts and no digest threading (no bytes churn / golden regen)."
+  - "No attempt to recompute registry digest from registry bytes (concept registry not shipped)."
+  - "No comparison between registry_hash (concept registry) and operator_set_digest (operator registry — different object)."
+
+design:
+  format_normalization: >
+    compilation_manifest.json registry_hash is ContentHash-format: sha256:<hex>.
+    search_graph.json metadata registry_digest is raw hex only. Verifier strips
+    sha256: prefix from manifest value before comparison. If registry_hash does
+    not start with sha256:, typed error (not best-effort parse).
+  fail_closed_contract: >
+    Both fields must exist. Missing registry_hash in manifest → CompilationManifestMissingField.
+    Missing registry_digest in graph metadata → CompilationManifestGraphMissingField.
+    No silent skip, no required-if-present softening.
+  placement: >
+    Third check inside verify_compilation_manifest_coherence() (Step 12b), after
+    payload coherence check. Fires before tape verification (Step 18) and before
+    scorer/operator secondary checks (Steps 13-17).
+  residual_gap: >
+    registry_epoch remains unverifiable (no epoch field in graph metadata). registry_hash
+    binds the cryptographic commitment; epoch is a human label. Binding the hash alone
+    is sufficient for coherence.
+
+scope:
+  in:
+    - harness/src/bundle.rs
+    - tests/lock/
+    - .caws/specs/
+  out:
+    - kernel/
+    - search/
+    - harness/src/runner.rs
+    - benchmarks/
+
+change_budget:
+  max_files: 4
+  max_loc: 120
+
+invariants:
+  - "INV-REGCOH-01: If search_graph.json exists, compilation_manifest.json MUST exist (MANIFEST-001) and search_graph.json.metadata.registry_digest MUST exist (fail-closed)."
+  - "INV-REGCOH-02: compilation_manifest.json registry_hash MUST be ContentHash-format (sha256:<hex>). If not, fail with typed error."
+  - "INV-REGCOH-03: strip_prefix(registry_hash, 'sha256:') MUST equal search_graph.json.metadata.registry_digest (raw hex)."
+
+acceptance:
+  - id: RCOH-001-POS
+    description: "Positive: manifest registry_hash (stripped) matches graph metadata registry_digest"
+    status: pending
+  - id: RCOH-001-MISMATCH
+    description: "Negative: tampered manifest registry_hash triggers CompilationManifestRegistryMismatch"
+    status: pending
+  - id: RCOH-001-MISSING-MANIFEST-FIELD
+    description: "Negative: missing registry_hash field triggers CompilationManifestMissingField"
+    status: pending
+  - id: RCOH-001-MISSING-GRAPH-FIELD
+    description: "Negative: missing graph metadata registry_digest triggers CompilationManifestGraphMissingField"
+    status: pending
+
+milestones:
+  - id: M1
+    title: "Production code + lock tests"
+    status: in_progress
+    deliverables:
+      - "harness/src/bundle.rs (2 error variants, Check 3 in verify_compilation_manifest_coherence)"
+      - "tests/lock/tests/compilation_manifest_coherence.rs (4 new tests)"
+
+evidence:
+  commits: []
+  total_tests: 544
+  lock_tests: []
+
+non_functional:
+  a11y: []
+  perf:
+    note: "Adds one string strip_prefix + comparison in verify_compilation_manifest_coherence. Negligible."
+  security: []
+contracts: []
