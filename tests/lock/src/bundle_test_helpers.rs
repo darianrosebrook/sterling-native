@@ -168,3 +168,45 @@ pub fn rebuild_without_artifact(bundle: &ArtifactBundleV1, remove_name: &str) ->
         .collect();
     build_bundle(artifacts).unwrap()
 }
+
+/// Modify `compilation_manifest.json` in a bundle and rebuild with consistent
+/// content hashes, manifest, and digest basis.
+///
+/// No upstream artifacts reference the compilation manifest's content hash,
+/// so no report patching is needed — only `build_bundle()` re-signing.
+///
+/// Artifact ordering is stabilized by sorting names before collection.
+///
+/// # Panics
+///
+/// Panics if the bundle is missing `compilation_manifest.json`.
+pub fn resign_bundle_with_modified_compilation_manifest(
+    bundle: &ArtifactBundleV1,
+    modify: impl FnOnce(&mut serde_json::Value),
+) -> ArtifactBundleV1 {
+    let cm_artifact = bundle
+        .artifacts
+        .get("compilation_manifest.json")
+        .unwrap();
+    let mut cm_json: serde_json::Value =
+        serde_json::from_slice(&cm_artifact.content).unwrap();
+    modify(&mut cm_json);
+    let modified_cm_bytes = canonical_json_bytes(&cm_json).unwrap();
+
+    // Stable ordering: sort by artifact name to avoid HashMap iteration nondeterminism.
+    let mut names: Vec<&str> = bundle.artifacts.keys().map(String::as_str).collect();
+    names.sort_unstable();
+
+    let artifacts: Vec<(String, Vec<u8>, bool)> = names
+        .into_iter()
+        .map(|name| {
+            let a = &bundle.artifacts[name];
+            if name == "compilation_manifest.json" {
+                (a.name.clone(), modified_cm_bytes.clone(), a.normative)
+            } else {
+                (a.name.clone(), a.content.clone(), a.normative)
+            }
+        })
+        .collect();
+    build_bundle(artifacts).unwrap()
+}

@@ -1,0 +1,112 @@
+id: MANIFEST-001
+type: feature
+title: 'Compilation Manifest Coherence in Search Evidence Corridor'
+status: in_progress
+risk_tier: 3
+mode: development
+created_at: '2026-02-28T18:00:00.000Z'
+updated_at: '2026-02-28T18:00:00.000Z'
+blast_radius:
+  modules:
+    - harness/bundle
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 5m
+
+purpose: >
+  compilation_manifest.json is the only normative artifact in the search bundle with
+  zero cross-checks beyond its own content hash (Step 1). It carries schema identity,
+  payload hash, identity/evidence digests, and registry snapshot claims — but nothing
+  constrains those claims to agree with any other artifact. This creates a split-brain
+  surface where two artifacts can disagree about schema/payload provenance while the
+  bundle verifies as internally well-formed. Fix: add Step 12b coherence checks that
+  constrain compilation_manifest.json to agree with already-bound corridor surfaces.
+
+non_goals:
+  - "No compilation_manifest_digest threading into graph metadata, tape header, or report."
+  - "No identity_digest or evidence_digest cross-checks (requires ByteState bytes in bundle)."
+  - "No registry_epoch/registry_hash cross-checks (concept registry ≠ operator registry)."
+  - "No golden fixture regeneration — no canonical bytes change in any artifact."
+  - "No new fields in any serialized artifact — pure verification-side change."
+
+design:
+  fail_closed_contract: >
+    compilation_manifest.json has existed in every search bundle since format creation.
+    Both Base and Cert require it when search_graph.json is present. No required-if-present
+    softening. All field accesses fail-closed: missing artifact or field → typed error.
+  schema_coherence: >
+    Graph metadata schema_descriptor = "id:version:hash" (runner.rs:281). Compilation
+    manifest has schema_id, schema_version, schema_hash as separate JSON fields.
+    Reconstruct composite string; compare. Both profiles.
+  payload_coherence: >
+    Manifest payload_hash = canonical_hash(DOMAIN_COMPILATION_PAYLOAD, canonical_json_bytes(payload)).
+    Fixture initial_payload_hex = hex::encode(payload_bytes). Verifier: decode hex →
+    parse JSON → re-canonicalize → hash with CompilationPayload domain → compare. Both profiles.
+  residual_gap: >
+    Registry coherence remains unproven. Manifest registry_epoch/registry_hash describe
+    the concept registry snapshot; the corridor binds operator_set_digest (different object).
+    Closing this requires shipping a concept registry snapshot artifact or proving
+    RegistryV1::digest() and RegistrySnapshot::hash are comparable.
+
+scope:
+  in:
+    - harness/src/bundle.rs
+    - tests/lock/
+    - .caws/specs/
+  out:
+    - kernel/
+    - search/
+    - harness/src/runner.rs
+    - benchmarks/
+
+change_budget:
+  max_files: 5
+  max_loc: 280
+
+invariants:
+  - "INV-MANIFEST-01: If search_graph.json exists, compilation_manifest.json MUST exist (fail-closed, both profiles)."
+  - "INV-MANIFEST-02: compilation_manifest schema_id:schema_version:schema_hash MUST equal graph metadata schema_descriptor."
+  - "INV-MANIFEST-03: compilation_manifest payload_hash MUST equal canonical_hash(CompilationPayload, canonical(fixture.initial_payload_hex decoded))."
+  - "INV-MANIFEST-04: All typed errors are governance-grade (no string-packing, each failure mode gets its own variant)."
+
+acceptance:
+  - id: MANIFEST-001-SCHEMA
+    description: "Positive: manifest schema fields match graph metadata schema_descriptor"
+    status: pending
+  - id: MANIFEST-001-PAYLOAD
+    description: "Positive: manifest payload_hash matches recomputed hash from fixture"
+    status: pending
+  - id: MANIFEST-001-SCHEMA-TAMPER
+    description: "Negative: tampered manifest schema_id triggers CompilationManifestSchemaMismatch"
+    status: pending
+  - id: MANIFEST-001-PAYLOAD-TAMPER
+    description: "Negative: tampered manifest payload_hash triggers CompilationManifestPayloadMismatch"
+    status: pending
+  - id: MANIFEST-001-MISSING
+    description: "Negative: missing compilation_manifest.json triggers CompilationManifestMissing"
+    status: pending
+
+milestones:
+  - id: M1
+    title: "Production code — coherence checks in verify_bundle pipeline"
+    status: in_progress
+    deliverables:
+      - "harness/src/bundle.rs (error variants, verify_compilation_manifest_coherence, call site)"
+  - id: M2
+    title: "Lock tests"
+    status: pending
+    deliverables:
+      - "tests/lock/src/bundle_test_helpers.rs (resign helper)"
+      - "tests/lock/tests/compilation_manifest_coherence.rs (5 tests)"
+
+evidence:
+  commits: []
+  total_tests: 539
+  lock_tests: []
+
+non_functional:
+  a11y: []
+  perf:
+    note: "Adds JSON parsing of compilation_manifest.json + fixture.json in verify_bundle. Both are small artifacts (<1KB typically). One hex decode + JSON re-canonicalize + SHA-256 hash for payload check."
+  security: []
+contracts: []

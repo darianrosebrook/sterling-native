@@ -283,6 +283,27 @@ pub enum BundleVerifyError {
     /// `search_graph.json` metadata has `fixture_digest` but
     /// `fixture.json` is absent, or `fixture_digest` is missing from metadata.
     MetadataBindingFixtureMissing,
+    /// `compilation_manifest.json` is missing when `search_graph.json` is present.
+    CompilationManifestMissing,
+    /// `compilation_manifest.json` failed JSON parsing.
+    CompilationManifestNotJson { detail: String },
+    /// A required field is missing from `compilation_manifest.json`.
+    CompilationManifestMissingField { field: &'static str },
+    /// `schema_descriptor` in graph metadata does not match compilation manifest's
+    /// `schema_id:schema_version:schema_hash`.
+    CompilationManifestSchemaMismatch { in_graph: String, in_manifest: String },
+    /// `fixture.json` is missing when compilation manifest coherence check fires.
+    CompilationManifestFixtureMissing,
+    /// A required field is missing from `fixture.json` during compilation manifest
+    /// coherence checking.
+    CompilationManifestFixtureMissingField { field: &'static str },
+    /// `initial_payload_hex` in `fixture.json` failed hex decoding.
+    CompilationManifestPayloadDecodeFailed { detail: String },
+    /// `initial_payload_hex` in `fixture.json` is not valid JSON after decoding.
+    CompilationManifestPayloadNotJson { detail: String },
+    /// `payload_hash` in compilation manifest does not match recomputed hash
+    /// from `fixture.json.initial_payload_hex`.
+    CompilationManifestPayloadMismatch { in_manifest: String, recomputed: String },
     /// Canonical JSON error during verification.
     CanonError { detail: String },
     /// Cert profile requires `search_tape.stap` but it is absent.
@@ -438,6 +459,9 @@ pub fn verify_bundle_with_profile(
 
     // Step 12: Cross-verify metadata bindings in search_graph.json.
     verify_metadata_bindings(bundle, profile)?;
+
+    // Step 12b: Compilation manifest coherence (schema + payload).
+    verify_compilation_manifest_coherence(bundle)?;
 
     // Step 13: Scorer digest binding (report ↔ scorer.json).
     verify_scorer_digest_binding(bundle)?;
@@ -744,6 +768,138 @@ fn verify_metadata_bindings(
         (None, VerificationProfile::Base) => {
             // Base: old bundles without fixture_digest pass.
         }
+    }
+
+    Ok(())
+}
+
+/// Cross-verify compilation manifest fields against graph metadata and fixture.
+///
+/// Fail-closed: if `search_graph.json` exists, `compilation_manifest.json` MUST
+/// exist with valid schema and payload fields. Missing artifacts or fields are
+/// typed errors, not silent passes.
+///
+/// Check 1 — Schema coherence: `compilation_manifest.json`'s
+/// `schema_id:schema_version:schema_hash` must equal graph metadata
+/// `schema_descriptor`.
+///
+/// Check 2 — Payload coherence: recomputed
+/// `canonical_hash(CompilationPayload, canonical(fixture.initial_payload_hex))`
+/// must equal `compilation_manifest.json`'s `payload_hash`.
+fn verify_compilation_manifest_coherence(
+    bundle: &ArtifactBundleV1,
+) -> Result<(), BundleVerifyError> {
+    // Only applies to search bundles.
+    let Some(graph_artifact) = bundle.artifacts.get("search_graph.json") else {
+        return Ok(());
+    };
+
+    // Fail-closed: manifest must exist in search bundles.
+    let manifest_artifact = bundle
+        .artifacts
+        .get("compilation_manifest.json")
+        .ok_or(BundleVerifyError::CompilationManifestMissing)?;
+
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&manifest_artifact.content).map_err(|e| {
+            BundleVerifyError::CompilationManifestNotJson {
+                detail: format!("{e}"),
+            }
+        })?;
+
+    let graph: serde_json::Value =
+        serde_json::from_slice(&graph_artifact.content).map_err(|e| {
+            BundleVerifyError::CanonError {
+                detail: format!("{e:?}"),
+            }
+        })?;
+
+    // --- Check 1: Schema coherence ---
+    let schema_id = manifest
+        .get("schema_id")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestMissingField {
+            field: "schema_id",
+        })?;
+    let schema_version = manifest
+        .get("schema_version")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestMissingField {
+            field: "schema_version",
+        })?;
+    let schema_hash = manifest
+        .get("schema_hash")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestMissingField {
+            field: "schema_hash",
+        })?;
+
+    let manifest_sd = format!("{schema_id}:{schema_version}:{schema_hash}");
+
+    let graph_sd = graph
+        .get("metadata")
+        .and_then(|m| m.get("schema_descriptor"))
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestSchemaMismatch {
+            in_graph: "<missing>".into(),
+            in_manifest: manifest_sd.clone(),
+        })?;
+
+    if graph_sd != manifest_sd {
+        return Err(BundleVerifyError::CompilationManifestSchemaMismatch {
+            in_graph: graph_sd.to_string(),
+            in_manifest: manifest_sd,
+        });
+    }
+
+    // --- Check 2: Payload coherence ---
+    let fixture_artifact = bundle
+        .artifacts
+        .get("fixture.json")
+        .ok_or(BundleVerifyError::CompilationManifestFixtureMissing)?;
+    let fixture: serde_json::Value =
+        serde_json::from_slice(&fixture_artifact.content).map_err(|e| {
+            BundleVerifyError::CanonError {
+                detail: format!("{e:?}"),
+            }
+        })?;
+
+    let payload_hex = fixture
+        .get("initial_payload_hex")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestFixtureMissingField {
+            field: "initial_payload_hex",
+        })?;
+
+    let manifest_payload_hash = manifest
+        .get("payload_hash")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestMissingField {
+            field: "payload_hash",
+        })?;
+
+    let payload_bytes = hex::decode(payload_hex).map_err(|e| {
+        BundleVerifyError::CompilationManifestPayloadDecodeFailed {
+            detail: format!("{e}"),
+        }
+    })?;
+    let payload_json: serde_json::Value =
+        serde_json::from_slice(&payload_bytes).map_err(|e| {
+            BundleVerifyError::CompilationManifestPayloadNotJson {
+                detail: format!("{e}"),
+            }
+        })?;
+    let canonical_payload = canonical_json_bytes(&payload_json)
+        .map_err(|e| BundleVerifyError::CanonError {
+            detail: format!("{e}"),
+        })?;
+    let recomputed = canonical_hash(HashDomain::CompilationPayload, &canonical_payload);
+
+    if recomputed.as_str() != manifest_payload_hash {
+        return Err(BundleVerifyError::CompilationManifestPayloadMismatch {
+            in_manifest: manifest_payload_hash.to_string(),
+            recomputed: recomputed.as_str().to_string(),
+        });
     }
 
     Ok(())
