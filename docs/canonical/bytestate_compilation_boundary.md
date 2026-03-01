@@ -90,7 +90,7 @@ class CompilationFailure:
 
 ## 3. The Envelope
 
-The compilation boundary adopts the standard envelope template from [philosophy.md](philosophy.md) §6 (v1 reference: [`philosophy_full.md`](../reference/v1/philosophy_full.md) §6):
+The compilation boundary adopts the standard envelope template from [philosophy.md](philosophy.md) §6:
 
 ```
 {
@@ -376,8 +376,7 @@ The key constraint: **learned operators do not get special treatment**. They ent
 | [code32_bytestate.md](code32_bytestate.md) | Defines the substrate this boundary compiles into. This doc does not redefine Code32 layout, hashing, or evidence format. |
 | [philosophy.md](philosophy.md) | Provides the contract shape template and the "dynamic as versioned streams" principle that this doc operationalizes for ByteState. |
 | [neural_usage_contract.md](neural_usage_contract.md) | Neural models may observe ByteState but not write to it. The compilation boundary enforces this: only governed symbolic compilation writes ByteState. |
-| [text_boundary_index.md](../reference/v1/canonical/text_boundary_index.md) *(v1 reference)* | The text boundary (Text → IR) is a domain-specific instance of the compilation boundary (Domain Payload → ByteState). Both share the same trust model: boundary artifacts are hash-critical; transport metadata is not. |
-| [minecraft_domains.md](../reference/v1/minecraft_domains.md) *(v1 reference)* | Existence proof: Minecraft already delivers rules + state at solve time. The compilation boundary formalizes and generalizes this pattern for ByteState. |
+| [text_boundary.md](../reference/capabilities/text_boundary.md) *(advisory)* | The text boundary (Text → IR) is a domain-specific instance of the compilation boundary (Domain Payload → ByteState). Both share the same trust model: boundary artifacts are hash-critical; transport metadata is not. |
 
 ---
 

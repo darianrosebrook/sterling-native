@@ -36,7 +36,7 @@ This is a label change, not a semantic change. The operator contracts, signature
 ## Consequences
 
 - `docs/canonical/glossary.md` uses the v2 names with a note about the v1 legacy names.
-- v1 reference docs under `docs/reference/v1/` retain the original names unchanged.
+- Historical v1 operator names are preserved in advisory reference docs under `docs/reference/`.
 - Any new canonical doc or contract in Sterling Native uses the v2 names.
 - The single-letter codes remain S/M/P/K/C — no code changes needed.
 

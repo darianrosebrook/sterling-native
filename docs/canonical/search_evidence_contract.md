@@ -2,7 +2,7 @@
 status: v2 canonical
 authority: canonical
 date: 2026-02-27
-supersedes: "v1 proof_evidence_system (archived at docs/reference/v1/canonical/proof_evidence_system_v1.md) for search-layer evidence"
+supersedes: "v1 proof_evidence_system — see docs/reference/capabilities/governance.md for remaining proof obligations"
 ---
 # Search Evidence Contract
 

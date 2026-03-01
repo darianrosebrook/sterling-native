@@ -13,7 +13,7 @@ notice: "This is a canonical definition. Do not edit without a version bump or C
 
 ## Supersedes
 
-This document supersedes the ViT-based compression framing of "Sterling Full" described in [light_vs_full.md](../reference/v1/canonical/light_vs_full.md) (January 24, 2026). The prior framing treated RGBA as a route to a ViT-shaped compressor (IR → RGBA grid → ViT latent → CoreML). That approach has the wrong inductive bias: Sterling's IR is sequential, not spatial, and forcing it into a 2D grid for a vision transformer imposes fake structure.
+This document supersedes the ViT-based compression framing of "Sterling Full" (January 24, 2026). The prior framing treated RGBA as a route to a ViT-shaped compressor (IR → RGBA grid → ViT latent → CoreML). That approach has the wrong inductive bias: Sterling's IR is sequential, not spatial, and forcing it into a 2D grid for a vision transformer imposes fake structure.
 
 This document reframes the 4-byte tuple as what it actually is: a **hardware-native substrate for symbolic operations**, not an intermediate format for a neural compressor.
 
@@ -609,7 +609,7 @@ Code32 is identity. SlotStatus is governance state. They must remain separate pl
 
 | Document | Relationship |
 |---|---|
-| [light_vs_full.md](../reference/v1/canonical/light_vs_full.md) | Superseded for "Sterling Full" definition. Full = ByteState substrate + evidence unification, not ViT compression. |
+| *(light_vs_full — deleted)* | Superseded for "Sterling Full" definition. Full = ByteState substrate + evidence unification, not ViT compression. |
 | [neural_usage_contract.md](neural_usage_contract.md) | ByteState respects the contract fully. Neural may read tensors; only governed operators may write. |
 | [Capability Primitives P14](../specs/primitives/00_INDEX.md) | P14 (Search over Compressed Representations) aligns directly. ByteState is the compressed representation; search over it is the primitive. |
 | [Capability Primitives P16](../specs/primitives/00_INDEX.md) | P16 (Representation Invariance and State Canonicalization) defines the hashing and canonicalization requirements ByteState must satisfy. |

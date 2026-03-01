@@ -119,7 +119,7 @@ docs/architecture/  Target architecture, module map, success rubric
 docs/policy/        Benchmarking, transfer, governance, versioning policies
 docs/adr/           Architecture decision records
 docs/specs/         Forward-looking capability primitives (P01–P22)
-docs/reference/v1/  Carried-over v1 reference (non-authoritative, with supersession tracking)
+docs/reference/     Advisory docs: proof obligations, design rationale, world design, historical context
 docs/templates/     Templates for transfer packs, benchmarks, claim catalogs
 ```
 

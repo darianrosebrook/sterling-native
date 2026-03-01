@@ -17,7 +17,7 @@
 - `architecture/clean_sheet_architecture.md` — v1 audit, sprawl sources, target architecture
 - `architecture/module_map.md` — 7-module target (carrier, state, operators, search, proof, worlds, ml)
 - `architecture/v2_success_rubric.md` — 9 measurable claims with falsifiers
-- `architecture/v1_contract_promotion_queue.md` — disposition table for 29 quarantined v1 contracts
+- `architecture/v1_v2_parity_audit.md` — capability migration map with legacy contract disposition appendix
 
 ## Ephemeral (temporal, non-canonical — becomes stale)
 - `ephemeral/roadmaps/roadmap_v0_spine.md` — milestone roadmap M0–M7 (spine first, governance second, reuse by evidence)
@@ -42,34 +42,31 @@
 - `templates/transfer_pack_template.md`
 - `templates/benchmark_run_manifest_template.md`
 
-## Reference (v1 carry-over, non-authoritative)
+## Reference (advisory, non-authoritative)
 
-### v1 full docs (archived from canonical)
-- `reference/v1/glossary_full.md` — comprehensive v1 glossary (narrative, all sections)
-- `reference/v1/philosophy_full.md` — v1 philosophy with implementation anchors and source file indexes
+All reference docs carry `authority: reference` front-matter. They describe proof obligations, design rationale, and historical context — never cite as canonical requirements. See `reference/README.md` for the full index.
 
-### v1 canonical contracts (quarantine — awaiting promotion review)
-- `reference/v1/canonical/README.md` — promotion criteria and inventory
-- 29 contract files (see `architecture/v1_contract_promotion_queue.md` for disposition)
+### Capabilities (proof obligations v2 must eventually host)
+- `reference/capabilities/memory.md` — SWM, landmarks, decay
+- `reference/capabilities/text_boundary.md` — text IR, realization trust boundary
+- `reference/capabilities/induction.md` — operator induction pipeline
+- `reference/capabilities/governance.md` — certification campaigns, verdicts
+- `reference/capabilities/discourse.md` — intent/speech act system
+- `reference/capabilities/knowledge_graph.md` — KG contract, entity/relation model
 
-### v1 docs
-- `reference/v1/newcomers.md` — comprehensive v1 introduction
-- `reference/v1/README.md` — v1 project overview
-- `reference/v1/core_features.md` — path algebra, decay, SWM, value function
-- `reference/v1/capability_campaign_plan.md` — cert-grade domain surfaces
-- `reference/v1/primitive-inventory.md` — primitive inventory summary
-- `reference/v1/not_graph_rag.md` — differentiation from Graph-RAG
-- `reference/v1/myelin-sheath.md` — certified fast-path corridors
-- `reference/v1/toy-domains.md` — capability axes and proving grounds
-- `reference/v1/minecraft_domains.md` — Minecraft domain formulations
-- `reference/v1/toy_model_plan.md` — original micro-domain plan (historical, pre-Code32)
-- `reference/v1/future_state_vision_2027.md` — future state gap analysis
-- `reference/v1/industry_convergence.md` — field convergence toward Sterling's ideas
-- `reference/v1/retrospective.md` — v1 retrospective and surprising realizations
-- `reference/v1/PROVING-GROUNDS.md` — proving grounds reference
-- `reference/v1/capability-promotion-runbook.md` — promotion runbook
-- `reference/v1/demo-promotion.md` — demo promotion guide
-- `reference/v1/README-demos.md` — demos reference
+### World Design (how to build worlds + unproven axes)
+- `reference/world_design/capability_axes.md` — 10 orthogonal capability axes
+- `reference/world_design/world_catalog.md` — planned worlds with status
+- `reference/world_design/promotion_gates.md` — D0–D4 ladder, CPG-0 through CPG-8
 
-### v1 navigational data (non-normative)
-- `reference/v1/moc/` — maps of content (JSON), useful for tooling but not contract surfaces
+### Design Rationale (enduring design philosophy)
+- `reference/design_rationale/absorption_pipeline.md` — capability absorption + differentiators
+- `reference/design_rationale/operator_policy.md` — operators as policies
+- `reference/design_rationale/value_architecture.md` — composable value heads
+- `reference/design_rationale/conformance.md` — TC-1 through TC-11 theory conformance
+- `reference/design_rationale/evaluation_gates.md` — EVAL-01/02/03 research gates
+- `reference/design_rationale/search_complexity.md` — Big-O analysis of search
+
+### Historical (context only)
+- `reference/historical/retrospective.md` — v1 retrospective
+- `reference/historical/north_star.md` — original thesis

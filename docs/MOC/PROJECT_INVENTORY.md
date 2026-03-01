@@ -87,7 +87,7 @@
 
 - **`docs/canonical/bytestate_compilation_boundary.md`**: Partially implemented (core compilation boundary operational; epoch transitions and dynamic domain handshake not yet wired)
 - **`docs/canonical/code32_bytestate.md`**: Implemented (V1 substrate complete)
-- **`docs/canonical/glossary.md`**: Definitions enforced by contracts, invariants, and ADRs. For the comprehensive v1 glossary (historical), see docs/reference/v1/glossary_full.md.
+- **`docs/canonical/glossary.md`**: Definitions enforced by contracts, invariants, and ADRs.
 - **`docs/canonical/philosophy.md`**: v2 canonical
 
 ## Git Hooks
@@ -126,7 +126,7 @@ Install: git config core.hooksPath .githooks
 
 - **`docs/policy/benchmarking_policy.md`**: All benchmarks and performance claims
 - **`docs/policy/canonical_doc_change_policy.md`**: “docs/canonical/* and other canonical surfaces”
-- **`docs/policy/doc_authority_policy.md`**: All documents in docs/ except docs/reference/v1/
+- **`docs/policy/doc_authority_policy.md`**: All documents in docs/
 - **`docs/policy/domain_transfer_policy.md`**: Transfer claims across worlds / truth regimes
 - **`docs/policy/governance_policy.md`**: Run modes, eligibility, and artifact semantics
 - **`docs/policy/versioning_policy.md`**: schemas, registries, epochs, and compatibility
@@ -289,7 +289,7 @@ Validates that markdown files in docs/ follow the doc authority policy:
 - Authority-specific banned terms (e.g. canonical forbids ephemeral language)
 - Link hygiene: resolves relative links and checks target existence
 - No ephemeral docs staged for commit
-- README/index files and docs/reference/v1/ are exempt
+- README/index files and templates are exempt; reference docs require `authority: reference`
 
 Usage:
     # Lint staged files only (for pre-commit hook)

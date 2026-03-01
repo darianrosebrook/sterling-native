@@ -2,7 +2,7 @@
 status: v2 canonical
 authority: canonical
 date: 2026-02-24
-supersedes: "v1 philosophy (archived at [docs/reference/v1/philosophy_full.md](../reference/v1/philosophy_full.md))"
+supersedes: "v1 philosophy — see [absorption_pipeline.md](../reference/design_rationale/absorption_pipeline.md) for the v1 absorption pipeline details"
 ---
 # Sterling Native Design Philosophy
 
@@ -121,7 +121,7 @@ The pipeline:
 5. Register the capability claim with evidence
 6. Runtime handshake, enforcement, fail-closed
 
-**Detailed v1 pipeline reference:** [`docs/reference/v1/philosophy_full.md`](../reference/v1/philosophy_full.md) §3–§8
+**Detailed absorption pipeline reference:** [`docs/reference/design_rationale/absorption_pipeline.md`](../reference/design_rationale/absorption_pipeline.md) *(advisory)*
 
 ---
 

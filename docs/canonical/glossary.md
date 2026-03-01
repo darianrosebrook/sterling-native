@@ -1,7 +1,7 @@
 ---
 status: "v2 canonical — curated vocabulary for Sterling Native."
 authority: canonical
-scope: "Definitions enforced by contracts, invariants, and ADRs. For the comprehensive v1 glossary (historical), see docs/reference/v1/glossary_full.md."
+scope: "Definitions enforced by contracts, invariants, and ADRs."
 ---
 # Sterling Native Glossary
 
@@ -162,3 +162,9 @@ Together they link "what changed" with "why it mattered" for credit assignment. 
 **Registry Snapshot:** A point-in-time capture of the Code32 registry state. Part of the compilation boundary triple `(payload, schema_descriptor, registry_snapshot)`.
 
 **Epoch:** A bounded interval of stable schema/registry state. Schema changes or registry expansions trigger epoch transitions with explicit handshake protocols.
+
+---
+
+## Naming Conventions
+
+**Schema Version (V1, V2, ...):** Artifact schema versions, not architecture generations. `ByteStateV1`, `SearchTapeV1`, `SearchGraphV1`, `PolicySnapshotV1`, `OperatorRegistryV1`, etc. are schema version labels indicating the format version of that specific artifact. They are unrelated to "Sterling v1" (the Python predecessor) vs "Sterling Native" (the Rust successor). A schema version bumps when the artifact's wire format or contract surface changes, per [ADR 0008](../adr/0008-schema-extension-additive-fields.md).

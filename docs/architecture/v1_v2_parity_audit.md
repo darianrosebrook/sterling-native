@@ -2,13 +2,13 @@
 status: "Living audit — updated 2026-02-27"
 authority: architecture
 date: 2026-02-27
-purpose: "Capability-level migration map from Sterling v1 to v2. Defines proof obligations for supersession. Drives both docs/reference/v1 cleanup and v2 roadmap."
+purpose: "Capability-level migration map from Sterling v1 to v2. Defines proof obligations for supersession. Advisory reference docs live under docs/reference/."
 ---
 # V1→V2 Parity Audit (Capability Migration Map)
 
 ## Purpose
 
-Sterling Native (v2) has crossed the threshold from substrate prototype to a coherent deterministic execution + search + evidence system. This audit enumerates the capabilities v1 delivered (or claimed), maps each to its v2 implementation status, and produces an explicit migration plan for what v2 must implement (or intentionally deprecate) to fully supersede v1 documentation under `docs/reference/v1/`.
+Sterling Native (v2) has crossed the threshold from substrate prototype to a coherent deterministic execution + search + evidence system. This audit enumerates the capabilities v1 delivered (or claimed), maps each to its v2 implementation status, and produces an explicit migration plan for what v2 must implement (or intentionally deprecate). Advisory reference docs (proof obligations, design rationale) live under `docs/reference/`.
 
 This is not a doc-promotion list (that's [`v1_contract_promotion_queue.md`](v1_contract_promotion_queue.md)). It is a capability-level parity map with proof obligations.
 
@@ -64,7 +64,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/state_model_contract_v1.md`, `hashing_contracts_v1.md` |
+| v1 source | *(superseded — v2 canonical: `docs/canonical/bytestate_compilation_boundary.md`)* |
 | v2 status | **Implemented** |
 | v2 code | `kernel/src/carrier/compile.rs`, `kernel/src/carrier/bytestate.rs`, `kernel/src/carrier/registry.rs` |
 | v2 canonical doc | `docs/canonical/bytestate_compilation_boundary.md` |
@@ -79,7 +79,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/hashing_contracts_v1.md` |
+| v1 source | *(superseded — v2 canonical: `kernel/src/proof/hash.rs`, `kernel/src/proof/canon.rs`)* |
 | v2 status | **Implemented** |
 | v2 code | `kernel/src/proof/hash.rs` (SHA-256 + domain prefixes), `kernel/src/proof/canon.rs` (single canonical JSON) |
 | v2 canonical doc | `docs/canonical/bytestate_compilation_boundary.md` §hashing |
@@ -94,7 +94,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/operator_registry_contract_v1.md`, `operator_policy.md` |
+| v1 source | `docs/reference/design_rationale/operator_policy.md` *(advisory)* |
 | v2 status | **Partial** |
 | v2 code | `kernel/src/operators/signature.rs` (OperatorSignature, OperatorCategory S/M/P/K/C), `kernel/src/operators/apply.rs` (apply() with SET_SLOT) |
 | v2 canonical doc | `docs/canonical/glossary.md` §Operator Layer |
@@ -108,7 +108,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/proof_evidence_system_v1.md` |
+| v1 source | *(superseded — v2 canonical: `docs/canonical/search_evidence_contract.md`)* |
 | v2 status | **Implemented** |
 | v2 code | `kernel/src/proof/replay.rs` (replay_verify), `kernel/src/carrier/trace_writer.rs` + `trace_reader.rs` (.bst1 format) |
 | v2 canonical doc | `docs/canonical/philosophy.md` §4 (evidence layers) |
@@ -126,7 +126,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/reasoning_framework.md`, `search_complexity.md` |
+| v1 source | *(superseded — v2: `search/src/search.rs`)*; complexity analysis: `docs/reference/design_rationale/search_complexity.md` *(advisory)* |
 | v2 status | **Implemented** |
 | v2 code | `search/src/search.rs` (search loop), `search/src/frontier.rs` (BestFirstFrontier), `search/src/node.rs` (SearchNodeV1), `search/src/graph.rs` (SearchGraphV1) |
 | v2 canonical doc | `docs/canonical/glossary.md` §Search Layer, `docs/canonical/search_evidence_contract.md` |
@@ -141,7 +141,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/value_function_components_v1.md` |
+| v1 source | `docs/reference/design_rationale/value_architecture.md` *(advisory)* |
 | v2 status | **Partial** |
 | v2 code | `search/src/scorer.rs` (ValueScorer trait, UniformScorer, TableScorer) |
 | CAWS spec | SC-001 M1 (UniformScorer), M3.2 (TableScorer) |
@@ -169,7 +169,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/proof_evidence_system_v1.md`, `conformance.md` |
+| v1 source | `docs/reference/design_rationale/conformance.md`, `docs/reference/capabilities/governance.md` *(advisory)* |
 | v2 status | **Implemented** |
 | v2 code | `harness/src/bundle.rs` (ArtifactBundleV1, verify_bundle, VerificationProfile, BundleVerifyError), `harness/src/bundle_dir.rs` (write/read/verify persistence) |
 | v2 canonical doc | `docs/canonical/search_evidence_contract.md` |
@@ -196,7 +196,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/governance_certification_contract_v1.md` (partial) |
+| v1 source | `docs/reference/capabilities/governance.md` *(advisory)* |
 | v2 status | **Implemented** |
 | v2 code | `harness/src/policy.rs` (PolicySnapshotV1, PolicyConfig, build_policy, enforce_*) |
 | CAWS spec | SPINE-001 M5 |
@@ -211,7 +211,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/world_adapter_protocol_v1.md` |
+| v1 source | *(superseded — v2: `harness/src/contract.rs`, `search/src/contract.rs`)* |
 | v2 status | **Implemented (structural)** |
 | v2 code | `harness/src/contract.rs` (WorldHarnessV1), `search/src/contract.rs` (SearchWorldV1) |
 | v2 worlds | `harness/src/worlds/rome_mini.rs`, `rome_mini_search.rs`, `slot_lattice_search.rs` + `slot_lattice_regimes.rs` (6 regimes) |
@@ -226,7 +226,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/capability_campaign_plan.md`, `PROVING-GROUNDS.md` |
+| v1 source | `docs/reference/world_design/promotion_gates.md`, `docs/reference/world_design/world_catalog.md` *(advisory)* |
 | v2 status | **Partial** |
 | v2 code | Bundle verification pipeline serves as the structural base for transfer evidence. |
 | Gaps | No formal `TransferPackV1` schema. No template-driven generator. No cross-world claim equivalence tests. |
@@ -240,7 +240,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/semantic_working_memory_contract_v0.md`, `core_features.md` |
+| v1 source | `docs/reference/capabilities/memory.md` *(advisory)* |
 | v2 status | **Not started** |
 | Parity target | **TBD** — v2 likely needs a redesigned substrate. v1 SWM was v0/doc-only; the v1 contract promotion queue marks it as Archive. |
 | Proof obligations | Memory artifacts must be content-addressed and replay-linked. Memory updates must be governed (operators), not ad hoc. |
@@ -249,7 +249,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/core_features.md` §landmarks |
+| v1 source | `docs/reference/capabilities/memory.md` §landmarks *(advisory)* |
 | v2 status | **Not started** |
 | Parity target | **TBD** — landmark discovery depends on episode history, which depends on worlds + memory. |
 
@@ -257,7 +257,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/core_features.md` §decay, path algebra |
+| v1 source | `docs/reference/capabilities/memory.md` §decay *(advisory)* |
 | v2 status | **Not started** |
 | Parity target | **TBD** |
 
@@ -269,7 +269,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/operator_induction_contract_v1.md` |
+| v1 source | `docs/reference/capabilities/induction.md` *(advisory)* |
 | v2 status | **Not started** |
 | Parity target | **Intentional redesign** — v1's 120-file pipeline will be collapsed. v2 targets 5 modules with evaluators as extension point (per `clean_sheet_architecture.md` §4). |
 | Proof obligations | Propose→evaluate→promote loop produces an operator with lock tests and regression gates. No silent regressions on previously certified claims. |
@@ -282,7 +282,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/governance_certification_contract_v1.md` (tool transcript sections) |
+| v1 source | `docs/reference/capabilities/governance.md` §tool-transcripts *(advisory)* |
 | v2 status | **Not started** |
 | Parity target | **Contract parity** — stage/commit/rollback semantics with proof trail. |
 | Proof obligations | Stage/commit/rollback verified by replay evidence. 100% tool actions have transcripts. No side effects without commit. |
@@ -296,7 +296,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/text_io_contract_v1.md`, `text_hard_ir_contract_v1.md`, `linguistic_ir_contract_v0.md`, `text_boundary_index.md` |
+| v1 source | `docs/reference/capabilities/text_boundary.md` *(advisory)* |
 | v2 status | **Not started** |
 | Parity target | **TBD** — depends on whether v2 pursues the v1 four-partition IR or a new design. |
 | Proof obligations | Minimal: a text boundary demo that enforces "surface is non-authoritative, IR is authoritative." |
@@ -306,7 +306,7 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 
 | Field | Value |
 |-------|-------|
-| v1 reference | `docs/reference/v1/canonical/discourse_intent_contract_v1.md` |
+| v1 source | `docs/reference/capabilities/discourse.md` *(advisory)* |
 | v2 status | **Not started** |
 | Parity target | **TBD** — v1 contract promotion queue marks this as Rewrite. |
 
@@ -324,9 +324,9 @@ v1 is not code to port — it is a catalog of proof obligations. Each group belo
 
 | Truth regime | v1 source | What v2 must prove | First world |
 |-------------|-----------|--------------------|----|
-| Tool safety | `governance_certification_contract_v1.md` (tool transcript sections) | Transactional semantics (stage/commit/rollback) with auditable transcripts. Every external interaction has a transcript artifact bound into the bundle. | Transactional KV Store |
-| Partial observability | `core_features.md` (belief, probes), Mastermind test-scenario | Belief discipline via probe operators and trace-visible belief changes. Belief set monotonicity under probes. No hidden observation channels. | Mastermind-like world |
-| Stochastic certification | `conformance.md` (distributional evaluation) | Seed/witness binding so certification binds to evidence, not "the environment." Exact replay from recorded evidence; distributional evaluation over seed sets. | Slippery Grid world |
+| Tool safety | `capabilities/governance.md` §tool-transcripts *(advisory)* | Transactional semantics (stage/commit/rollback) with auditable transcripts. Every external interaction has a transcript artifact bound into the bundle. | Transactional KV Store |
+| Partial observability | `capabilities/memory.md` §belief, `world_design/capability_axes.md` §partial-obs *(advisory)* | Belief discipline via probe operators and trace-visible belief changes. Belief set monotonicity under probes. No hidden observation channels. | Mastermind-like world |
+| Stochastic certification | `design_rationale/conformance.md` §distributional *(advisory)* | Seed/witness binding so certification binds to evidence, not "the environment." Exact replay from recorded evidence; distributional evaluation over seed sets. | Slippery Grid world |
 
 **Guardrail (G6)**: Enforce "tools are modeled, not executed" initially. Stage/commit/rollback should be trace-visible contracts with transcripts; real side effects come later behind an explicit non-cert mode.
 
@@ -342,7 +342,7 @@ v1 is not code to port — it is a catalog of proof obligations. Each group belo
 - **Operator-set digest** — bound into evidence so drift is detectable per-run.
 - **Packaging/install surface** — so operator sets are auditable, transferable artifacts.
 
-**v1 reference**: `operator_registry_contract_v1.md`, `operator_policy.md`, `core/operators/engine/registry.py`.
+**Advisory reference**: `docs/reference/design_rationale/operator_policy.md`.
 
 **Guardrail (G7)**: This is Phase 0, not Phase 2. See §Operator Registry MVP below.
 
@@ -356,7 +356,7 @@ v1 is not code to port — it is a catalog of proof obligations. Each group belo
 - **Campaign notion** (even if simplified) binding: policy snapshot, operator set, evidence bundle(s), and acceptance criteria.
 - **Fail-closed enforcement** at the governance level (not just type-system fail-closed).
 
-**v1 reference**: `governance_certification_contract_v1.md`, `conformance.md`, `core/governance/gate_verdict.py`.
+**Advisory reference**: `docs/reference/capabilities/governance.md`, `docs/reference/design_rationale/conformance.md`.
 
 **Guardrail (G1)**: Write an ADR pinning certification authority. If Python is the control plane, every Python cert must be reducible to a set of Rust-verified artifacts + explicit policy/campaign metadata.
 
@@ -370,7 +370,7 @@ v1 is not code to port — it is a catalog of proof obligations. Each group belo
 - **Standard evaluation packet format** so future worlds slot in without bespoke pipelines.
 - Start with inducing a policy/scorer table; graduate to inducing operator definitions once the registry exists.
 
-**v1 reference**: `operator_induction_contract_v1.md`, `core/induction/`.
+**Advisory reference**: `docs/reference/capabilities/induction.md`.
 
 ### Import Group E: Memory MVP
 
@@ -382,7 +382,7 @@ v1 is not code to port — it is a catalog of proof obligations. Each group belo
 - **Governed memory updates** (operators or explicit post-pass artifacts), not ad hoc mutable objects.
 - **Content-addressed, bundle-linked** memory artifacts.
 
-**v1 reference**: `semantic_working_memory_contract_v0.md`, `core_features.md` §landmarks.
+**Advisory reference**: `docs/reference/capabilities/memory.md`.
 
 ### Import Group F: Text boundary
 
@@ -393,7 +393,7 @@ v1 is not code to port — it is a catalog of proof obligations. Each group belo
 - A minimal text boundary demo: parse/render components as advisory, never authority.
 - A verifiable realization artifact surface (even if the realizer remains Python).
 
-**v1 reference**: `text_io_contract_v1.md`, `text_hard_ir_contract_v1.md`, `linguistic_ir_contract_v0.md`.
+**Advisory reference**: `docs/reference/capabilities/text_boundary.md`.
 
 ---
 
@@ -665,8 +665,53 @@ These must be resolved to complete parity. Each should become a decision record 
 
 ## Relationship to other documents
 
-- **[`v1_contract_promotion_queue.md`](v1_contract_promotion_queue.md)**: Tracks doc-level promotion status. This audit tracks capability-level parity.
 - **[`v2_success_rubric.md`](v2_success_rubric.md)**: The scorecard this audit's build order is designed to advance.
 - **[`clean_sheet_architecture.md`](clean_sheet_architecture.md)**: The target architecture. This audit measures progress against that target.
 - **[`docs/canonical/search_evidence_contract.md`](../canonical/search_evidence_contract.md)**: The v2 canonical doc that supersedes v1's proof/evidence system for the search layer.
+- **[`docs/reference/`](../reference/README.md)**: Version-agnostic advisory docs preserving proof obligations, design rationale, and world design framing.
 - **Sterling `docs/architecture/v1_v2_supersession_map.md`**: The Python-side view of this same mapping. This parity audit is the primary source of truth (G8); the supersession map summarizes and links here.
+
+---
+
+## Appendix: Legacy Contract Disposition
+
+This table records the disposition of the 29 v1 canonical contracts that were quarantined in `docs/reference/v1/canonical/` (now deleted). Each contract was either promoted to `docs/canonical/`, rewritten as an advisory doc in `docs/reference/`, or archived (deleted — material absorbed into advisory docs or fully superseded).
+
+**Promotion criteria** (historical — from the original quarantine process):
+1. Aligns with the v2 compilation boundary spine
+2. Uses DEV/CERTIFIED governance taxonomy
+3. No parallel implementations (INV-CORE-12)
+4. ByteTrace is canonical trace artifact (ADR 0002)
+5. Has version metadata and change policy header
+
+| Contract | Disposition | v2 Status | New Location |
+|----------|-------------|-----------|-------------|
+| `north_star.md` | Keep (historical) | Implemented | `docs/reference/historical/north_star.md` |
+| `core_constraints_v1.md` | Promoted | Implemented | `docs/canonical/core_constraints.md` |
+| `core_features.md` | Absorbed | Partial | `docs/reference/capabilities/memory.md` (decay, landmarks, SWM) |
+| `conformance.md` | Rewritten | Partial | `docs/reference/design_rationale/conformance.md` |
+| `evaluation_gates_v1.md` | Rewritten | Partial | `docs/reference/design_rationale/evaluation_gates.md` |
+| `hashing_contracts_v1.md` | Superseded | Implemented | `kernel/src/proof/hash.rs` + `canon.rs` |
+| `knowledge_graph_contract_v1.md` | Rewritten | Not started | `docs/reference/capabilities/knowledge_graph.md` |
+| `operator_registry_contract_v1.md` | Superseded | Implemented | `kernel/src/operators/operator_registry.rs` |
+| `proof_evidence_system_v1.md` | Superseded | Implemented | `docs/canonical/search_evidence_contract.md` |
+| `reasoning_framework.md` | Superseded | Implemented | `search/src/search.rs` + `frontier.rs` + `graph.rs` |
+| `schema_registry.md` | Archived | N/A | *(deleted — v1 Python schema IDs)* |
+| `schemas.md` | Archived | N/A | *(deleted — v1 schema index)* |
+| `state_model_contract_v1.md` | Superseded | Implemented | `docs/canonical/bytestate_compilation_boundary.md` |
+| `sterling_architecture_layers.md` | Superseded | Implemented | `docs/canonical/philosophy.md` §1 |
+| `text_boundary_index.md` | Archived | N/A | *(deleted — navigational index)* |
+| `text_io_contract_v1.md` | Rewritten | Not started | `docs/reference/capabilities/text_boundary.md` |
+| `value_function_components_v1.md` | Rewritten | Partial | `docs/reference/design_rationale/value_architecture.md` |
+| `world_adapter_protocol_v1.md` | Superseded | Implemented | `harness/src/contract.rs` + `search/src/contract.rs` |
+| `claim_schema_system_v1.md` | Absorbed | Implemented | `docs/reference/capabilities/governance.md` |
+| `discourse_intent_contract_v1.md` | Rewritten | Not started | `docs/reference/capabilities/discourse.md` |
+| `governance_certification_contract_v1.md` | Rewritten | Partial | `docs/reference/capabilities/governance.md` |
+| `operator_induction_contract_v1.md` | Rewritten | Not started | `docs/reference/capabilities/induction.md` |
+| `operator_policy.md` | Rewritten | Partial | `docs/reference/design_rationale/operator_policy.md` |
+| `linguistic_ir_contract_v0.md` | Rewritten | Not started | `docs/reference/capabilities/text_boundary.md` |
+| `text_hard_ir_contract_v1.md` | Rewritten | Not started | `docs/reference/capabilities/text_boundary.md` |
+| `semantic_realization_convergence.md` | Archived | N/A | *(deleted — v1 convergence pipeline)* |
+| `light_vs_full.md` | Archived | N/A | *(deleted — self-superseded)* |
+| `module_interdependencies_v1.md` | Archived | N/A | *(deleted — Python import graph)* |
+| `semantic_working_memory_contract_v0.md` | Absorbed | Not started | `docs/reference/capabilities/memory.md` |

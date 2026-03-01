@@ -370,4 +370,4 @@ This bundle decomposes Sterling's reasoning work into domain-agnostic capability
 ## See Also
 
 - [I/O Contract](00_IO_CONTRACT.md) - Rig input/output schemas
-- [v1 Toy Domains](../../reference/v1/toy-domains.md) - Signal worlds for unproven capabilities *(v1 reference)*
+- [Capability Axes](../../reference/world_design/capability_axes.md) - 10 orthogonal axes for world design *(advisory)*

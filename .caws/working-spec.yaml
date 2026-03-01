@@ -32,7 +32,7 @@ scope:
     - docs/specs/
     - tests/
   out:
-    - docs/reference/v1/
+    - docs/reference/historical/
     - docs/ephemeral/
     - reference/v1_impl/
     - node_modules/
@@ -44,7 +44,7 @@ invariants:
   - "Operator taxonomy is S/M/P/K/C: Seek/Memorize/Perceive/Knowledge/Control (ADR 0004)"
   - "v1 is a test oracle, not a dependency — zero v1 imports in kernel build graph (ADR 0005)"
   - "DEV/CERTIFIED are the only governance modes"
-  - "All docs outside reference/v1 must declare authority: front-matter field"
+  - "All docs must declare authority: front-matter field (except README/index files and templates)"
 acceptance:
   - id: A1
     given: "a domain payload and schema descriptor"

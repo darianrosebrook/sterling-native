@@ -476,7 +476,6 @@ These emerged from cross-referencing multiple redesign proposals:
 
 ## Relationship to Other Documents
 
-- **[Future State Vision 2027](../reference/v1/future_state_vision_2027.md)** — The 5-act narrative this architecture would accelerate *(v1 reference)*
-- **[North Star](../reference/v1/canonical/north_star.md)** — The thesis this architecture serves *(v1 reference)*
+- **[North Star](../reference/historical/north_star.md)** — The thesis this architecture serves *(advisory)*
 
 This document does not replace the 2026 roadmap. The roadmap describes what to build *next* within the current architecture. This document describes what the architecture *should be* if we were starting clean. The two inform each other: the roadmap's friction points validate this document's proposed changes; this document's target structure guides the roadmap's consolidation decisions.
