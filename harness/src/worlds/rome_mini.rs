@@ -27,6 +27,7 @@ impl WorldHarnessV1 for RomeMini {
             layer_count: 1,
             slot_count: 2,
             arg_slot_count: SET_SLOT_ARG_COUNT,
+            evidence_obligations: vec![],
         }
     }
 

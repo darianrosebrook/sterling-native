@@ -723,12 +723,19 @@ fn build_fixture_json(
         })
         .collect();
 
+    let obligations: Vec<serde_json::Value> = dims
+        .evidence_obligations
+        .iter()
+        .map(|s| serde_json::Value::String(s.clone()))
+        .collect();
+
     let fixture_value = serde_json::json!({
         "dimensions": {
             "arg_slot_count": dims.arg_slot_count,
             "layer_count": dims.layer_count,
             "slot_count": dims.slot_count,
         },
+        "evidence_obligations": obligations,
         "initial_payload_hex": hex::encode(payload_bytes),
         "program": program_steps,
         "schema_version": "fixture.v1",

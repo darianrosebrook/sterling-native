@@ -189,6 +189,7 @@ impl WorldHarnessV1 for TransactionalKvStore {
             layer_count: 2,
             slot_count: SLOT_COUNT,
             arg_slot_count: 3, // SET_SLOT takes 3 arg slots (layer, slot, value)
+            evidence_obligations: vec![],
         }
     }
 
