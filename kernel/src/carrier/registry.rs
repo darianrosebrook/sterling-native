@@ -604,4 +604,16 @@ mod tests {
             "expected DuplicateCode32, got: {err:?}"
         );
     }
+
+    #[test]
+    fn from_canonical_bytes_rejects_unsorted_allocations() {
+        // Same data as canonical, but allocations in reverse order.
+        // BTreeMap produces sorted order, so this input won't round-trip.
+        let bad = br#"{"allocations":[["b",[1,0,1,0]],["a",[1,0,0,0]]],"epoch":"e"}"#;
+        let err = RegistryV1::from_canonical_bytes(bad).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::NotCanonical),
+            "expected NotCanonical for unsorted allocations, got: {err:?}"
+        );
+    }
 }
