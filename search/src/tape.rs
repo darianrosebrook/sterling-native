@@ -118,12 +118,18 @@ pub const NOTE_CANDIDATE_CAP_REACHED: u8 = 0;
 pub const NOTE_FRONTIER_PRUNED: u8 = 1;
 
 // ---------------------------------------------------------------------------
-// Raw hash helpers (private, allocation-free)
+// Raw hash helpers (allocation-free)
 // ---------------------------------------------------------------------------
 
 /// SHA-256 with domain prefix, returning raw 32 bytes.
-/// Equivalent to `canonical_hash(domain, data)` but avoids the `ContentHash` wrapper.
-pub(crate) fn raw_hash(domain: HashDomain, data: &[u8]) -> [u8; 32] {
+///
+/// Equivalent to `canonical_hash(domain, data)` but returns `[u8; 32]` instead
+/// of `ContentHash`. Used internally for tape chain integrity where raw bytes
+/// are needed. Also used by lock-tests for tape binary surgery tooling.
+///
+/// Stable only insofar as the tape format remains v1.
+#[must_use]
+pub fn raw_hash(domain: HashDomain, data: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(domain.as_bytes());
     hasher.update(data);
@@ -134,8 +140,11 @@ pub(crate) fn raw_hash(domain: HashDomain, data: &[u8]) -> [u8; 32] {
 }
 
 /// SHA-256 with domain prefix and two data slices, returning raw 32 bytes.
+///
 /// Used for hash chain: `h_i = raw_hash2(DOMAIN, h_{i-1}, record_frame_bytes)`.
-pub(crate) fn raw_hash2(domain: HashDomain, a: &[u8], b: &[u8]) -> [u8; 32] {
+/// Public for the same reason as [`raw_hash`]: lock-tests tape surgery tooling.
+#[must_use]
+pub fn raw_hash2(domain: HashDomain, a: &[u8], b: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(domain.as_bytes());
     hasher.update(a);

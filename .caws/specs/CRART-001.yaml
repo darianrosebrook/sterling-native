@@ -1,0 +1,110 @@
+id: CRART-001
+type: feature
+title: 'Concept Registry Artifact — shipping + independent digest verification'
+status: in_progress
+risk_tier: 2
+mode: development
+created_at: '2026-02-28T23:30:00.000Z'
+updated_at: '2026-02-28T23:30:00.000Z'
+blast_radius:
+  modules:
+    - search/tape
+    - harness/bundle
+    - harness/runner
+    - kernel/carrier/registry
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 10m
+
+purpose: >
+  Ship concept_registry.json as a normative artifact in search bundles, enabling
+  independent verification of the compilation manifest's registry_hash claim.
+  Currently registry_hash is a producer claim checked only for coherence (RCOH-001);
+  with the registry bytes shipped, a verifier can recompute the semantic digest
+  and prove it matches. M2 (future) enables full compilation replay.
+
+non_goals:
+  - "M1 does not include compilation replay (deferred to M2)."
+  - "No new hash domains — uses existing DOMAIN_REGISTRY_SNAPSHOT."
+  - "No RegistryV1::from_canonical_bytes() in M1 (needed only for M2 replay)."
+
+design:
+  artifact_bytes: >
+    Exactly RegistryV1::canonical_bytes() — the same bytes that RegistryV1::digest()
+    hashes. No wrapper schema.
+  semantic_digest: >
+    canonical_hash(HashDomain::RegistrySnapshot, concept_registry_bytes). Must equal
+    compilation_manifest.json.registry_hash (string) and search_graph.json.metadata.registry_digest
+    (raw hex after strip_prefix).
+  profile_posture: >
+    Base: required-if-present (if artifact exists, verify it; if absent, pass).
+    Cert: mandatory (artifact must exist and verify).
+  hashing_authority: >
+    Fix pre-M1: expose raw_hash/raw_hash2 from sterling_search::tape as pub, remove
+    sha2 dependency from lock-tests. Single hashing authority principle.
+
+scope:
+  in:
+    - search/src/tape.rs
+    - harness/src/bundle.rs
+    - harness/src/runner.rs
+    - kernel/src/carrier/registry.rs
+    - tests/lock/
+    - benchmarks/src/lib.rs
+    - .caws/specs/
+  out: []
+
+change_budget:
+  max_files: 14
+  max_loc: 400
+
+invariants:
+  - "INV-CRART-01: Cert search bundles MUST contain concept_registry.json."
+  - "INV-CRART-02: sha256(DOMAIN_REGISTRY_SNAPSHOT || concept_registry_bytes) MUST equal compilation_manifest.json.registry_hash AND search_graph.json.metadata.registry_digest (hex-normalized)."
+  - "INV-CRART-03: raw_hash/raw_hash2 are the single hashing authority for tape chain integrity — no shadow SHA-256 implementations in test code."
+
+acceptance:
+  - id: CRART-001-HASH-AUTHORITY
+    description: "Hashing authority: raw_hash/raw_hash2 pub in search, no sha2 in lock-tests"
+    status: pending
+  - id: CRART-001-ARTIFACT
+    description: "concept_registry.json shipped as normative artifact in search bundles"
+    status: pending
+  - id: CRART-001-DIGEST-BINDING
+    description: "Verification step checks semantic digest matches manifest and graph metadata"
+    status: pending
+  - id: CRART-001-BASE-COMPAT
+    description: "Base passes without concept_registry.json; Cert fails with ConceptRegistryMissing"
+    status: pending
+  - id: CRART-001-TAMPER
+    description: "Tampered concept_registry.json triggers typed digest mismatch error"
+    status: pending
+
+milestones:
+  - id: M0
+    title: "Hashing authority cleanup"
+    status: in_progress
+    deliverables:
+      - "search/src/tape.rs: raw_hash/raw_hash2 promoted to pub"
+      - "tests/lock/Cargo.toml: sha2 dependency removed"
+      - "tests/lock/src/bundle_test_helpers.rs: shadow hash functions deleted"
+  - id: M1
+    title: "Artifact shipping + digest verification"
+    status: pending
+    deliverables:
+      - "harness/src/runner.rs: emit concept_registry.json (normative)"
+      - "harness/src/bundle.rs: verification step for semantic digest binding"
+      - "tests/lock/: positive, tamper, Base-compat lock tests"
+      - "Golden fixture regeneration"
+
+evidence:
+  commits: []
+  total_tests: 557
+  lock_tests: []
+
+non_functional:
+  a11y: []
+  perf:
+    note: "One additional SHA-256 hash per verify_bundle call when concept_registry.json present. Negligible."
+  security: []
+contracts: []

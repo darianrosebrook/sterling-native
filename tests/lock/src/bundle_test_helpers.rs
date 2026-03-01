@@ -4,13 +4,12 @@
 //! preventing tests from accidentally testing digest mismatch instead of the
 //! semantic mismatch they intend to exercise.
 
-use sha2::{Digest, Sha256};
 use sterling_harness::bundle::{build_bundle, ArtifactBundleV1, DOMAIN_BUNDLE_ARTIFACT};
 use sterling_kernel::proof::canon::canonical_json_bytes;
 use sterling_kernel::proof::hash::canonical_hash;
 use sterling_search::tape::{
-    DOMAIN_SEARCH_TAPE, DOMAIN_SEARCH_TAPE_CHAIN, FOOTER_SIZE, SEARCH_TAPE_MAGIC,
-    SEARCH_TAPE_VERSION,
+    raw_hash, raw_hash2, DOMAIN_SEARCH_TAPE, DOMAIN_SEARCH_TAPE_CHAIN, FOOTER_SIZE,
+    SEARCH_TAPE_MAGIC, SEARCH_TAPE_VERSION,
 };
 
 /// Modify the `search_graph.json` in a bundle and rebuild with consistent
@@ -306,7 +305,7 @@ fn rebuild_tape_with_header(
     );
 
     // Reseed chain hash with new header and replay through frames.
-    let mut chain_hash = tape_raw_hash(DOMAIN_SEARCH_TAPE, &new_header_bytes);
+    let mut chain_hash = raw_hash(DOMAIN_SEARCH_TAPE, &new_header_bytes);
     let mut pos = 0;
     let mut replayed_records: u64 = 0;
     while pos < frames_region.len() {
@@ -314,7 +313,7 @@ fn rebuild_tape_with_header(
             frames_region[pos..pos + 4].try_into().unwrap(),
         ) as usize;
         let full_frame = &frames_region[pos..pos + 4 + frame_len];
-        chain_hash = tape_raw_hash2(DOMAIN_SEARCH_TAPE_CHAIN, &chain_hash, full_frame);
+        chain_hash = raw_hash2(DOMAIN_SEARCH_TAPE_CHAIN, &chain_hash, full_frame);
         pos += 4 + frame_len;
         replayed_records += 1;
     }
@@ -336,29 +335,3 @@ fn rebuild_tape_with_header(
     buf
 }
 
-/// SHA-256 with domain prefix, matching `sterling_search::tape::raw_hash`.
-fn tape_raw_hash(domain: sterling_kernel::proof::hash_domain::HashDomain, data: &[u8]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(domain.as_bytes());
-    hasher.update(data);
-    let result = hasher.finalize();
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&result);
-    out
-}
-
-/// SHA-256 with domain prefix and two inputs, matching `sterling_search::tape::raw_hash2`.
-fn tape_raw_hash2(
-    domain: sterling_kernel::proof::hash_domain::HashDomain,
-    a: &[u8],
-    b: &[u8],
-) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(domain.as_bytes());
-    hasher.update(a);
-    hasher.update(b);
-    let result = hasher.finalize();
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&result);
-    out
-}
