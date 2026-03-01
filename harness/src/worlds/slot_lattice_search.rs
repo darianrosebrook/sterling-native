@@ -220,6 +220,7 @@ impl WorldHarnessV1 for SlotLatticeSearch {
             layer_count: 1,
             slot_count: MAX_SLOTS,
             arg_slot_count: 3, // SET_SLOT takes 3 arg slots
+            evidence_obligations: vec![],
         }
     }
 

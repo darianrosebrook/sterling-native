@@ -27,6 +27,12 @@ pub struct FixtureDimensions {
     pub slot_count: usize,
     /// Fixed number of operator argument slots per frame.
     pub arg_slot_count: usize,
+    /// Evidence obligations declared by this world.
+    ///
+    /// Each obligation is a named, versioned contract (e.g., `"tool_transcript_v1"`)
+    /// that the verifier maps to specific verification steps. Defaults to empty
+    /// for worlds that don't require additional evidence artifacts.
+    pub evidence_obligations: Vec<String>,
 }
 
 /// Typed failure for world harness operations.

@@ -45,6 +45,7 @@ impl WorldHarnessV1 for RomeMiniSearch {
             layer_count: 1,
             slot_count: SLOT_COUNT,
             arg_slot_count: 3, // SET_SLOT takes 3 arg slots (layer, slot, value)
+            evidence_obligations: vec![],
         }
     }
 

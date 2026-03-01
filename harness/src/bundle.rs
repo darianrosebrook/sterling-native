@@ -324,6 +324,30 @@ pub enum BundleVerifyError {
     /// `concept_registry.json` semantic digest does not match
     /// `compilation_manifest.json.registry_hash`.
     ConceptRegistryDigestMismatch { in_artifact: String, in_manifest: String },
+    /// Cert: `evidence_obligations` includes `tool_transcript_v1` but
+    /// `tool_transcript.json` is absent from the bundle.
+    ToolTranscriptMissing,
+    /// `tool_transcript.json` content hash does not match report
+    /// `tool_transcript_digest`.
+    ToolTranscriptDigestMismatch { declared: String, recomputed: String },
+    /// Cert: independently rendered transcript does not byte-match the
+    /// shipped `tool_transcript.json`.
+    ToolTranscriptEquivalenceMismatch {
+        expected_hash: String,
+        rendered_hash: String,
+    },
+    /// `tool_transcript.json` `entry_count` does not match entries array length.
+    ToolTranscriptEntryCountMismatch { declared: usize, actual: usize },
+    /// `tool_transcript.json` `step_index` values are invalid.
+    ToolTranscriptStepIndexInvalid { detail: String },
+    /// `tool_transcript_digest` expected in report but missing.
+    ToolTranscriptDigestMissing,
+    /// Cert: tape contains tool operator frames but `evidence_obligations`
+    /// does not include `tool_transcript_v1`.
+    ObligationMismatch { detail: String },
+    /// Cert: a write to committed layer occurred before `OP_COMMIT`,
+    /// or a write occurred after `OP_ROLLBACK`.
+    CommittedWriteOrderViolation { step_index: usize, detail: String },
     /// Canonical JSON error during verification.
     CanonError { detail: String },
     /// Cert profile requires `search_tape.stap` but it is absent.
@@ -516,6 +540,9 @@ pub fn verify_bundle_with_profile(
 
     // Step 18: Tape verification (profile-dependent).
     verify_tape(bundle, profile)?;
+
+    // Step 19: Tool transcript verification (profile-dependent).
+    verify_tool_transcript(bundle, profile)?;
 
     Ok(())
 }
@@ -1773,6 +1800,313 @@ fn verify_tape(
         })?;
         if rendered_bytes != graph_art.content {
             return Err(BundleVerifyError::TapeGraphEquivalenceMismatch);
+        }
+    }
+
+    Ok(())
+}
+
+/// Tool transcript verification pipeline (profile-dependent).
+///
+/// Base: if `tool_transcript.json` present, verify digest binding only.
+/// Cert: obligation-gated + digest binding + structural integrity +
+///       equivalence render + trace-order audit.
+#[allow(clippy::too_many_lines)]
+fn verify_tool_transcript(
+    bundle: &ArtifactBundleV1,
+    profile: VerificationProfile,
+) -> Result<(), BundleVerifyError> {
+    let transcript_artifact = bundle.artifacts.get("tool_transcript.json");
+    let report_artifact = bundle.artifacts.get("verification_report.json");
+    let fixture_artifact = bundle.artifacts.get("fixture.json");
+    let tape_artifact = bundle.artifacts.get("search_tape.stap");
+
+    // Read evidence_obligations from fixture.json.
+    let obligations: Vec<String> = fixture_artifact
+        .and_then(|a| serde_json::from_slice::<serde_json::Value>(&a.content).ok())
+        .and_then(|v| {
+            v.get("evidence_obligations")
+                .and_then(|arr| arr.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+        })
+        .unwrap_or_default();
+
+    let has_obligation = obligations.iter().any(|o| o == "tool_transcript_v1");
+
+    // Step 19a: Cert obligation gating.
+    if profile == VerificationProfile::Cert && has_obligation && transcript_artifact.is_none() {
+        return Err(BundleVerifyError::ToolTranscriptMissing);
+    }
+
+    // If no transcript artifact, nothing more to verify (Base skips entirely,
+    // Cert without obligation skips).
+    let Some(transcript_art) = transcript_artifact else {
+        // Cert belt-and-suspenders: check if tape contains tool ops
+        // but obligation is missing.
+        if profile == VerificationProfile::Cert {
+            if let Some(tape_art) = tape_artifact {
+                if let Ok(tape) = read_tape(&tape_art.content) {
+                    if crate::transcript::tape_contains_tool_ops(&tape) && !has_obligation {
+                        return Err(BundleVerifyError::ObligationMismatch {
+                            detail: "tape contains tool operator frames but \
+                                evidence_obligations does not include \
+                                \"tool_transcript_v1\""
+                                .to_string(),
+                        });
+                    }
+                }
+            }
+        }
+        return Ok(());
+    };
+
+    // Step 19b: Digest binding (report `tool_transcript_digest` == artifact content_hash).
+    if let Some(report_art) = report_artifact {
+        let report: serde_json::Value =
+            serde_json::from_slice(&report_art.content).map_err(|e| {
+                BundleVerifyError::ReportParseError {
+                    detail: format!("{e:?}"),
+                }
+            })?;
+
+        if let Some(declared) = report.get("tool_transcript_digest").and_then(|v| v.as_str()) {
+            if transcript_art.content_hash.as_str() != declared {
+                return Err(BundleVerifyError::ToolTranscriptDigestMismatch {
+                    declared: declared.to_string(),
+                    recomputed: transcript_art.content_hash.as_str().to_string(),
+                });
+            }
+        } else {
+            // Transcript artifact exists but report missing digest.
+            return Err(BundleVerifyError::ToolTranscriptDigestMissing);
+        }
+    }
+
+    // Step 19c: Structural integrity.
+    let transcript: serde_json::Value =
+        serde_json::from_slice(&transcript_art.content).map_err(|e| {
+            BundleVerifyError::CanonError {
+                detail: format!("tool_transcript.json parse: {e:?}"),
+            }
+        })?;
+
+    // entry_count == entries.len()
+    let entries = transcript
+        .get("entries")
+        .and_then(serde_json::Value::as_array)
+        .ok_or(BundleVerifyError::CanonError {
+            detail: "tool_transcript.json missing entries array".to_string(),
+        })?;
+    #[allow(clippy::cast_possible_truncation)]
+    let declared_count = transcript
+        .get("entry_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0) as usize;
+    if declared_count != entries.len() {
+        return Err(BundleVerifyError::ToolTranscriptEntryCountMismatch {
+            declared: declared_count,
+            actual: entries.len(),
+        });
+    }
+
+    // step_index non-decreasing (multiple candidates in the same expansion
+    // share the same expansion_order, so equal is valid)
+    let mut prev_step: Option<u64> = None;
+    for entry in entries {
+        let step = entry
+            .get("step_index")
+            .and_then(serde_json::Value::as_u64)
+            .ok_or(BundleVerifyError::ToolTranscriptStepIndexInvalid {
+                detail: "entry missing step_index".to_string(),
+            })?;
+        if let Some(prev) = prev_step {
+            if step < prev {
+                return Err(BundleVerifyError::ToolTranscriptStepIndexInvalid {
+                    detail: format!(
+                        "step_index {step} not non-decreasing (prev {prev})"
+                    ),
+                });
+            }
+        }
+        prev_step = Some(step);
+    }
+
+    // Step 19d (Cert only): Equivalence render from tape.
+    if profile == VerificationProfile::Cert {
+        if let Some(tape_art) = tape_artifact {
+            let tape = read_tape(&tape_art.content).map_err(|e| {
+                BundleVerifyError::CanonError {
+                    detail: format!("tape parse for transcript equivalence: {e:?}"),
+                }
+            })?;
+
+            // Use the kernel operator registry for rendering.
+            // The bundle's operator_registry.json must match the kernel's
+            // registry (verified by Step 16-17), so this is equivalent.
+            let op_reg =
+                sterling_kernel::operators::operator_registry::kernel_operator_registry();
+
+            let world_id = transcript
+                .get("world_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            let rendered_bytes =
+                crate::transcript::render_tool_transcript(&tape, &op_reg, world_id)
+                    .map_err(|e| BundleVerifyError::CanonError {
+                        detail: format!("transcript render: {e}"),
+                    })?;
+
+            if rendered_bytes != transcript_art.content {
+                let rendered_hash =
+                    canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &rendered_bytes);
+                return Err(BundleVerifyError::ToolTranscriptEquivalenceMismatch {
+                    expected_hash: transcript_art.content_hash.as_str().to_string(),
+                    rendered_hash: rendered_hash.as_str().to_string(),
+                });
+            }
+
+            // Cert belt-and-suspenders: if tape contains tool ops, obligation must be declared.
+            if crate::transcript::tape_contains_tool_ops(&tape) && !has_obligation {
+                return Err(BundleVerifyError::ObligationMismatch {
+                    detail: "tape contains tool operator frames but \
+                        evidence_obligations does not include \"tool_transcript_v1\""
+                        .to_string(),
+                });
+            }
+
+            // Step 19e (Cert only): Trace-order audit for committed-write safety.
+            verify_trace_order_safety(&tape)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Cert trace-order audit: verify committed-write safety on the winning path.
+///
+/// Only checks the goal path (root → goal node), not all explored branches.
+/// The search tape records all expansions across all branches; checking
+/// global tape order would false-positive on legitimate branch exploration.
+///
+/// Rules (on winning path only):
+/// - No writes to layer 0 (via `SET_SLOT`) before `OP_COMMIT` has been applied.
+/// - No writes to any layer after `OP_ROLLBACK` has been applied.
+fn verify_trace_order_safety(
+    tape: &sterling_search::tape::SearchTapeV1,
+) -> Result<(), BundleVerifyError> {
+    use std::collections::HashMap;
+    use sterling_kernel::operators::apply::{OP_COMMIT, OP_ROLLBACK, OP_SET_SLOT, OP_STAGE};
+    use sterling_search::graph::TerminationReasonV1;
+    use sterling_search::tape::{TapeCandidateOutcomeV1, TapeRecordV1};
+
+    // Find the goal node from termination.
+    let goal_node = tape.records.iter().find_map(|r| {
+        if let TapeRecordV1::Termination(t) = r {
+            if let TerminationReasonV1::GoalReached { node_id } = t.reason {
+                return Some(node_id);
+            }
+        }
+        None
+    });
+    let Some(goal_node) = goal_node else {
+        // No goal reached → no winning path to audit.
+        return Ok(());
+    };
+
+    // Build node_id → parent_id map from NodeCreation records.
+    let mut parent_map: HashMap<u64, Option<u64>> = HashMap::new();
+    for record in &tape.records {
+        if let TapeRecordV1::NodeCreation(nc) = record {
+            parent_map.insert(nc.node_id, nc.parent_id);
+        }
+    }
+
+    // Walk backwards from goal to root to collect winning path node IDs.
+    let mut path_nodes: Vec<u64> = Vec::new();
+    let mut current = goal_node;
+    loop {
+        path_nodes.push(current);
+        match parent_map.get(&current) {
+            Some(Some(parent)) => current = *parent,
+            _ => break, // root node (parent_id = None) or not found
+        }
+    }
+    path_nodes.reverse(); // root → goal order
+
+    // Build node_id → expansion index for winning path nodes.
+    let path_node_set: std::collections::HashSet<u64> = path_nodes.iter().copied().collect();
+
+    // Collect the applied candidates on the winning path in expansion order.
+    // For each expansion of a path node, find the candidate that transitions
+    // to the next node on the path.
+    let mut winning_candidates: Vec<(u64, sterling_kernel::carrier::code32::Code32, Vec<u8>)> =
+        Vec::new();
+    for record in &tape.records {
+        let TapeRecordV1::Expansion(expansion) = record else {
+            continue;
+        };
+        if !path_node_set.contains(&expansion.node_id) {
+            continue;
+        }
+        for candidate in &expansion.candidates {
+            if let TapeCandidateOutcomeV1::Applied { to_node } = &candidate.outcome {
+                if path_node_set.contains(to_node) {
+                    let op_code = sterling_kernel::carrier::code32::Code32::from_le_bytes(
+                        candidate.op_code_bytes,
+                    );
+                    winning_candidates.push((
+                        expansion.expansion_order,
+                        op_code,
+                        candidate.op_args.clone(),
+                    ));
+                }
+            }
+        }
+    }
+
+    // Check rules on winning path candidates in order.
+    let mut commit_seen = false;
+    let mut rollback_seen = false;
+
+    for (exp_order, op_code, op_args) in &winning_candidates {
+        // Rule 1: No writes after rollback.
+        if rollback_seen
+            && (op_code == &OP_SET_SLOT || op_code == &OP_STAGE || op_code == &OP_COMMIT)
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            return Err(BundleVerifyError::CommittedWriteOrderViolation {
+                step_index: *exp_order as usize,
+                detail: format!(
+                    "write (op {op_code:?}) after OP_ROLLBACK at expansion {exp_order}"
+                ),
+            });
+        }
+
+        // Rule 2: No layer 0 writes before commit.
+        if op_code == &OP_SET_SLOT && !commit_seen && op_args.len() >= 4 {
+            let layer =
+                u32::from_le_bytes([op_args[0], op_args[1], op_args[2], op_args[3]]);
+            if layer == 0 {
+                #[allow(clippy::cast_possible_truncation)]
+                return Err(BundleVerifyError::CommittedWriteOrderViolation {
+                    step_index: *exp_order as usize,
+                    detail: format!(
+                        "SET_SLOT to layer 0 before OP_COMMIT at expansion {exp_order}"
+                    ),
+                });
+            }
+        }
+
+        // Track state after checks.
+        if op_code == &OP_COMMIT {
+            commit_seen = true;
+        } else if op_code == &OP_ROLLBACK {
+            rollback_seen = true;
         }
     }
 
