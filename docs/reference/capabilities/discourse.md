@@ -3,7 +3,7 @@ authority: reference
 status: advisory
 date: 2026-03-01
 capability: discourse
-parity_audit_sections: "H2"
+parity_capabilities: [H2]
 ---
 
 # Discourse and Intent
@@ -76,6 +76,18 @@ The sterling Python repo defined discourse-level operators: SELECT_GOAL_TYPE, BI
 This document covers capability **H2** (Discourse / speech act contracts) from the [parity audit](../../architecture/v1_v2_parity_audit.md).
 
 Current status: **Not started.** The parity audit notes that the sterling Python repo's contract promotion queue marks this capability as "Rewrite" — indicating that the design should be reconsidered rather than ported directly.
+
+### What exists today (verifiable)
+
+- Operator taxonomy with category codes — `kernel/src/operators/operator_registry.rs` (M, S, P, K, C categories)
+- Advisory/authoritative trust boundary — `docs/adr/0003-neural-advisory-not-authoritative.md`
+
+### What is proposed (not implemented)
+
+- An IntentFamily taxonomy (Inform, Query, Direct, Commit, Meta) for speech act classification
+- Discourse operators that transform IR at the pragmatics layer
+- A discourse state type tracking conversational context across turns
+- Speech act certification (a SpeechActWitness type binding utterance to intent classification)
 
 This is the furthest-out capability in the migration plan. Prerequisites include:
 - Text boundary contract (see [text_boundary reference](text_boundary.md)) — discourse operates on text IR, not raw surface text

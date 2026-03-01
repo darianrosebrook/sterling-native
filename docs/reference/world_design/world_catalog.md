@@ -55,14 +55,16 @@ tampering, scorer digest mismatch, operator registry bypass.
 Parameterized N-slot x V-value world with configurable traps, goals, and
 policy knobs. Six canonical regimes exercise distinct failure modes:
 
-| Regime | Config | Exercises |
-|--------|--------|-----------|
-| truncation | N=8, V=4, cap=5 | Candidate truncation (32 candidates → 5) |
-| duplicates | N=4, V=2, goal=Never | Duplicate suppression from permuted slot assignments |
-| exhaustive_dead_end | N=4, V=3, trap=Slot0Eq(2) | Trap avoidance, dead-end detection |
-| budget_limited | N=6, V=3, max_expansions=3 | Early budget termination |
-| scale_1000 | N=10, V=4, 1000 expansions | Performance envelope, large state space |
-| frontier_pressure | N=6, V=3, max_frontier=8 | Frontier pruning under pressure |
+| Constructor | Config | Exercises |
+|-------------|--------|-----------|
+| `regime_truncation()` | N=8, V=4, cap=5 | Candidate truncation (32 candidates → 5) |
+| `regime_duplicates()` | N=4, V=2, goal=Never | Duplicate suppression from permuted slot assignments |
+| `regime_exhaustive_dead_end()` | N=4, V=3, trap=Slot0Eq(2) | Trap avoidance, dead-end detection |
+| `regime_budget_limited()` | N=6, V=3, max_expansions=3 | Early budget termination |
+| `regime_scale_1000()` | N=10, V=4, 1000 expansions | Performance envelope, large state space |
+| `regime_frontier_pressure()` | N=6, V=3, max_frontier=8 | Frontier pruning under pressure |
+
+Source: `harness/src/worlds/slot_lattice_regimes.rs`
 
 **Capability axes exercised:** (4) adversarial robustness (trap regimes),
 (7) transfer (same search contracts across regimes), (10) compute governance

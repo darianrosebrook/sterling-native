@@ -3,7 +3,7 @@ authority: reference
 status: advisory
 date: 2026-03-01
 capability: induction
-parity_audit_sections: "F1"
+parity_capabilities: [F1]
 ---
 
 # Operator Induction Pipeline
@@ -93,7 +93,15 @@ This document covers capability **F1** (Operator induction pipeline) from the [p
 
 Current status: **Not started.** The parity audit identifies this as an intentional redesign — the sterling Python repo's pipeline will be compressed to 5 modules with evaluators as the extension point.
 
-Import obligations from the parity audit (Import Group D):
-- Propose-evaluate-promote loop producing promotable operators (or operator policies) with regression gates
-- Standard evaluation packet format so future worlds slot in without bespoke pipelines
-- Start with inducing a policy/scorer table; graduate to inducing operator definitions once the registry exists
+### What exists today (verifiable)
+
+- Operator registry with typed signatures — `kernel/src/operators/operator_registry.rs` `OperatorRegistryV1`
+- Three-phase apply() with effect validation — `kernel/src/operators/apply.rs`
+- Content-addressed operator artifacts in evidence bundles — `harness/src/bundle.rs` `operator_registry.json`
+
+### What is proposed (not implemented)
+
+- A propose→evaluate→promote lifecycle for new operators (Shadow → Provisional → Production)
+- An identifiability gate requiring learned operators to outperform UniformScorer on held-out instances
+- Promotion gate types (a PromotionGate evaluator) with campaign evidence requirements
+- Evaluator extension points for custom promotion criteria

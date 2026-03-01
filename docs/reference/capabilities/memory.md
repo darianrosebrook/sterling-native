@@ -3,7 +3,7 @@ authority: reference
 status: advisory
 date: 2026-03-01
 capability: memory
-parity_audit_sections: "E1, E2, E3"
+parity_capabilities: [E1, E2, E3]
 ---
 
 # Memory Substrate
@@ -80,10 +80,19 @@ This parallels the existing `apply()` contract: operators declare their effects 
 
 This document covers capabilities **E1** (Semantic Working Memory), **E2** (Landmarks + compression), and **E3** (Decay / activation dynamics) from the [parity audit](../../architecture/v1_v2_parity_audit.md).
 
-All three are currently **Not started** in the native substrate. The parity audit identifies the following import obligations:
+All three are currently **Not started** in the native substrate.
 
-- Episode identity and durable summaries (landmarks or equivalent)
-- Governed memory updates (operators or explicit post-pass artifacts)
-- Content-addressed, bundle-linked memory artifacts
+### What exists today (verifiable)
+
+- Content-addressed hash chains proven for search tape — `kernel/src/proof/trace_hash.rs` `step_chain()`
+- Budget-driven resource governance — `search/src/policy.rs` `SearchPolicyV1` budget caps
+- Operator effect validation framework — `kernel/src/operators/apply.rs` three-phase apply()
+
+### What is proposed (not implemented)
+
+- A four-status memory lifecycle (Committed/Shadow/Weak/Frontier) with planning boundary enforcement
+- A MeaningStateDigest chain linking memory states to episode evidence
+- Compaction as a registered operator with witness artifacts (an EvictsEntriesByBudget effect kind)
+- Certified corridor promotion (a CorridorGate type sharing governance surface with operator induction)
 
 See also Import Group E (Memory MVP) in the parity audit for the strategic context.

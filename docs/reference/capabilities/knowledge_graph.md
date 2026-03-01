@@ -3,7 +3,7 @@ authority: reference
 status: advisory
 date: 2026-03-01
 capability: knowledge_graph
-parity_audit_sections: "D1, D2"
+parity_capabilities: [D1, D2]
 ---
 
 # Knowledge Graph
@@ -87,16 +87,18 @@ Options include: KG as a pre-compilation lookup (resolve entities before compile
 
 This document covers knowledge graph aspects relevant to capabilities **D1** (World harness contract — specifically domain specification as a world-level concern) and **D2** (Transfer packs / certification packets — specifically how KG artifacts participate in transfer evidence) from the [parity audit](../../architecture/v1_v2_parity_audit.md).
 
-What v2 already proves:
-- RegistryV1 bijective Code32-to-ConceptID mapping (A1, A3: **Implemented**)
-- Content-addressed artifacts with canonical JSON (A2: **Implemented**)
-- World harness contract with typed trait bounds (D1: **Implemented, structural**)
+### What exists today (verifiable)
 
-What remains:
-- Entity identity beyond concept IDs (KGRef)
-- Typed relation storage and querying
-- Domain specification system for capability absorption
-- External sense bridges with advisory governance
-- TransferPackV1 schema tying claims to artifacts to verification profiles (D2)
+- RegistryV1 bijective Code32-to-ConceptID mapping — `kernel/src/carrier/registry.rs` (A1, A3: **Implemented**)
+- Content-addressed artifacts with canonical JSON — `kernel/src/proof/canon.rs` (A2: **Implemented**)
+- World harness contract with typed trait bounds — `harness/src/contract.rs` (D1: **Implemented, structural**)
+
+### What is proposed (not implemented)
+
+- Entity identity beyond concept IDs (a KGRef type computed via `canonical_hash` with dedicated domain separator)
+- Typed relation storage (a triple store with content-addressed relation identity)
+- Domain specification system for capability absorption (a DomainSpec type with entity schema + action surface)
+- External sense bridges with advisory governance (bridges as advisory input, commitment as governed operator)
+- A TransferPack schema tying claims to artifacts to verification profiles (D2)
 
 See Import Group A (Truth-regime world diversity) in the parity audit for how domain specs connect to the broader world diversity goal — each new truth regime would be accompanied by a domain spec defining its entity schema and action surface.

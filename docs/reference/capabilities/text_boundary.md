@@ -3,7 +3,7 @@ authority: reference
 status: advisory
 date: 2026-03-01
 capability: text_boundary
-parity_audit_sections: "H1"
+parity_capabilities: [H1]
 ---
 
 # Text Boundary and Realization
@@ -77,10 +77,19 @@ This aligns with the existing `apply()` contract where operators declare effects
 
 This document covers capability **H1** (Text IO boundary, IR partitions) from the [parity audit](../../architecture/v1_v2_parity_audit.md).
 
-Current status: **Not started.** The parity audit notes the open decision of whether to implement the sterling Python repo's four-partition IR or design a new realization pipeline.
+Current status: **Not started.**
 
-Import obligations from the parity audit (Import Group F):
-- A minimal text boundary demo: parse/render components as advisory, never authority
-- A verifiable realization artifact surface (even if the realizer remains Python)
+### What exists today (verifiable)
+
+- Advisory/authoritative trust boundary principle — `docs/adr/0003-neural-advisory-not-authoritative.md`
+- Slot lifecycle (Hole → Provisional → Committed) in ByteState — `kernel/src/carrier/bytestate.rs`
+- Operator witness framework — `kernel/src/operators/apply.rs` with `EffectKind` declarations
+
+### What is proposed (not implemented)
+
+- A text IR type (either encoded into ByteState slots or a parallel TextStateV1) with typed holes
+- Parse boundary producing content-addressed IR artifacts
+- Render boundary explicitly marked non-authoritative
+- Witnessed IR transforms as registered operators (an OperatorWitness type for linguistic delta patches)
 
 See also capability **H2** (Discourse / speech act contracts) in the parity audit, covered by the companion [discourse reference](discourse.md).

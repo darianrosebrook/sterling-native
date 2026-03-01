@@ -10,7 +10,7 @@ purpose: "Capability-level migration map from Sterling v1 to v2. Defines proof o
 
 Sterling Native (v2) has crossed the threshold from substrate prototype to a coherent deterministic execution + search + evidence system. This audit enumerates the capabilities v1 delivered (or claimed), maps each to its v2 implementation status, and produces an explicit migration plan for what v2 must implement (or intentionally deprecate). Advisory reference docs (proof obligations, design rationale) live under `docs/reference/`.
 
-This is not a doc-promotion list (that's [`v1_contract_promotion_queue.md`](v1_contract_promotion_queue.md)). It is a capability-level parity map with proof obligations.
+This is a capability-level parity map with proof obligations. Legacy contract dispositions are in the appendix below.
 
 ## Definitions
 
@@ -328,7 +328,7 @@ v1 is not code to port — it is a catalog of proof obligations. Each group belo
 | Partial observability | `capabilities/memory.md` §belief, `world_design/capability_axes.md` §partial-obs *(advisory)* | Belief discipline via probe operators and trace-visible belief changes. Belief set monotonicity under probes. No hidden observation channels. | Mastermind-like world |
 | Stochastic certification | `design_rationale/conformance.md` §distributional *(advisory)* | Seed/witness binding so certification binds to evidence, not "the environment." Exact replay from recorded evidence; distributional evaluation over seed sets. | Slippery Grid world |
 
-**Guardrail (G6)**: Enforce "tools are modeled, not executed" initially. Stage/commit/rollback should be trace-visible contracts with transcripts; real side effects come later behind an explicit non-cert mode.
+**Guardrail (GR-6)**: Enforce "tools are modeled, not executed" initially. Stage/commit/rollback should be trace-visible contracts with transcripts; real side effects come later behind an explicit non-cert mode.
 
 ### Import Group B: Operator registry + lifecycle
 
@@ -344,7 +344,7 @@ v1 is not code to port — it is a catalog of proof obligations. Each group belo
 
 **Advisory reference**: `docs/reference/design_rationale/operator_policy.md`.
 
-**Guardrail (G7)**: This is Phase 0, not Phase 2. See §Operator Registry MVP below.
+**Guardrail (GR-7)**: This is Phase 0, not Phase 2. See §Operator Registry MVP below.
 
 ### Import Group C: Governance / certification campaigns
 
@@ -358,7 +358,7 @@ v1 is not code to port — it is a catalog of proof obligations. Each group belo
 
 **Advisory reference**: `docs/reference/capabilities/governance.md`, `docs/reference/design_rationale/conformance.md`.
 
-**Guardrail (G1)**: Write an ADR pinning certification authority. If Python is the control plane, every Python cert must be reducible to a set of Rust-verified artifacts + explicit policy/campaign metadata.
+**Guardrail (GR-1)**: Write an ADR pinning certification authority. If Python is the control plane, every Python cert must be reducible to a set of Rust-verified artifacts + explicit policy/campaign metadata.
 
 ### Import Group D: Induction pipeline (collapsed)
 
@@ -401,7 +401,7 @@ v1 is not code to port — it is a catalog of proof obligations. Each group belo
 
 Eight footgun risks identified during cross-codebase audit. These are authority and format problems that create long-lived drift if not addressed early.
 
-### G1. Two v2 codebases without a hard authority boundary
+### GR-1. Two v2 codebases without a hard authority boundary (formerly G1)
 
 **Risk**: "Rust owns the corridor; Python owns everything above" is workable, but becomes a corner if you don't force a single certification authority decision. Otherwise two quasi-authorities emerge: Rust verifies bundles, Python issues governance claims that may or may not be mechanically reducible to those bundles.
 
@@ -409,7 +409,7 @@ Eight footgun risks identified during cross-codebase audit. These are authority 
 
 **Status**: Resolved — ADR 0006.
 
-### G2. Competing evidence packaging (ArtifactBundleV1 vs H2/TD-12)
+### GR-2. Competing evidence packaging (ArtifactBundleV1 vs H2/TD-12) (formerly G2)
 
 **Risk**: The biggest long-term coherence risk. Rust bundles are clean, deterministic, fail-closed. Python's H2/TD-12 is a richer governance attestation system. If both evolve independently, you pay a permanent "translation tax" and every future claim must answer "which bundle is canonical?"
 
@@ -419,13 +419,13 @@ Eight footgun risks identified during cross-codebase audit. These are authority 
 
 **Status**: Resolved — ADR 0007.
 
-### G3. Cross-codebase compatibility without equivalence harness
+### GR-3. Cross-codebase compatibility without equivalence harness (formerly G3)
 
 **Risk**: Docs assert shared wire formats and compatibility. Without mechanical enforcement, drift appears in tiny places (domain prefix registries, canonical JSON edge cases, schema descriptor differences), and docs quietly become aspirational again.
 
 **Guardrail**: Treat cross-codebase equivalence as a first-class capability with lock tests. See §Cross-Codebase Equivalence Harness below.
 
-### G4. Hash domain prefix registry fragmentation
+### GR-4. Hash domain prefix registry fragmentation (formerly G4)
 
 **Risk**: Domain constants defined across crates (`kernel/src/proof/hash.rs`, `harness/src/bundle.rs`, `search/src/node.rs`). New domains get added opportunistically → eventual collision or accidental semantic changes.
 
@@ -433,7 +433,7 @@ Eight footgun risks identified during cross-codebase audit. These are authority 
 
 **Status**: **Resolved — HASH-001** (`e2ccfc0`). All 21 domains live in `HashDomain` enum (`kernel/src/proof/hash_domain.rs`). `canonical_hash()` accepts only `HashDomain`, not raw bytes. Lock test `hash_domain_lock.rs` enforces: canonical set count, byte uniqueness, null-termination, `STERLING::*::V1\0` naming, no raw `b"STERLING::"` literals in production source, no `deny_unknown_fields`.
 
-### G5. Search evidence schema ossification before truth-regime worlds land
+### GR-5. Search evidence schema ossification before truth-regime worlds land (formerly G5)
 
 **Risk**: SearchGraphV1 / SearchTapeV1 are canonical surfaces. Once tool-use / partial observability / stochastic worlds land, you may need additional binding fields or event types that don't fit without version churn.
 
@@ -445,19 +445,19 @@ Don't pretend the current schema won't face extension pressure once worlds diver
 
 **Status**: Resolved — ADR 0008. Additive fields within a version; breaking changes require bumps.
 
-### G6. Tool worlds executing real side effects
+### GR-6. Tool worlds executing real side effects (formerly G6)
 
 **Risk**: A transactional tool world can be modeled as pure state transitions, but only if "tool I/O" is an evidence artifact (transcript) bound into the verification story. If you implement tool worlds that actually perform side effects at runtime ("just for the demo"), you'll fight your own determinism model.
 
 **Guardrail**: Enforce "tools are modeled, not executed" at first. Stage/commit/rollback should be trace-visible contracts with transcripts. Real side effects come later behind an explicit non-cert mode.
 
-### G7. Delaying operator registry too long
+### GR-7. Delaying operator registry too long (formerly G7)
 
 **Risk**: You can build truth-regime worlds with a minimal operator surface, but if stable operator IDs + signature legality + packaging are postponed, semantics get encoded into "world-specific candidate enumeration." Later induction/promotion will have nothing stable to hook into.
 
 **Guardrail**: Operator registry MVP is Phase 0. See §Operator Registry MVP. Don't import the whole v1 operator universe; instead define a very small registry that makes governance and learning possible later: stable IDs, signature masks, legality checks, minimal packaging/export surface.
 
-### G8. Parallel docs without enforcement
+### GR-8. Parallel docs without enforcement (formerly G8)
 
 **Risk**: Two parallel documents drift: parity audit in sterling-native and supersession map in sterling.
 
@@ -578,7 +578,7 @@ All worlds must run under the same harness contract (`WorldHarnessV1` + `SearchW
 
 ## Cross-Codebase Equivalence Harness
 
-Sterling (Python) and sterling-native (Rust) share wire formats (.bst1, canonical JSON, Code32 layout). Claiming compatibility without mechanical enforcement is a footgun (G3). This harness makes it testable.
+Sterling (Python) and sterling-native (Rust) share wire formats (.bst1, canonical JSON, Code32 layout). Claiming compatibility without mechanical enforcement is a footgun (GR-3). This harness makes it testable.
 
 **Minimal fixture set where both codebases must produce byte-identical artifacts**:
 
@@ -669,7 +669,7 @@ These must be resolved to complete parity. Each should become a decision record 
 - **[`clean_sheet_architecture.md`](clean_sheet_architecture.md)**: The target architecture. This audit measures progress against that target.
 - **[`docs/canonical/search_evidence_contract.md`](../canonical/search_evidence_contract.md)**: The v2 canonical doc that supersedes v1's proof/evidence system for the search layer.
 - **[`docs/reference/`](../reference/README.md)**: Version-agnostic advisory docs preserving proof obligations, design rationale, and world design framing.
-- **Sterling `docs/architecture/v1_v2_supersession_map.md`**: The Python-side view of this same mapping. This parity audit is the primary source of truth (G8); the supersession map summarizes and links here.
+- **Sterling `docs/architecture/v1_v2_supersession_map.md`**: The Python-side view of this same mapping. This parity audit is the primary source of truth (GR-8); the supersession map summarizes and links here.
 
 ---
 

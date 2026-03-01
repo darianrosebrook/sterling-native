@@ -8,7 +8,8 @@ Validates that markdown files in docs/ follow the doc authority policy:
 - Authority-specific banned terms (e.g. canonical forbids ephemeral language)
 - Link hygiene: resolves relative links and checks target existence
 - No ephemeral docs staged for commit
-- README/index files and docs/reference/v1/ are exempt
+- README/index files are exempt
+- Parity ID validation for reference docs
 
 Usage:
     # Lint staged files only (for pre-commit hook)
@@ -39,11 +40,11 @@ PATH_AUTHORITY_MAP = {
     "docs/policy/": "policy",
     "docs/adr/": "adr",
     "docs/architecture/": "architecture",
+    "docs/reference/": "reference",
 }
 
 # Paths that are exempt from authority checks
 EXEMPT_PREFIXES = (
-    "docs/reference/v1/",
     "docs/templates/",
     "docs/MOC/",        # generated inventory outputs
     "docs/_index/",     # generated structural index
@@ -96,6 +97,70 @@ AUTHORITY_BANNED_TERMS: dict[str, list[tuple[re.Pattern, str]]] = {
          "ADRs must not reference ephemeral doc concepts"),
     ],
 }
+
+# Stale v1 path — hard error in any doc
+STALE_V1_LINK_RE = re.compile(r"reference/v1/")
+
+# --- Parity ID validation ---
+# Capability IDs from the parity audit §Capability Parity Matrix
+VALID_CAPABILITY_IDS = {
+    "A1", "A2", "A3", "A4",
+    "B1", "B2", "B3",
+    "C1", "C2", "C3",
+    "D1", "D2",
+    "E1", "E2", "E3",
+    "F1",
+    "G1",
+    "H1", "H2",
+}
+
+# Guardrail IDs from the parity audit §Guardrails (GR- prefix disambiguates from capabilities)
+VALID_GUARDRAIL_IDS = {
+    "GR-1", "GR-2", "GR-3", "GR-4", "GR-5", "GR-6", "GR-7", "GR-8",
+}
+
+# Front-matter field regexes for parity IDs
+PARITY_CAPABILITIES_RE = re.compile(r"^parity_capabilities:\s*\[(.+)\]$", re.MULTILINE)
+PARITY_GUARDRAILS_RE = re.compile(r"^parity_guardrails:\s*\[(.+)\]$", re.MULTILINE)
+# Deprecated field — warn only
+PARITY_AUDIT_SECTIONS_RE = re.compile(r"^parity_audit_sections:", re.MULTILINE)
+
+
+def validate_parity_ids(frontmatter: str, filepath: str) -> list[str]:
+    """Validate parity_capabilities and parity_guardrails front-matter fields."""
+    errors = []
+
+    # Deprecated field: warn only
+    if PARITY_AUDIT_SECTIONS_RE.search(frontmatter):
+        errors.append(
+            f"WARN: {filepath}: deprecated field 'parity_audit_sections' — "
+            f"migrate to 'parity_capabilities' / 'parity_guardrails'"
+        )
+
+    # Validate capability IDs
+    cap_match = PARITY_CAPABILITIES_RE.search(frontmatter)
+    if cap_match:
+        ids = [s.strip().strip('"').strip("'") for s in cap_match.group(1).split(",")]
+        for cid in ids:
+            if cid and cid not in VALID_CAPABILITY_IDS:
+                errors.append(
+                    f"{filepath}: invalid parity_capabilities ID '{cid}' "
+                    f"(valid: {', '.join(sorted(VALID_CAPABILITY_IDS))})"
+                )
+
+    # Validate guardrail IDs
+    gr_match = PARITY_GUARDRAILS_RE.search(frontmatter)
+    if gr_match:
+        ids = [s.strip().strip('"').strip("'") for s in gr_match.group(1).split(",")]
+        for gid in ids:
+            if gid and gid not in VALID_GUARDRAIL_IDS:
+                errors.append(
+                    f"{filepath}: invalid parity_guardrails ID '{gid}' "
+                    f"(valid: {', '.join(sorted(VALID_GUARDRAIL_IDS))})"
+                )
+
+    return errors
+
 
 def resolve_link(source_filepath: str, target: str) -> Path:
     """Resolve a relative link target against its source file's directory."""
@@ -274,6 +339,22 @@ def lint_file(filepath: str, staged: bool = False) -> list[str]:
         if pattern.search(body):
             errors.append(f"{filepath}: {reason}")
 
+    # Stale v1 reference path check — only flag in markdown link targets
+    for link_match in LINK_RE.finditer(body):
+        target = link_match.group(2)
+        if STALE_V1_LINK_RE.search(target):
+            errors.append(
+                f"{filepath}: link target contains stale 'reference/v1/' path: '{target}' — "
+                f"update to docs/reference/ (v1 directory deleted)"
+            )
+            break  # one error per file is sufficient
+
+    # Parity ID validation (reference docs only)
+    if authority == "reference":
+        fm_match = FRONTMATTER_RE.search(content)
+        if fm_match:
+            errors.extend(validate_parity_ids(fm_match.group(1), filepath))
+
     # Link hygiene: resolve relative links and check target existence
     for link_match in LINK_RE.finditer(body):
         target = link_match.group(2)
@@ -307,16 +388,32 @@ def main():
     if not files:
         sys.exit(0)
 
-    all_errors = []
+    all_messages = []
     for filepath in files:
-        all_errors.extend(lint_file(filepath, staged=args.staged))
+        all_messages.extend(lint_file(filepath, staged=args.staged))
 
-    if all_errors:
+    # Separate warnings (non-blocking) from errors (blocking)
+    warnings = [m for m in all_messages if m.startswith("WARN:")]
+    errors = [m for m in all_messages if not m.startswith("WARN:")]
+
+    if warnings:
+        print("Doc authority lint warnings:", file=sys.stderr)
+        for warn in warnings:
+            print(f"  {warn}", file=sys.stderr)
+
+    if errors:
         print("Doc authority lint errors:", file=sys.stderr)
-        for error in all_errors:
+        for error in errors:
             print(f"  {error}", file=sys.stderr)
-        print(f"\n{len(all_errors)} error(s) found. See docs/policy/doc_authority_policy.md.", file=sys.stderr)
+        total = len(errors)
+        if warnings:
+            print(f"\n{total} error(s), {len(warnings)} warning(s). See docs/policy/doc_authority_policy.md.", file=sys.stderr)
+        else:
+            print(f"\n{total} error(s) found. See docs/policy/doc_authority_policy.md.", file=sys.stderr)
         sys.exit(1)
+
+    if warnings:
+        print(f"\n{len(warnings)} warning(s), 0 errors.", file=sys.stderr)
 
     sys.exit(0)
 
