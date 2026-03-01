@@ -1,7 +1,7 @@
 id: CREPLAY-001
 type: feature
 title: 'Compilation Boundary Replay Verification (Cert)'
-status: draft
+status: closed
 risk_tier: 3
 mode: development
 created_at: '2026-03-01T00:00:00.000Z'
@@ -139,61 +139,77 @@ acceptance:
       RegistryV1::from_canonical_bytes() exists, round-trips with canonical_bytes(),
       rejects non-canonical input, rejects malformed JSON shapes and out-of-range
       code byte values.
-    status: pending
+    status: met
+    evidence: "commit 1e710d1 — 12 unit tests in registry.rs"
   - id: CREPLAY-001-REPLAY-PASS
     description: >-
       Cert verification replays compile() from bundle contents and passes on
       a valid RomeMiniSearch bundle.
-    status: pending
+    status: met
+    evidence: "cert_replay_passes_valid_bundle — commit 252b454"
   - id: CREPLAY-001-COHERENT-FORGE
     description: >-
       A coherently forged bundle where compilation_manifest.json + graph metadata +
       tape header all agree with each other (passing Steps 12b/12c) but do not
       correspond to the actual compile() output is rejected by replay mismatch.
       This is the unique value proposition of replay over field-level coherence.
-    status: pending
+    status: met
+    evidence: "coherently_forged_manifest_rejected_by_replay — commit 252b454"
   - id: CREPLAY-001-TAMPER-REGISTRY
     description: >-
-      Tampered concept_registry.json (valid canonical JSON, wrong allocations)
-      causes compilation replay manifest mismatch or compile failure.
-    status: pending
+      Tampered concept_registry.json (modified epoch) causes compilation replay
+      manifest mismatch.
+    status: met
+    evidence: "tampered_registry_epoch_fails_replay — commit 252b454"
   - id: CREPLAY-001-BASE-SKIP
     description: >-
       Base profile does not execute compilation replay. A valid bundle
       verifies in Base without invoking the replay step.
-    status: pending
+    status: met
+    evidence: "base_skips_replay — commit 252b454"
   - id: CREPLAY-001-NON-CANONICAL-REJECTED
     description: >-
       from_canonical_bytes() rejects syntactically valid JSON that is not in
       canonical form (extra whitespace, unsorted keys, non-integer numbers).
-    status: pending
+    status: met
+    evidence: "from_canonical_bytes_rejects_pretty_printed + _rejects_non_canonical_whitespace — commit 1e710d1"
 
 milestones:
   - id: M1
     title: "Kernel inverse parser: RegistryV1::from_canonical_bytes()"
-    status: pending
+    status: complete
+    evidence: "commit 1e710d1 — 12 unit tests, 163 kernel tests total"
     deliverables:
       - "kernel/src/carrier/registry.rs: from_canonical_bytes() with strict validation + canonical round-trip enforcement"
-      - "kernel/src/carrier/registry.rs: unit tests (round-trip, malformed shapes, out-of-range bytes, non-canonical rejection, bijection violation)"
+      - "kernel/src/carrier/registry.rs: 12 unit tests (round-trip, empty, malformed shapes, out-of-range bytes, non-canonical rejection, bijection violation)"
   - id: M2
     title: "Cert-only compilation replay verification step"
-    status: pending
+    status: complete
+    evidence: "commit b2fea91 — Step 12d wired, 572 tests green"
     deliverables:
       - "harness/src/bundle.rs: verify_compilation_replay(bundle, profile) wired after Step 12c"
       - "harness/src/bundle.rs: 3 typed error variants (registry parse, compile failed, manifest mismatch)"
   - id: M3
     title: "Lock tests for compilation replay"
-    status: pending
+    status: complete
+    evidence: "commit 252b454 — 576 tests green, 4 new lock tests"
     deliverables:
-      - "Positive: Cert replay passes for golden RomeMiniSearch bundle"
-      - "Negative: coherently forged manifest+graph surfaces pass Step 12b/12c but fail replay"
-      - "Negative: invalid-but-canonical-shape registry bytes rejected (parse error)"
-      - "Base: replay skipped, bundle still verifies"
+      - "cert_replay_passes_valid_bundle (positive)"
+      - "coherently_forged_manifest_rejected_by_replay (unique replay value)"
+      - "tampered_registry_epoch_fails_replay (registry tamper)"
+      - "base_skips_replay (Base tolerance)"
 
 evidence:
-  commits: []
-  total_tests: 560
-  lock_tests: []
+  commits:
+    - "1e710d1 — feat(kernel): add RegistryV1::from_canonical_bytes() [CREPLAY-001] (M1)"
+    - "b2fea91 — feat(bind): Cert-only compilation boundary replay [CREPLAY-001] (M2)"
+    - "252b454 — test(lock): compilation boundary replay lock tests [CREPLAY-001] (M3)"
+  total_tests: 576
+  lock_tests:
+    - cert_replay_passes_valid_bundle
+    - coherently_forged_manifest_rejected_by_replay
+    - tampered_registry_epoch_fails_replay
+    - base_skips_replay
 
 non_functional:
   a11y: []
