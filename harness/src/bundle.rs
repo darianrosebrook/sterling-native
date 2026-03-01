@@ -307,6 +307,12 @@ pub enum BundleVerifyError {
     /// `registry_hash` in compilation manifest (stripped to raw hex) does not match
     /// `registry_digest` in `search_graph.json` metadata.
     CompilationManifestRegistryMismatch { in_manifest_hex: String, in_graph_hex: String },
+    /// `identity_digest` in compilation manifest (stripped to raw hex) does not match
+    /// `root_identity_digest` in `search_graph.json` metadata.
+    CompilationManifestIdentityMismatch { in_manifest_hex: String, in_graph_hex: String },
+    /// `evidence_digest` in compilation manifest (stripped to raw hex) does not match
+    /// `root_evidence_digest` in `search_graph.json` metadata.
+    CompilationManifestEvidenceMismatch { in_manifest_hex: String, in_graph_hex: String },
     /// A required field is missing from `search_graph.json` metadata during
     /// compilation manifest coherence checking.
     CompilationManifestGraphMissingField { field: &'static str },
@@ -466,8 +472,8 @@ pub fn verify_bundle_with_profile(
     // Step 12: Cross-verify metadata bindings in search_graph.json.
     verify_metadata_bindings(bundle, profile)?;
 
-    // Step 12b: Compilation manifest coherence (schema + payload).
-    verify_compilation_manifest_coherence(bundle)?;
+    // Step 12b: Compilation manifest coherence (schema + payload + registry + root digests).
+    verify_compilation_manifest_coherence(bundle, profile)?;
 
     // Step 13: Scorer digest binding (report ↔ scorer.json).
     verify_scorer_digest_binding(bundle)?;
@@ -799,6 +805,7 @@ fn verify_metadata_bindings(
 #[allow(clippy::too_many_lines)]
 fn verify_compilation_manifest_coherence(
     bundle: &ArtifactBundleV1,
+    profile: VerificationProfile,
 ) -> Result<(), BundleVerifyError> {
     // Only applies to search bundles.
     let Some(graph_artifact) = bundle.artifacts.get("search_graph.json") else {
@@ -941,6 +948,72 @@ fn verify_compilation_manifest_coherence(
             in_manifest_hex: manifest_registry_hex.to_string(),
             in_graph_hex: graph_registry_hex.to_string(),
         });
+    }
+
+    // --- Check 4: Root identity digest coherence ---
+    // --- Check 5: Root evidence digest coherence ---
+    // Base: required-if-present. Cert: mandatory.
+    let graph_metadata = graph.get("metadata");
+
+    let graph_identity = graph_metadata
+        .and_then(|m| m.get("root_identity_digest"))
+        .and_then(|v| v.as_str());
+    let graph_evidence = graph_metadata
+        .and_then(|m| m.get("root_evidence_digest"))
+        .and_then(|v| v.as_str());
+
+    match (graph_identity, graph_evidence, profile) {
+        // Both present: cross-check against manifest.
+        (Some(g_id), Some(g_ev), _) => {
+            let manifest_identity = manifest
+                .get("identity_digest")
+                .and_then(|v| v.as_str())
+                .ok_or(BundleVerifyError::CompilationManifestMissingField {
+                    field: "identity_digest",
+                })?;
+            let manifest_identity_hex = manifest_identity
+                .strip_prefix("sha256:")
+                .ok_or(BundleVerifyError::CompilationManifestMissingField {
+                    field: "identity_digest",
+                })?;
+            if manifest_identity_hex != g_id {
+                return Err(BundleVerifyError::CompilationManifestIdentityMismatch {
+                    in_manifest_hex: manifest_identity_hex.to_string(),
+                    in_graph_hex: g_id.to_string(),
+                });
+            }
+
+            let manifest_evidence = manifest
+                .get("evidence_digest")
+                .and_then(|v| v.as_str())
+                .ok_or(BundleVerifyError::CompilationManifestMissingField {
+                    field: "evidence_digest",
+                })?;
+            let manifest_evidence_hex = manifest_evidence
+                .strip_prefix("sha256:")
+                .ok_or(BundleVerifyError::CompilationManifestMissingField {
+                    field: "evidence_digest",
+                })?;
+            if manifest_evidence_hex != g_ev {
+                return Err(BundleVerifyError::CompilationManifestEvidenceMismatch {
+                    in_manifest_hex: manifest_evidence_hex.to_string(),
+                    in_graph_hex: g_ev.to_string(),
+                });
+            }
+        }
+        // Cert: both must be present.
+        (None, _, VerificationProfile::Cert) => {
+            return Err(BundleVerifyError::CompilationManifestGraphMissingField {
+                field: "root_identity_digest",
+            });
+        }
+        (_, None, VerificationProfile::Cert) => {
+            return Err(BundleVerifyError::CompilationManifestGraphMissingField {
+                field: "root_evidence_digest",
+            });
+        }
+        // Base: absent fields are ok (older bundles without root digests).
+        _ => {}
     }
 
     Ok(())
@@ -1431,6 +1504,22 @@ fn verify_tape(
         (None, None) => {}
     }
 
+    // root_identity_digest: Base=required-if-present, Cert=mandatory.
+    check_optional_tape_header_field(
+        header,
+        metadata,
+        "root_identity_digest",
+        profile,
+    )?;
+
+    // root_evidence_digest: Base=required-if-present, Cert=mandatory.
+    check_optional_tape_header_field(
+        header,
+        metadata,
+        "root_evidence_digest",
+        profile,
+    )?;
+
     // Step 16e: schema_version check (fail-closed: must be present and correct).
     let schema_version = header
         .get("schema_version")
@@ -1498,6 +1587,46 @@ fn check_tape_header_field(
             in_tape: tape_val.to_string(),
             in_artifact: graph_val.to_string(),
         });
+    }
+    Ok(())
+}
+
+/// Compare an optional tape header field against graph metadata.
+///
+/// Base: required-if-present (both absent is ok, one-sided is error).
+/// Cert: mandatory (both absent is error).
+fn check_optional_tape_header_field(
+    header: &serde_json::Value,
+    metadata: &serde_json::Value,
+    field: &'static str,
+    profile: VerificationProfile,
+) -> Result<(), BundleVerifyError> {
+    let tape_val = header.get(field).and_then(|v| v.as_str());
+    let graph_val = metadata.get(field).and_then(|v| v.as_str());
+
+    match (tape_val, graph_val) {
+        (Some(t), Some(g)) if t != g => {
+            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                field,
+                in_tape: t.to_string(),
+                in_artifact: g.to_string(),
+            });
+        }
+        (Some(_), None) | (None, Some(_)) => {
+            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                field,
+                in_tape: tape_val.unwrap_or("<absent>").to_string(),
+                in_artifact: graph_val.unwrap_or("<absent>").to_string(),
+            });
+        }
+        (None, None) if profile == VerificationProfile::Cert => {
+            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                field,
+                in_tape: "<absent>".to_string(),
+                in_artifact: "<absent>".to_string(),
+            });
+        }
+        _ => {} // Both match, or both absent in Base.
     }
     Ok(())
 }

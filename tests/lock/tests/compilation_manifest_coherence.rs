@@ -279,3 +279,198 @@ fn missing_graph_registry_digest_field_rejected() {
         "expected CompilationManifestGraphMissingField for registry_digest, got: {err:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Root state digest coherence (IDCOH-001)
+// ---------------------------------------------------------------------------
+
+/// Compilation manifest's `identity_digest` and `evidence_digest` (stripped to
+/// raw hex) match graph metadata `root_identity_digest` and `root_evidence_digest`.
+#[test]
+fn root_digests_match_compilation_manifest() {
+    let bundle = default_bundle();
+
+    // Parse compilation manifest.
+    let cm_art = bundle
+        .artifacts
+        .get("compilation_manifest.json")
+        .expect("compilation_manifest.json");
+    let cm: serde_json::Value = serde_json::from_slice(&cm_art.content).expect("valid JSON");
+
+    let identity_digest = cm["identity_digest"].as_str().expect("identity_digest");
+    let evidence_digest = cm["evidence_digest"].as_str().expect("evidence_digest");
+
+    let manifest_id_hex = identity_digest
+        .strip_prefix("sha256:")
+        .expect("identity_digest must have sha256: prefix");
+    let manifest_ev_hex = evidence_digest
+        .strip_prefix("sha256:")
+        .expect("evidence_digest must have sha256: prefix");
+
+    // Parse graph metadata.
+    let graph_art = bundle
+        .artifacts
+        .get("search_graph.json")
+        .expect("search_graph.json");
+    let graph: serde_json::Value =
+        serde_json::from_slice(&graph_art.content).expect("valid JSON");
+    let graph_id = graph["metadata"]["root_identity_digest"]
+        .as_str()
+        .expect("root_identity_digest");
+    let graph_ev = graph["metadata"]["root_evidence_digest"]
+        .as_str()
+        .expect("root_evidence_digest");
+
+    assert_eq!(
+        manifest_id_hex, graph_id,
+        "compilation manifest identity_digest (stripped) must match graph metadata root_identity_digest"
+    );
+    assert_eq!(
+        manifest_ev_hex, graph_ev,
+        "compilation manifest evidence_digest (stripped) must match graph metadata root_evidence_digest"
+    );
+
+    // Full pipeline verification passes.
+    verify_bundle(&bundle).expect("bundle must verify");
+}
+
+/// Tampered `identity_digest` in compilation manifest triggers
+/// `CompilationManifestIdentityMismatch`.
+#[test]
+fn tampered_compilation_manifest_identity_digest_rejected() {
+    let bundle = default_bundle();
+    verify_bundle(&bundle).expect("original must pass");
+
+    let tampered = resign_bundle_with_modified_compilation_manifest(&bundle, |cm| {
+        cm["identity_digest"] =
+            serde_json::json!("sha256:0000000000000000000000000000000000000000000000000000000000000000");
+    });
+
+    let err = verify_bundle(&tampered).expect_err("must fail");
+    assert!(
+        matches!(err, BundleVerifyError::CompilationManifestIdentityMismatch { .. }),
+        "expected CompilationManifestIdentityMismatch, got: {err:?}"
+    );
+}
+
+/// Tampered `evidence_digest` in compilation manifest triggers
+/// `CompilationManifestEvidenceMismatch`.
+#[test]
+fn tampered_compilation_manifest_evidence_digest_rejected() {
+    let bundle = default_bundle();
+    verify_bundle(&bundle).expect("original must pass");
+
+    let tampered = resign_bundle_with_modified_compilation_manifest(&bundle, |cm| {
+        cm["evidence_digest"] =
+            serde_json::json!("sha256:0000000000000000000000000000000000000000000000000000000000000000");
+    });
+
+    let err = verify_bundle(&tampered).expect_err("must fail");
+    assert!(
+        matches!(err, BundleVerifyError::CompilationManifestEvidenceMismatch { .. }),
+        "expected CompilationManifestEvidenceMismatch, got: {err:?}"
+    );
+}
+
+/// Missing `root_identity_digest` in graph metadata triggers
+/// `CompilationManifestGraphMissingField` (Cert profile).
+///
+/// Uses `rebuild_with_modified_graph` so Step 10 (`search_graph_digest`) passes
+/// and the failure fires in Step 12b.
+#[test]
+fn missing_graph_root_identity_digest_rejected() {
+    let bundle = default_bundle();
+    verify_bundle(&bundle).expect("original must pass");
+
+    let tampered = rebuild_with_modified_graph(&bundle, |graph| {
+        graph["metadata"]
+            .as_object_mut()
+            .unwrap()
+            .remove("root_identity_digest");
+    });
+
+    // Base: required-if-present. With one field removed and one present,
+    // Step 12b's "both present" branch won't fire; Base passes silently.
+    // But Cert requires both — let's verify the Cert path.
+    let err = sterling_harness::bundle::verify_bundle_with_profile(
+        &tampered,
+        sterling_harness::bundle::VerificationProfile::Cert,
+    )
+    .expect_err("must fail in Cert");
+    assert!(
+        matches!(
+            err,
+            BundleVerifyError::CompilationManifestGraphMissingField {
+                field: "root_identity_digest"
+            }
+        ),
+        "expected CompilationManifestGraphMissingField for root_identity_digest, got: {err:?}"
+    );
+}
+
+/// Missing `root_evidence_digest` in graph metadata triggers
+/// `CompilationManifestGraphMissingField` (Cert profile).
+#[test]
+fn missing_graph_root_evidence_digest_rejected() {
+    let bundle = default_bundle();
+    verify_bundle(&bundle).expect("original must pass");
+
+    let tampered = rebuild_with_modified_graph(&bundle, |graph| {
+        graph["metadata"]
+            .as_object_mut()
+            .unwrap()
+            .remove("root_evidence_digest");
+    });
+
+    let err = sterling_harness::bundle::verify_bundle_with_profile(
+        &tampered,
+        sterling_harness::bundle::VerificationProfile::Cert,
+    )
+    .expect_err("must fail in Cert");
+    assert!(
+        matches!(
+            err,
+            BundleVerifyError::CompilationManifestGraphMissingField {
+                field: "root_evidence_digest"
+            }
+        ),
+        "expected CompilationManifestGraphMissingField for root_evidence_digest, got: {err:?}"
+    );
+}
+
+/// Tape header carries `root_identity_digest` and `root_evidence_digest`
+/// matching graph metadata values.
+#[test]
+fn tape_header_carries_root_digests() {
+    let bundle = default_bundle();
+
+    let tape_art = bundle
+        .artifacts
+        .get("search_tape.stap")
+        .expect("search_tape.stap");
+    let tape = sterling_search::tape_reader::read_tape(&tape_art.content).expect("parse tape");
+    let header = &tape.header.json;
+
+    let graph_art = bundle
+        .artifacts
+        .get("search_graph.json")
+        .expect("search_graph.json");
+    let graph: serde_json::Value =
+        serde_json::from_slice(&graph_art.content).expect("valid JSON");
+
+    let tape_id = header["root_identity_digest"]
+        .as_str()
+        .expect("tape header root_identity_digest");
+    let tape_ev = header["root_evidence_digest"]
+        .as_str()
+        .expect("tape header root_evidence_digest");
+    let graph_id = graph["metadata"]["root_identity_digest"]
+        .as_str()
+        .expect("graph metadata root_identity_digest");
+    let graph_ev = graph["metadata"]["root_evidence_digest"]
+        .as_str()
+        .expect("graph metadata root_evidence_digest");
+
+    assert_eq!(tape_id, graph_id, "tape header root_identity_digest must match graph metadata");
+    assert_eq!(tape_ev, graph_ev, "tape header root_evidence_digest must match graph metadata");
+}
