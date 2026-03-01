@@ -16,4 +16,5 @@ pub mod bundle_dir;
 pub mod contract;
 pub mod policy;
 pub mod runner;
+pub mod transcript;
 pub mod worlds;

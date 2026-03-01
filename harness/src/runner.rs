@@ -29,6 +29,7 @@ use sterling_search::contract::SearchWorldV1;
 use sterling_search::policy::SearchPolicyV1;
 use sterling_search::scorer::{TableScorer, ValueScorer};
 use sterling_search::search::MetadataBindings;
+use sterling_search::tape_reader::read_tape;
 
 use sterling_kernel::carrier::bytetrace::{
     ByteTraceEnvelopeV1, ByteTraceFooterV1, ByteTraceFrameV1, ByteTraceHeaderV1, ByteTraceV1,
@@ -342,6 +343,36 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
     // Compute tape content hash once; reused for report binding and precomputed_hash.
     let tape_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &tape_output.bytes);
 
+    // Phase 4b: render tool transcript if evidence_obligations require it.
+    let dims = world.dimensions();
+    let has_transcript_obligation = dims
+        .evidence_obligations
+        .iter()
+        .any(|o| o == "tool_transcript_v1");
+
+    let transcript_result = if has_transcript_obligation {
+        let tape = read_tape(&tape_output.bytes).map_err(|e| SearchRunError::CanonFailed {
+            detail: format!("tape parse for transcript: {e:?}"),
+        })?;
+        let transcript_bytes = crate::transcript::render_tool_transcript(
+            &tape,
+            &operator_registry,
+            WorldHarnessV1::world_id(world),
+        )
+        .map_err(|e| SearchRunError::CanonFailed {
+            detail: format!("transcript render: {e}"),
+        })?;
+        let transcript_content_hash =
+            canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &transcript_bytes);
+        Some((transcript_bytes, transcript_content_hash))
+    } else {
+        None
+    };
+
+    let transcript_digest_for_report = transcript_result
+        .as_ref()
+        .map(|(_, hash)| hash.as_str().to_string());
+
     let health_metrics = search_result.graph.compute_health_metrics();
 
     let verification_report = build_search_verification_report(
@@ -354,6 +385,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         &fixture_content_hash,
         &health_metrics,
         &tape_content_hash,
+        transcript_digest_for_report.as_deref(),
     )
     .map_err(SearchRunError::RunError)?;
 
@@ -409,6 +441,16 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         artifacts.push(("scorer.json".into(), artifact.bytes.clone(), true).into());
     }
 
+    // Include tool transcript artifact (normative, tool worlds only).
+    if let Some((transcript_bytes, transcript_hash)) = transcript_result {
+        artifacts.push(ArtifactInput {
+            name: "tool_transcript.json".into(),
+            content: transcript_bytes,
+            normative: true,
+            precomputed_hash: Some(transcript_hash),
+        });
+    }
+
     build_bundle(artifacts).map_err(SearchRunError::BundleFailed)
 }
 
@@ -443,6 +485,7 @@ fn build_search_verification_report(
     fixture_content_hash: &ContentHash,
     health_metrics: &sterling_search::graph::SearchHealthMetricsV1,
     tape_content_hash: &ContentHash,
+    tool_transcript_digest: Option<&str>,
 ) -> Result<Vec<u8>, RunError> {
     let mut report = serde_json::json!({
         // DIAGNOSTIC: not verified by verify_bundle(); present for observability.
@@ -473,6 +516,11 @@ fn build_search_verification_report(
     // BINDING: verified against scorer.json content_hash (Table mode only).
     if let Some(digest) = scorer_digest {
         report["scorer_digest"] = serde_json::json!(digest);
+    }
+
+    // BINDING: verified against tool_transcript.json content_hash (tool worlds only).
+    if let Some(digest) = tool_transcript_digest {
+        report["tool_transcript_digest"] = serde_json::json!(digest);
     }
 
     canonical_json_bytes(&report).map_err(|e| RunError::CanonFailed {
