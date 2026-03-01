@@ -1,7 +1,7 @@
 id: RCOH-001
 type: feature
 title: 'Registry Digest Coherence in Compilation Manifest'
-status: in_progress
+status: closed
 risk_tier: 3
 mode: development
 created_at: '2026-02-28T22:00:00.000Z'
@@ -71,29 +71,31 @@ invariants:
 acceptance:
   - id: RCOH-001-POS
     description: "Positive: manifest registry_hash (stripped) matches graph metadata registry_digest"
-    status: pending
+    status: complete
   - id: RCOH-001-MISMATCH
     description: "Negative: tampered manifest registry_hash triggers CompilationManifestRegistryMismatch"
-    status: pending
+    status: complete
   - id: RCOH-001-MISSING-MANIFEST-FIELD
     description: "Negative: missing registry_hash field triggers CompilationManifestMissingField"
-    status: pending
+    status: complete
   - id: RCOH-001-MISSING-GRAPH-FIELD
     description: "Negative: missing graph metadata registry_digest triggers CompilationManifestGraphMissingField"
-    status: pending
+    status: complete
 
 milestones:
   - id: M1
     title: "Production code + lock tests"
-    status: in_progress
+    status: closed
     deliverables:
       - "harness/src/bundle.rs (2 error variants, Check 3 in verify_compilation_manifest_coherence)"
       - "tests/lock/tests/compilation_manifest_coherence.rs (4 new tests)"
 
 evidence:
-  commits: []
-  total_tests: 544
-  lock_tests: []
+  commits:
+    - 0fb982c  # feat(bind): registry digest coherence in compilation manifest
+  total_tests: 548
+  lock_tests:
+    - tests/lock/tests/compilation_manifest_coherence.rs (4 new tests, 9 total)
 
 non_functional:
   a11y: []
