@@ -26,20 +26,27 @@ purpose: >
   weakening verification.
 
 non_goals:
-  - "No schema version bump — fixture_digest is additive; verification uses required-if-present semantics."
+  - "No schema version bump — fixture_digest is additive at the schema level (extensibility-safe)."
   - "No changes to the linear trace path (ByteTrace already has fixture_hash)."
   - "No changes to kernel crate."
-  - "No golden fixture regeneration — new field is additive."
 
 design:
   binding_definition: >
     fixture_digest = binding_hex(canonical_hash(DOMAIN_BUNDLE_ARTIFACT, fixture_json_bytes)).
-    Raw hex format (no sha256: prefix), matching the binding corridor convention.
+    Raw hex in graph metadata and tape header (no sha256: prefix). Full sha256:hex in
+    verification report (matching scorer/operator digest convention). These are distinct
+    encodings under the same semantic name, following existing corridor convention.
   backward_compat: >
-    Emitted always in new bundles. Verification uses required-if-present: if fixture_digest
-    is present in graph metadata, it MUST match fixture.json artifact content_hash. If absent
-    (old bundle), verification passes. This avoids a breaking schema bump while providing
-    full binding for all new bundles.
+    Emitted always in new bundles. Base profile: required-if-present (old bundles without
+    fixture_digest pass Step 12). Cert profile: mandatory (fixture_digest must be present
+    in graph metadata and tape header; absence fails verification). Golden fixtures are
+    regenerated because canonical JSON bytes change (new field in metadata), even though
+    the schema is additive.
+  trust_boundary: >
+    fixture_digest pins declared configuration (dimensions, initial payload, program), not
+    code behavior. enumerate_candidates(), is_goal(), and scoring logic are code-determined.
+    A code change can still produce a self-verifying bundle. This is the explicit builder-trust
+    boundary.
   tape_render: >
     tape_render.rs extracts fixture_digest from header as optional field (like
     operator_set_digest/scorer_digest). Old tapes without the field render correctly.
@@ -71,9 +78,10 @@ change_budget:
 
 invariants:
   - "INV-BIND-01: fixture_digest is binding_hex(fixture.json artifact content_hash), not DOMAIN_HARNESS_FIXTURE or any other domain."
-  - "INV-BIND-02: fixture_digest is mandatory in new bundles, required-if-present in verification (no schema bump)."
+  - "INV-BIND-02: Base: required-if-present (Step 12). Cert: mandatory in graph metadata and tape header (Steps 12, 18)."
   - "INV-BIND-03: fixture_digest is policy-independent — same world under different policies produces identical fixture_digest."
   - "INV-BIND-04: tape_render.rs propagates fixture_digest from header to rendered graph metadata (Cert equivalence)."
+  - "INV-BIND-05: schema_descriptor is cross-checked in tape↔graph Step 16d (fail-closed, both sides required)."
 
 acceptance:
   - id: BIND-001-GRAPH
@@ -114,9 +122,10 @@ milestones:
 evidence:
   commits:
     - b38baf3  # feat(bind): thread fixture_digest through search evidence corridor
-  total_tests: 535
+    - pending  # hardening: Cert enforcement, schema_descriptor Step 16d, omission tests
+  total_tests: 539
   lock_tests:
-    - tests/lock/tests/fixture_digest_binding.rs (7 tests)
+    - tests/lock/tests/fixture_digest_binding.rs (11 tests)
 
 non_functional:
   a11y: []

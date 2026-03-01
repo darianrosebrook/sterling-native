@@ -9,7 +9,9 @@
 //! - Policy-independent (same world under different policies)
 
 use lock_tests::bundle_test_helpers::rebuild_with_modified_graph;
-use sterling_harness::bundle::{verify_bundle, BundleVerifyError};
+use sterling_harness::bundle::{
+    verify_bundle, verify_bundle_with_profile, BundleVerifyError, VerificationProfile,
+};
 use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_search::policy::SearchPolicyV1;
@@ -209,4 +211,98 @@ fn fixture_digest_policy_independent() {
     // only search_policy_digest or termination may differ.)
     // The key invariant is fixture_digest equality above.
     let _ = (report_a, report_b);
+}
+
+// ---------------------------------------------------------------------------
+// Cert enforcement
+// ---------------------------------------------------------------------------
+
+/// Cert profile passes when `fixture_digest` is present (normal bundle).
+#[test]
+fn cert_profile_accepts_valid_fixture_digest() {
+    let bundle = default_bundle();
+    verify_bundle_with_profile(&bundle, VerificationProfile::Cert)
+        .expect("Cert must accept valid bundle with fixture_digest");
+}
+
+/// Removing `fixture_digest` from graph metadata: Cert fails at Step 12
+/// (`MetadataBindingFixtureMissing`) before the tape check fires.
+///
+/// Step 12 runs before Step 18, so stripping the graph metadata field alone
+/// is sufficient to prove the Cert enforcement boundary. The tape is never
+/// reached because the pipeline short-circuits.
+#[test]
+fn cert_rejects_missing_fixture_digest_in_graph() {
+    let bundle = default_bundle();
+
+    // Strip fixture_digest from graph metadata only. rebuild_with_modified_graph
+    // patches the report's search_graph_digest automatically, so Steps 1-11 pass.
+    let stripped = rebuild_with_modified_graph(&bundle, |graph| {
+        if let Some(metadata) = graph.get_mut("metadata") {
+            metadata.as_object_mut().unwrap().remove("fixture_digest");
+        }
+    });
+
+    // Cert: fails at Step 12 (mandatory in Cert).
+    let err = verify_bundle_with_profile(&stripped, VerificationProfile::Cert)
+        .expect_err("Cert must reject bundle without fixture_digest");
+    assert!(
+        matches!(err, BundleVerifyError::MetadataBindingFixtureMissing),
+        "expected MetadataBindingFixtureMissing, got: {err:?}"
+    );
+}
+
+/// Base profile passes Step 12 when `fixture_digest` is absent from graph
+/// metadata (required-if-present semantics). It will still fail at Step 18
+/// due to tape↔graph asymmetry (tape has the field, graph doesn't), which
+/// proves the two enforcement layers are independent.
+#[test]
+fn base_passes_step12_when_fixture_digest_absent() {
+    let bundle = default_bundle();
+
+    // Strip fixture_digest from graph metadata only.
+    let stripped = rebuild_with_modified_graph(&bundle, |graph| {
+        if let Some(metadata) = graph.get_mut("metadata") {
+            metadata.as_object_mut().unwrap().remove("fixture_digest");
+        }
+    });
+
+    // Base will pass Step 12 (required-if-present, field absent).
+    // But Step 18 will catch the tape↔graph asymmetry (tape has it, graph doesn't).
+    let err = verify_bundle_with_profile(&stripped, VerificationProfile::Base)
+        .expect_err("Base must still fail due to tape↔graph asymmetry");
+    assert!(
+        matches!(
+            err,
+            BundleVerifyError::TapeHeaderBindingMismatch {
+                field: "fixture_digest",
+                ..
+            }
+        ),
+        "expected TapeHeaderBindingMismatch for fixture_digest, got: {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// schema_descriptor tape↔graph binding
+// ---------------------------------------------------------------------------
+
+/// `schema_descriptor` in tape header matches graph metadata (Step 16d).
+#[test]
+fn schema_descriptor_in_tape_header_matches_graph() {
+    let bundle = default_bundle();
+    let header = parse_tape_header(&bundle);
+    let graph = parse_graph(&bundle);
+
+    let tape_sd = header["schema_descriptor"]
+        .as_str()
+        .expect("tape header must have schema_descriptor");
+    let graph_sd = graph["metadata"]["schema_descriptor"]
+        .as_str()
+        .expect("graph metadata must have schema_descriptor");
+
+    assert_eq!(
+        tape_sd, graph_sd,
+        "tape header schema_descriptor must match graph metadata"
+    );
 }

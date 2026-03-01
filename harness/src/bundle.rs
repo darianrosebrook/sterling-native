@@ -437,7 +437,7 @@ pub fn verify_bundle_with_profile(
     verify_mode_artifact_coherence(bundle)?;
 
     // Step 12: Cross-verify metadata bindings in search_graph.json.
-    verify_metadata_bindings(bundle)?;
+    verify_metadata_bindings(bundle, profile)?;
 
     // Step 13: Scorer digest binding (report ↔ scorer.json).
     verify_scorer_digest_binding(bundle)?;
@@ -654,7 +654,12 @@ fn binding_hex(hash: &ContentHash) -> &str {
 /// Checks:
 /// - `metadata.policy_snapshot_digest` == `policy_snapshot.json`'s `content_hash`
 /// - `metadata.world_id` == `verification_report.json`'s `world_id`
-fn verify_metadata_bindings(bundle: &ArtifactBundleV1) -> Result<(), BundleVerifyError> {
+/// - `metadata.fixture_digest` == `fixture.json`'s `content_hash` (required-if-present
+///   in Base; mandatory in Cert)
+fn verify_metadata_bindings(
+    bundle: &ArtifactBundleV1,
+    profile: VerificationProfile,
+) -> Result<(), BundleVerifyError> {
     let Some(graph_artifact) = bundle.artifacts.get("search_graph.json") else {
         return Ok(());
     };
@@ -710,23 +715,34 @@ fn verify_metadata_bindings(bundle: &ArtifactBundleV1) -> Result<(), BundleVerif
         }
     }
 
-    // Cross-verify fixture_digest (required-if-present: no schema bump).
+    // Cross-verify fixture_digest.
+    // Base: required-if-present. Cert: mandatory.
     let graph_fixture_digest = graph
         .get("metadata")
         .and_then(|m| m.get("fixture_digest"))
         .and_then(|v| v.as_str());
 
-    if let Some(digest) = graph_fixture_digest {
-        let fixture_artifact = bundle
-            .artifacts
-            .get("fixture.json")
-            .ok_or(BundleVerifyError::MetadataBindingFixtureMissing)?;
-        let fixture_hex = binding_hex(&fixture_artifact.content_hash);
-        if digest != fixture_hex {
-            return Err(BundleVerifyError::MetadataBindingFixtureMismatch {
-                in_graph: digest.to_string(),
-                in_fixture: fixture_hex.to_string(),
-            });
+    match (graph_fixture_digest, profile) {
+        (Some(digest), _) => {
+            // Field present: cross-check against fixture.json artifact.
+            let fixture_artifact = bundle
+                .artifacts
+                .get("fixture.json")
+                .ok_or(BundleVerifyError::MetadataBindingFixtureMissing)?;
+            let fixture_hex = binding_hex(&fixture_artifact.content_hash);
+            if digest != fixture_hex {
+                return Err(BundleVerifyError::MetadataBindingFixtureMismatch {
+                    in_graph: digest.to_string(),
+                    in_fixture: fixture_hex.to_string(),
+                });
+            }
+        }
+        (None, VerificationProfile::Cert) => {
+            // Cert requires fixture_digest in graph metadata.
+            return Err(BundleVerifyError::MetadataBindingFixtureMissing);
+        }
+        (None, VerificationProfile::Base) => {
+            // Base: old bundles without fixture_digest pass.
         }
     }
 
@@ -1078,6 +1094,9 @@ fn verify_tape(
     // world_id (fail-closed: require both sides)
     check_tape_header_field(header, metadata, "world_id")?;
 
+    // schema_descriptor (string, from graph metadata)
+    check_tape_header_field(header, metadata, "schema_descriptor")?;
+
     // registry_digest (both raw hex, from graph metadata)
     check_tape_header_field(header, metadata, "registry_digest")?;
 
@@ -1087,7 +1106,7 @@ fn verify_tape(
     // root_state_fingerprint (both raw hex, from graph metadata)
     check_tape_header_field(header, metadata, "root_state_fingerprint")?;
 
-    // fixture_digest (required-if-present: both sides must agree when field exists)
+    // fixture_digest: Base=required-if-present, Cert=mandatory.
     let tape_fixture = header.get("fixture_digest").and_then(|v| v.as_str());
     let graph_fixture = metadata.get("fixture_digest").and_then(|v| v.as_str());
     match (tape_fixture, graph_fixture) {
@@ -1107,7 +1126,14 @@ fn verify_tape(
                 in_artifact: graph_fixture.unwrap_or("<absent>").to_string(),
             });
         }
-        (None, None) => {} // Old bundle without fixture_digest — pass.
+        (None, None) if profile == VerificationProfile::Cert => {
+            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                field: "fixture_digest",
+                in_tape: "<absent>".to_string(),
+                in_artifact: "<absent>".to_string(),
+            });
+        }
+        (None, None) => {} // Base: old bundle without fixture_digest — pass.
     }
 
     // policy_snapshot_digest: authoritative source is policy_snapshot.json content_hash.
