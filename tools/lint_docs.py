@@ -10,6 +10,7 @@ Validates that markdown files in docs/ follow the doc authority policy:
 - No ephemeral docs staged for commit
 - README/index files are exempt
 - Parity ID validation for reference docs
+- Backtick identifier verification (warning-only, reference docs)
 
 Usage:
     # Lint staged files only (for pre-commit hook)
@@ -100,6 +101,16 @@ AUTHORITY_BANNED_TERMS: dict[str, list[tuple[re.Pattern, str]]] = {
 
 # Stale v1 path — hard error in any doc
 STALE_V1_LINK_RE = re.compile(r"reference/v1/")
+
+# --- Backtick identifier verification (warning-only, reference docs) ---
+BACKTICK_RE = re.compile(r"`([^`]+)`")
+FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
+# Versioned Rust types: FooV1, BarV2, etc.
+TYPE_V_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*V\d+$")
+# Function calls: foo_bar()
+FN_CALL_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\(\)$")
+# Crate-relative file paths
+CRATE_PATH_RE = re.compile(r"^(kernel|search|harness|tests|benchmarks)/.*\.(rs|py)$")
 
 # --- Parity ID validation ---
 # Capability IDs from the parity audit §Capability Parity Matrix
@@ -298,6 +309,55 @@ def expected_authority(filepath: str) -> str | None:
     return None
 
 
+def strip_fenced_blocks(text: str) -> str:
+    """Remove fenced code blocks to avoid false positives in backtick scan."""
+    return FENCED_CODE_RE.sub("", text)
+
+
+def code_symbol_exists(pattern: str) -> bool:
+    """Check if a pattern exists in Rust source directories."""
+    result = subprocess.run(
+        ["grep", "-r", "-l", "-E", "--", pattern, "kernel", "search", "harness"],
+        capture_output=True, text=True
+    )
+    return result.returncode == 0
+
+
+def verify_backticks(filepath: str, body: str) -> list[str]:
+    """Verify backticked identifiers in reference docs. Returns WARN-prefixed messages."""
+    warnings = []
+    text = strip_fenced_blocks(body)
+
+    for m in BACKTICK_RE.finditer(text):
+        token = m.group(1).strip()
+
+        # Skip empty, whitespace-containing, or very short tokens
+        if not token or len(token) < 3 or any(c.isspace() for c in token):
+            continue
+
+        # Crate-relative file paths
+        if CRATE_PATH_RE.match(token):
+            if not Path(token).exists():
+                warnings.append(f"WARN: {filepath}: backticked path not found: `{token}`")
+            continue
+
+        # Function calls: `foo_bar()`
+        fn_match = FN_CALL_RE.match(token)
+        if fn_match:
+            fn_name = fn_match.group(1)
+            if not code_symbol_exists(rf"fn {re.escape(fn_name)}\("):
+                warnings.append(f"WARN: {filepath}: backticked function not found: `{token}`")
+            continue
+
+        # Versioned Rust types: `ThingV1`
+        if TYPE_V_RE.match(token):
+            if not code_symbol_exists(rf"(struct|enum|trait) {re.escape(token)}\b"):
+                warnings.append(f"WARN: {filepath}: backticked type not found: `{token}`")
+            continue
+
+    return warnings
+
+
 def lint_file(filepath: str, staged: bool = False) -> list[str]:
     """Lint a single file. Returns list of error messages."""
     errors = []
@@ -373,6 +433,10 @@ def lint_file(filepath: str, staged: bool = False) -> list[str]:
             continue
         if not check_link_exists(filepath, target, staged=staged):
             errors.append(f"{filepath}: broken link '{target}' — target does not exist")
+
+    # Backtick identifier verification (warning-only, reference docs only)
+    if authority == "reference":
+        errors.extend(verify_backticks(filepath, body))
 
     return errors
 
