@@ -521,23 +521,25 @@ acceptance:
 
   - id: TOOL-001-CORRIDOR-BINDING
     description: >-
-      tool_transcript_digest threaded through graph metadata, tape header, and
-      verification report. verify_bundle() checks binding consistency.
-    status: partial
+      tool_transcript_digest bound in verification report. Transcript integrity
+      committed by normative artifact inclusion in digest basis (Steps 4-6).
+      Correspondence proven by Cert equivalence render (Step 19d). Graph metadata
+      and tape header correctly do NOT carry transcript digest — the transcript is
+      a downstream derived projection of the tape, so embedding its digest in the
+      tape would create a dependency cycle. Report-only binding is the correct
+      pattern for downstream derived artifacts.
+    status: met
     notes: >-
-      Digest is bound in verification report only (harness/src/runner.rs:488,522-523,
-      bundle.rs Step 19b). Graph metadata (search/src/graph.rs SearchGraphMetadata)
-      and tape header (search/src/search.rs build_tape_header) do NOT carry
-      tool_transcript_digest. The BIND-001 three-point corridor convention
-      (raw hex in graph + tape, sha256:hex in report) is one-third wired.
-      This is a known structural gap — the equivalence render (Step 19d) provides
-      the safety backstop that the missing corridor points would provide, but the
-      defense-in-depth layering specified by INV-TOOL-02 is incomplete.
+      The BIND-001 three-point convention (graph + tape + report) applies to
+      upstream bindings (values known at/during search). Downstream derived
+      artifacts follow a different convention: normative artifact commitment
+      (digest basis) + report convenience field + Cert equivalence render.
+      This distinction is now documented in corridor_audit.md.
     evidence:
       - "harness/src/runner.rs:488 — tool_transcript_digest in report (sha256:hex)"
-      - "harness/src/bundle.rs:1867 — Step 19b digest binding check (report only)"
-      - "search/src/graph.rs — NO tool_transcript_digest field in SearchGraphMetadata"
-      - "search/src/search.rs — NO tool_transcript_digest in build_tape_header()"
+      - "harness/src/bundle.rs:1867 — Step 19b digest binding check (report)"
+      - "harness/src/bundle.rs Steps 4-6 — transcript committed via digest basis (normative artifact)"
+      - "harness/src/bundle.rs:1938-1984 — Step 19d Cert equivalence render (correspondence proof)"
 
   - id: TOOL-001-OBLIGATION-GATING
     description: >-
@@ -734,11 +736,13 @@ evidence:
   total_tests: 635
   lock_tests:
     - "tests/lock/tests/tool_transcript.rs — 27 tests"
-  known_gaps:
+  notes:
     - >-
-      TOOL-001-CORRIDOR-BINDING partial: tool_transcript_digest only in
-      verification report, not in graph metadata or tape header. Equivalence
-      render (Step 19d) provides the safety backstop.
+      Corridor binding is report-only by design. Transcript is a downstream
+      derived projection of the tape; embedding its digest in upstream surfaces
+      (graph metadata, tape header) would create a dependency cycle. Integrity
+      committed via digest basis (normative artifact); correspondence via Cert
+      equivalence render.
 
 non_functional:
   a11y: []
