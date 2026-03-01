@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "c4219923f9437265",
+  "aggregate_hash": "94fe63d465e1540a",
   "entry_count": 76,
   "entries": [
     {
@@ -583,12 +583,40 @@
     },
     {
       "path": "docs/reference/design_rationale/absorption_pipeline.md",
-      "title": "Absorption Pipeline",
+      "title": "Capability Absorption Pipeline",
       "authority": "reference",
       "status": "advisory",
       "scope": null,
-      "content_hash": "245636a898b33dee",
+      "content_hash": "fe5d2a48548696ca",
       "links": [
+        {
+          "text": "bytestate compilation boundary",
+          "target": "docs/reference/design_rationale/../../canonical/bytestate_compilation_boundary.md"
+        },
+        {
+          "text": "core constraints",
+          "target": "docs/reference/design_rationale/../../canonical/core_constraints.md"
+        },
+        {
+          "text": "search evidence contract",
+          "target": "docs/reference/design_rationale/../../canonical/search_evidence_contract.md"
+        },
+        {
+          "text": "ADR 0003",
+          "target": "docs/reference/design_rationale/../../adr/0003-neural-advisory-only.md"
+        },
+        {
+          "text": "ADR 0006",
+          "target": "docs/reference/design_rationale/../../adr/0006-certification-authority-boundary.md"
+        },
+        {
+          "text": "ADR 0007",
+          "target": "docs/reference/design_rationale/../../adr/0007-evidence-packaging-nesting.md"
+        },
+        {
+          "text": "ADR 0008",
+          "target": "docs/reference/design_rationale/../../adr/0008-schema-extension-additive-fields.md"
+        },
         {
           "text": "parity audit",
           "target": "docs/reference/design_rationale/../../architecture/v1_v2_parity_audit.md"
