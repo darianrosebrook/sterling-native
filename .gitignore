@@ -19,6 +19,7 @@ apps/tools/caws/
 # Worktrees (local filesystem paths, not portable across machines)
 .caws/worktrees/
 .caws/worktrees.json
+.claude/worktrees/
 
 # CAWS caches (generated, machine-local)
 .caws/duplication-cache.json
