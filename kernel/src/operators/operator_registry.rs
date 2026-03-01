@@ -33,6 +33,25 @@ pub enum EffectKind {
     /// exactly one status slot to `Provisional`. Which slot is determined by
     /// the operator's arguments at runtime.
     WritesOneSlotFromArgs,
+
+    /// Stages exactly one identity slot and promotes exactly one status slot
+    /// to `Provisional`. Mechanically identical to `WritesOneSlotFromArgs`
+    /// but semantically distinct: marks the write as a staging action for
+    /// transcript categorization.
+    StagesOneSlot,
+
+    /// Commits a transaction by writing the `txn_marker` slot. Validates:
+    /// exactly 1 identity diff (marker slot) and 1 status diff
+    /// (marker Hole→Provisional). Additionally requires at least one
+    /// non-marker slot on the target layer is already Provisional.
+    /// Validated using only pre/post state bytes + args + schema-known offsets.
+    CommitsTransaction,
+
+    /// Rolls back a transaction by writing the `txn_marker` slot. Validates:
+    /// exactly 1 identity diff (marker slot) and 1 status diff
+    /// (marker Hole→Provisional). No precondition on staged slots —
+    /// empty rollbacks are permitted.
+    RollsBackTransaction,
 }
 
 impl EffectKind {
@@ -41,6 +60,9 @@ impl EffectKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::WritesOneSlotFromArgs => "writes_one_slot_from_args",
+            Self::StagesOneSlot => "stages_one_slot",
+            Self::CommitsTransaction => "commits_transaction",
+            Self::RollsBackTransaction => "rolls_back_transaction",
         }
     }
 
@@ -49,6 +71,9 @@ impl EffectKind {
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "writes_one_slot_from_args" => Some(Self::WritesOneSlotFromArgs),
+            "stages_one_slot" => Some(Self::StagesOneSlot),
+            "commits_transaction" => Some(Self::CommitsTransaction),
+            "rolls_back_transaction" => Some(Self::RollsBackTransaction),
             _ => None,
         }
     }
@@ -276,11 +301,11 @@ fn status_mask_to_json(mask: &StatusMaskV1) -> serde_json::Value {
 // kernel_operator_registry() — the canonical V1 kernel registry
 // ---------------------------------------------------------------------------
 
-use crate::operators::apply::OP_SET_SLOT;
+use crate::operators::apply::{OP_COMMIT, OP_ROLLBACK, OP_SET_SLOT, OP_STAGE};
 
 /// Build the canonical operator registry for the V1 kernel.
 ///
-/// Contains exactly one entry: `OP_SET_SLOT`.
+/// Contains four entries: `OP_SET_SLOT`, `OP_STAGE`, `OP_COMMIT`, `OP_ROLLBACK`.
 ///
 /// The harness calls this to get the registry for bundle artifact generation.
 /// Worlds call this (or receive it from the harness) for operator legality
@@ -291,23 +316,69 @@ use crate::operators::apply::OP_SET_SLOT;
 /// Panics if the static registry construction fails (programming error).
 #[must_use]
 pub fn kernel_operator_registry() -> OperatorRegistryV1 {
-    let entry = OperatorEntry {
+    // Masks are 0×0 (dimension-free) for all operators: their effects depend
+    // on which (layer, slot) args specify at runtime. The effect_kind +
+    // post-apply check substitutes for static mask checking.
+    let empty_id_mask = || IdentityMaskV1::new(0, 0);
+    let empty_st_mask = || StatusMaskV1::new(0, 0);
+
+    let set_slot = OperatorEntry {
         op_id: OP_SET_SLOT,
         name: "SET_SLOT".into(),
         category: OperatorCategory::Memorize,
         arg_byte_count: 12, // 3 × 4 bytes (layer u32, slot u32, value Code32)
         effect_kind: EffectKind::WritesOneSlotFromArgs,
-        // Masks are 0×0 (dimension-free): SET_SLOT's effect depends on which
-        // (layer, slot) its args specify at runtime. The effect_kind +
-        // post-apply check substitutes for static mask checking.
-        precondition_mask: IdentityMaskV1::new(0, 0),
-        effect_mask: IdentityMaskV1::new(0, 0),
-        status_effect_mask: StatusMaskV1::new(0, 0),
+        precondition_mask: empty_id_mask(),
+        effect_mask: empty_id_mask(),
+        status_effect_mask: empty_st_mask(),
         cost_model: "unit".into(),
         contract_epoch: "v1".into(),
     };
-    OperatorRegistryV1::new("operator_registry.v1".into(), vec![entry])
-        .expect("kernel_operator_registry: static invariant violated")
+
+    let stage = OperatorEntry {
+        op_id: OP_STAGE,
+        name: "STAGE".into(),
+        category: OperatorCategory::Memorize,
+        arg_byte_count: 12, // 3 × 4 bytes (layer u32, slot u32, value Code32)
+        effect_kind: EffectKind::StagesOneSlot,
+        precondition_mask: empty_id_mask(),
+        effect_mask: empty_id_mask(),
+        status_effect_mask: empty_st_mask(),
+        cost_model: "unit".into(),
+        contract_epoch: "v1".into(),
+    };
+
+    let commit = OperatorEntry {
+        op_id: OP_COMMIT,
+        name: "COMMIT".into(),
+        category: OperatorCategory::Control,
+        arg_byte_count: 4, // 1 × 4 bytes (layer u32)
+        effect_kind: EffectKind::CommitsTransaction,
+        precondition_mask: empty_id_mask(),
+        effect_mask: empty_id_mask(),
+        status_effect_mask: empty_st_mask(),
+        cost_model: "unit".into(),
+        contract_epoch: "v1".into(),
+    };
+
+    let rollback = OperatorEntry {
+        op_id: OP_ROLLBACK,
+        name: "ROLLBACK".into(),
+        category: OperatorCategory::Control,
+        arg_byte_count: 4, // 1 × 4 bytes (layer u32)
+        effect_kind: EffectKind::RollsBackTransaction,
+        precondition_mask: empty_id_mask(),
+        effect_mask: empty_id_mask(),
+        status_effect_mask: empty_st_mask(),
+        cost_model: "unit".into(),
+        contract_epoch: "v1".into(),
+    };
+
+    OperatorRegistryV1::new(
+        "operator_registry.v1".into(),
+        vec![set_slot, stage, commit, rollback],
+    )
+    .expect("kernel_operator_registry: static invariant violated")
 }
 
 // ---------------------------------------------------------------------------
@@ -440,21 +511,46 @@ mod tests {
     }
 
     #[test]
-    fn kernel_operator_registry_has_set_slot() {
+    fn kernel_operator_registry_has_all_operators() {
         let reg = kernel_operator_registry();
-        assert_eq!(reg.len(), 1);
-        let entry = reg.get(&OP_SET_SLOT).unwrap();
-        assert_eq!(entry.name, "SET_SLOT");
-        assert_eq!(entry.category, OperatorCategory::Memorize);
-        assert_eq!(entry.arg_byte_count, 12);
-        assert_eq!(entry.effect_kind, EffectKind::WritesOneSlotFromArgs);
-        assert_eq!(entry.contract_epoch, "v1");
+        assert_eq!(reg.len(), 4);
+
+        let set_slot = reg.get(&OP_SET_SLOT).unwrap();
+        assert_eq!(set_slot.name, "SET_SLOT");
+        assert_eq!(set_slot.category, OperatorCategory::Memorize);
+        assert_eq!(set_slot.arg_byte_count, 12);
+        assert_eq!(set_slot.effect_kind, EffectKind::WritesOneSlotFromArgs);
+        assert_eq!(set_slot.contract_epoch, "v1");
+
+        let stage = reg.get(&OP_STAGE).unwrap();
+        assert_eq!(stage.name, "STAGE");
+        assert_eq!(stage.category, OperatorCategory::Memorize);
+        assert_eq!(stage.arg_byte_count, 12);
+        assert_eq!(stage.effect_kind, EffectKind::StagesOneSlot);
+
+        let commit = reg.get(&OP_COMMIT).unwrap();
+        assert_eq!(commit.name, "COMMIT");
+        assert_eq!(commit.category, OperatorCategory::Control);
+        assert_eq!(commit.arg_byte_count, 4);
+        assert_eq!(commit.effect_kind, EffectKind::CommitsTransaction);
+
+        let rollback = reg.get(&OP_ROLLBACK).unwrap();
+        assert_eq!(rollback.name, "ROLLBACK");
+        assert_eq!(rollback.category, OperatorCategory::Control);
+        assert_eq!(rollback.arg_byte_count, 4);
+        assert_eq!(rollback.effect_kind, EffectKind::RollsBackTransaction);
     }
 
     #[test]
     fn effect_kind_round_trip() {
-        let kind = EffectKind::WritesOneSlotFromArgs;
-        assert_eq!(EffectKind::parse(kind.as_str()), Some(kind));
+        for kind in [
+            EffectKind::WritesOneSlotFromArgs,
+            EffectKind::StagesOneSlot,
+            EffectKind::CommitsTransaction,
+            EffectKind::RollsBackTransaction,
+        ] {
+            assert_eq!(EffectKind::parse(kind.as_str()), Some(kind));
+        }
         assert_eq!(EffectKind::parse("unknown"), None);
     }
 
@@ -467,15 +563,24 @@ mod tests {
         let bytes = reg.canonical_bytes().unwrap();
         let s = std::str::from_utf8(&bytes).unwrap();
 
-        // Verify key structural properties rather than exact bytes
-        // (exact bytes would be too brittle for the first commit).
+        // Verify key structural properties rather than exact bytes.
         assert!(s.starts_with('{'));
         assert!(s.ends_with('}'));
         assert!(s.contains("\"schema_version\":\"operator_registry.v1\""));
+        // All four operators present
         assert!(s.contains("\"name\":\"SET_SLOT\""));
+        assert!(s.contains("\"name\":\"STAGE\""));
+        assert!(s.contains("\"name\":\"COMMIT\""));
+        assert!(s.contains("\"name\":\"ROLLBACK\""));
+        // Effect kinds
         assert!(s.contains("\"effect_kind\":\"writes_one_slot_from_args\""));
-        assert!(s.contains("\"arg_byte_count\":12"));
-        assert!(s.contains("\"category\":\"M\""));
+        assert!(s.contains("\"effect_kind\":\"stages_one_slot\""));
+        assert!(s.contains("\"effect_kind\":\"commits_transaction\""));
+        assert!(s.contains("\"effect_kind\":\"rolls_back_transaction\""));
+        // Op IDs: SET_SLOT(1,1,1), STAGE(1,1,2), COMMIT(1,1,3), ROLLBACK(1,1,4)
         assert!(s.contains("\"op_id\":[1,1,1,0]"));
+        assert!(s.contains("\"op_id\":[1,1,2,0]"));
+        assert!(s.contains("\"op_id\":[1,1,3,0]"));
+        assert!(s.contains("\"op_id\":[1,1,4,0]"));
     }
 }
