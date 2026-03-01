@@ -1913,7 +1913,8 @@ fn verify_tool_transcript(
         });
     }
 
-    // step_index monotonically increasing
+    // step_index non-decreasing (multiple candidates in the same expansion
+    // share the same expansion_order, so equal is valid)
     let mut prev_step: Option<u64> = None;
     for entry in entries {
         let step = entry
@@ -1923,10 +1924,10 @@ fn verify_tool_transcript(
                 detail: "entry missing step_index".to_string(),
             })?;
         if let Some(prev) = prev_step {
-            if step <= prev {
+            if step < prev {
                 return Err(BundleVerifyError::ToolTranscriptStepIndexInvalid {
                     detail: format!(
-                        "step_index {step} not monotonically increasing (prev {prev})"
+                        "step_index {step} not non-decreasing (prev {prev})"
                     ),
                 });
             }
@@ -1986,73 +1987,126 @@ fn verify_tool_transcript(
     Ok(())
 }
 
-/// Cert trace-order audit: verify committed-write safety from the tape.
+/// Cert trace-order audit: verify committed-write safety on the winning path.
 ///
-/// Rules:
+/// Only checks the goal path (root → goal node), not all explored branches.
+/// The search tape records all expansions across all branches; checking
+/// global tape order would false-positive on legitimate branch exploration.
+///
+/// Rules (on winning path only):
 /// - No writes to layer 0 (via `SET_SLOT`) before `OP_COMMIT` has been applied.
 /// - No writes to any layer after `OP_ROLLBACK` has been applied.
 fn verify_trace_order_safety(
     tape: &sterling_search::tape::SearchTapeV1,
 ) -> Result<(), BundleVerifyError> {
+    use std::collections::HashMap;
     use sterling_kernel::operators::apply::{OP_COMMIT, OP_ROLLBACK, OP_SET_SLOT, OP_STAGE};
+    use sterling_search::graph::TerminationReasonV1;
     use sterling_search::tape::{TapeCandidateOutcomeV1, TapeRecordV1};
 
-    let mut commit_seen = false;
-    let mut rollback_seen = false;
+    // Find the goal node from termination.
+    let goal_node = tape.records.iter().find_map(|r| {
+        if let TapeRecordV1::Termination(t) = r {
+            if let TerminationReasonV1::GoalReached { node_id } = t.reason {
+                return Some(node_id);
+            }
+        }
+        None
+    });
+    let Some(goal_node) = goal_node else {
+        // No goal reached → no winning path to audit.
+        return Ok(());
+    };
 
+    // Build node_id → parent_id map from NodeCreation records.
+    let mut parent_map: HashMap<u64, Option<u64>> = HashMap::new();
+    for record in &tape.records {
+        if let TapeRecordV1::NodeCreation(nc) = record {
+            parent_map.insert(nc.node_id, nc.parent_id);
+        }
+    }
+
+    // Walk backwards from goal to root to collect winning path node IDs.
+    let mut path_nodes: Vec<u64> = Vec::new();
+    let mut current = goal_node;
+    loop {
+        path_nodes.push(current);
+        match parent_map.get(&current) {
+            Some(Some(parent)) => current = *parent,
+            _ => break, // root node (parent_id = None) or not found
+        }
+    }
+    path_nodes.reverse(); // root → goal order
+
+    // Build node_id → expansion index for winning path nodes.
+    let path_node_set: std::collections::HashSet<u64> = path_nodes.iter().copied().collect();
+
+    // Collect the applied candidates on the winning path in expansion order.
+    // For each expansion of a path node, find the candidate that transitions
+    // to the next node on the path.
+    let mut winning_candidates: Vec<(u64, sterling_kernel::carrier::code32::Code32, Vec<u8>)> =
+        Vec::new();
     for record in &tape.records {
         let TapeRecordV1::Expansion(expansion) = record else {
             continue;
         };
-
+        if !path_node_set.contains(&expansion.node_id) {
+            continue;
+        }
         for candidate in &expansion.candidates {
-            if !matches!(candidate.outcome, TapeCandidateOutcomeV1::Applied { .. }) {
-                continue;
+            if let TapeCandidateOutcomeV1::Applied { to_node } = &candidate.outcome {
+                if path_node_set.contains(to_node) {
+                    let op_code = sterling_kernel::carrier::code32::Code32::from_le_bytes(
+                        candidate.op_code_bytes,
+                    );
+                    winning_candidates.push((
+                        expansion.expansion_order,
+                        op_code,
+                        candidate.op_args.clone(),
+                    ));
+                }
             }
+        }
+    }
 
-            let op_code =
-                sterling_kernel::carrier::code32::Code32::from_le_bytes(candidate.op_code_bytes);
+    // Check rules on winning path candidates in order.
+    let mut commit_seen = false;
+    let mut rollback_seen = false;
 
-            // Track commit/rollback state.
-            if op_code == OP_COMMIT {
-                commit_seen = true;
-            } else if op_code == OP_ROLLBACK {
-                rollback_seen = true;
-            }
+    for (exp_order, op_code, op_args) in &winning_candidates {
+        // Rule 1: No writes after rollback.
+        if rollback_seen
+            && (op_code == &OP_SET_SLOT || op_code == &OP_STAGE || op_code == &OP_COMMIT)
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            return Err(BundleVerifyError::CommittedWriteOrderViolation {
+                step_index: *exp_order as usize,
+                detail: format!(
+                    "write (op {op_code:?}) after OP_ROLLBACK at expansion {exp_order}"
+                ),
+            });
+        }
 
-            // Rule 1: No writes after rollback.
-            if rollback_seen
-                && (op_code == OP_SET_SLOT || op_code == OP_STAGE || op_code == OP_COMMIT)
-            {
+        // Rule 2: No layer 0 writes before commit.
+        if op_code == &OP_SET_SLOT && !commit_seen && op_args.len() >= 4 {
+            let layer =
+                u32::from_le_bytes([op_args[0], op_args[1], op_args[2], op_args[3]]);
+            if layer == 0 {
                 #[allow(clippy::cast_possible_truncation)]
                 return Err(BundleVerifyError::CommittedWriteOrderViolation {
-                    step_index: expansion.expansion_order as usize,
+                    step_index: *exp_order as usize,
                     detail: format!(
-                        "write (op {op_code:?}) after OP_ROLLBACK at expansion {}",
-                        expansion.expansion_order
+                        "SET_SLOT to layer 0 before OP_COMMIT at expansion {exp_order}"
                     ),
                 });
             }
+        }
 
-            // Rule 2: No layer 0 writes before commit.
-            if op_code == OP_SET_SLOT && !commit_seen && candidate.op_args.len() >= 4 {
-                let layer = u32::from_le_bytes([
-                    candidate.op_args[0],
-                    candidate.op_args[1],
-                    candidate.op_args[2],
-                    candidate.op_args[3],
-                ]);
-                if layer == 0 {
-                    #[allow(clippy::cast_possible_truncation)]
-                    return Err(BundleVerifyError::CommittedWriteOrderViolation {
-                        step_index: expansion.expansion_order as usize,
-                        detail: format!(
-                            "SET_SLOT to layer 0 before OP_COMMIT at expansion {}",
-                            expansion.expansion_order
-                        ),
-                    });
-                }
-            }
+        // Track state after checks.
+        if op_code == &OP_COMMIT {
+            commit_seen = true;
+        } else if op_code == &OP_ROLLBACK {
+            rollback_seen = true;
         }
     }
 
