@@ -25,15 +25,15 @@ purpose: >
   moves Sterling from "deterministic search engine" to "tool-safe reasoning engine."
   Three new kernel operators (OP_STAGE, OP_COMMIT, OP_ROLLBACK) with distinct
   EffectKind variants replace the B2-001 pattern of encoding transaction semantics
-  entirely through SET_SLOT. A new normative artifact (tool_transcript.json) records
-  every tool action with its operator, arguments, and outcome, digest-bound into the
-  evidence corridor (report + graph metadata + tape header). Cert verification
-  fail-closes on transcript absence for tool-world bundles.
+  entirely through SET_SLOT. A new required derived artifact (tool_transcript.json)
+  is rendered deterministically from the authoritative SearchTape, with Cert-only
+  equivalence verification (analogous to tape→graph). Digest-bound into the
+  evidence corridor (report + graph metadata + tape header).
 
   This is the first truth-regime world that requires kernel operator additions (B2-001
   was entirely consumer-side). It forces the operator extensibility path that all
   future worlds depend on: new EffectKind variants, new dispatch entries, registry
-  growth, and a new normative artifact with corridor binding.
+  growth, and a new derived artifact with corridor binding and equivalence checking.
 
 depends_on:
   - "B2-001: TransactionalKvStore world establishes 2-layer state model and write-once semantics."
@@ -49,16 +49,105 @@ non_goals:
   - "No changes to SearchGraphV1 schema version — tool_transcript_digest is additive (ADR 0008)."
   - "No multi-tool worlds — single tool type per world in this spec."
   - "No OP_CLEAR_SLOT or multi-write-per-slot — B2.1 scope remains separate."
+  - >-
+    No multiple independent transactions per episode — single-txn-then-stop by design
+    until CLEAR_SLOT / status demotion exists (B2.1). Transcript schema supports
+    multi-txn via txn_epoch field so the format doesn't need a breaking change later.
 
 design:
   architectural_posture: >
     This spec exercises three extension boundaries simultaneously:
     (1) kernel operator extension (new EffectKind variants + dispatch entries),
-    (2) normative artifact extension (tool_transcript.json + corridor binding),
+    (2) derived artifact extension (tool_transcript.json + corridor binding + equivalence),
     (3) ADR 0008 additive field extension (new metadata fields in existing schemas).
     Each extension must be backward-compatible: existing worlds (RomeMini,
     SlotLatticeSearch, TransactionalKvStore) must continue to build and verify
     unchanged.
+
+  # ---------------------------------------------------------------------------
+  # Pivot 1: Transcript as derived projection, not independent narrative
+  # ---------------------------------------------------------------------------
+  transcript_authority: >
+    tool_transcript.json is a DERIVED PROJECTION of SearchTape (the authoritative
+    trace), not an independent narrative artifact. This follows the same pattern as
+    SearchGraphV1: the tape is authoritative, the transcript is a human-readable
+    derived view that must be byte-identical to a deterministic rendering from the
+    tape. This prevents the "coherently forged transcript" class of attack where
+    digest bindings are consistent but the transcript content diverges from what
+    actually happened.
+
+    The rendering function render_tool_transcript(tape, operator_registry) is
+    deterministic and pure: given the same tape bytes and registry, it always
+    produces the same canonical JSON bytes. The transcript is NOT built from
+    trace events during execution; it is rendered from the finished tape as a
+    post-hoc projection.
+
+  transcript_equivalence: >
+    Cert-only equivalence check (analogous to tape→graph equivalence, Step 18):
+    The verifier independently renders tool_transcript.json from the SearchTape
+    and the operator_registry.json, then asserts byte-identical match to the
+    bundle-shipped tool_transcript.json. This closes the correspondence gap.
+
+    Base profile: required-if-present digest binding checks (coherence only).
+    Cert profile: mandatory presence + digest binding + equivalence render.
+
+    This means a "coherently forged transcript" where tape/header/graph digest
+    bindings are updated to match a tampered transcript will pass Base but fail
+    Cert with a typed TranscriptEquivalenceMismatch error.
+
+  # ---------------------------------------------------------------------------
+  # Pivot 2: Obligation gating via evidence_obligations, not registry contents
+  # ---------------------------------------------------------------------------
+  obligation_gating: >
+    Transcript requirements are NOT gated on "operators present in registry."
+    The operator registry is (or will become) a global catalog; conditioning
+    verification obligations on its contents creates fragile coupling that breaks
+    when the registry grows.
+
+    Instead, obligations are declared in fixture dimensions via an explicit
+    evidence_obligations field: e.g., obligations: ["tool_transcript_v1"].
+    This is a world-declared property, set at fixture build time, stable across
+    runs. The verifier reads obligations from fixture.json and enforces
+    accordingly.
+
+    Gating rules:
+    - Cert: if evidence_obligations contains "tool_transcript_v1", transcript
+      MUST be present and MUST pass equivalence check. Absence → typed error.
+    - Cert: if evidence_obligations does NOT contain "tool_transcript_v1",
+      transcript is ignored even if tool operators are in the registry.
+    - Base: required-if-present (digest binding only, no equivalence render).
+
+    This scales to Phase 1b/1c: partial observability can add
+    "belief_update_v1", stochastic worlds can add "seed_witness_v1", etc.
+    Each obligation is a named, versioned contract.
+
+    Belt-and-suspenders: Cert also cross-checks that if the SearchTape contains
+    frames with tool operator op_codes, then "tool_transcript_v1" MUST be in
+    evidence_obligations. This catches worlds that use tool operators but forget
+    to declare the obligation. The reverse (obligation declared but no tool ops
+    in trace) is allowed — a world may declare transcript obligation even if a
+    particular run found a non-tool path.
+
+  # ---------------------------------------------------------------------------
+  # Pivot 3: Committed-write safety boundary
+  # ---------------------------------------------------------------------------
+  committed_write_safety: >
+    "Side effects" in this world means "writes to the committed layer (layer 0)."
+    The safety claim is: no writes to layer 0 are permitted before OP_COMMIT has
+    occurred, and no writes to any layer are permitted after OP_ROLLBACK.
+
+    This is enforced at TWO levels:
+    (1) Proposer-side: enumerate_candidates() only emits SET_SLOT(layer=0, ...)
+        candidates after the txn_marker shows kv:commit. After kv:rollback, no
+        candidates are emitted.
+    (2) Verifier-side (Cert only): Step 12e includes a trace-order audit that
+        checks the executed SearchTape for committed-write ordering violations.
+        This does NOT rely on proposer correctness — it independently verifies
+        the safety property from the authoritative trace.
+
+    Double-finalization is rejected: commit after rollback, rollback after commit,
+    commit twice, rollback twice are all precondition failures (txn_marker slot
+    is already Provisional → write-once violation at the kernel level).
 
   new_operators:
     OP_STAGE:
@@ -67,26 +156,25 @@ design:
       effect: >
         Writes value to identity[layer][slot] and promotes status to Provisional.
         Identical mechanical effect to SET_SLOT but with distinct EffectKind
-        (StagesOneSlot) that also records the action in the tool transcript.
-        Precondition: target slot must be Hole (write-once).
+        (StagesOneSlot). Precondition: target slot must be Hole (write-once).
       effect_kind: "StagesOneSlot"
       semantics: >
         Declares intent to stage a value for later commit/rollback decision.
-        Distinguished from SET_SLOT to enable transcript recording and
-        audit of staging vs direct-write actions.
+        Distinguished from SET_SLOT so the transcript can categorize staging
+        actions vs direct writes.
 
     OP_COMMIT:
       code: "Code32::new(1, 1, 3) — domain 1, kind 1, local_id 3"
       args: "1 arg slot (4 bytes): layer index (u32 LE) identifying the staging layer"
       effect: >
         Writes a commit marker to the transaction marker slot on the staging layer.
-        Validates that at least one slot on the staging layer has been staged
-        (is Provisional). Precondition: txn_marker slot must be Hole.
+        Validates that at least one non-marker slot on the staging layer has been
+        staged (is Provisional). Precondition: txn_marker slot must be Hole.
       effect_kind: "CommitsTransaction"
       semantics: >
         Finalizes a staging transaction. After commit, staged values are
-        semantically committed. The commit marker is itself a write
-        (Hole→Provisional on the txn_marker slot).
+        semantically committed and commit-writes to layer 0 become legal.
+        The commit marker is itself a write (Hole→Provisional on txn_marker).
 
     OP_ROLLBACK:
       code: "Code32::new(1, 1, 4) — domain 1, kind 1, local_id 4"
@@ -97,65 +185,99 @@ design:
       effect_kind: "RollsBackTransaction"
       semantics: >
         Abandons a staging transaction. Staged values remain in state
-        (residue) but are semantically discarded. The rollback marker
-        is itself a write (Hole→Provisional on the txn_marker slot).
+        (residue) but are semantically discarded. No further operations
+        are legal after rollback (no candidates emitted; verifier rejects
+        post-rollback writes).
 
   new_effect_kinds:
+    validation_constraints: >
+      Each EffectKind is validated using ONLY pre-state bytes, post-state bytes,
+      operator args, and fixed schema-known slot locations. Bounded scan over
+      ByteState planes (layer_count × slot_count, both small). No validator
+      depends on search context, world harness, or non-kernel code.
+
     StagesOneSlot: >
-      Validates: exactly 1 identity diff and 1 status diff (same as
-      WritesOneSlotFromArgs). Distinguished for transcript categorization.
-      Mechanical validation is identical but semantic tagging enables
-      richer audit trails.
+      Validates: exactly 1 identity diff and 1 status diff (same mechanical
+      check as WritesOneSlotFromArgs). Distinguished at the type level for
+      transcript categorization. Kernel does not need world context to validate.
 
     CommitsTransaction: >
-      Validates: exactly 1 identity diff (txn_marker slot) and 1 status diff
-      (txn_marker Hole→Provisional). Additionally requires that at least one
-      non-marker slot on the target layer is Provisional (something was staged).
+      Validates: exactly 1 identity diff (txn_marker slot, arg-specified) and
+      1 status diff (txn_marker Hole→Provisional). Additionally requires that
+      at least one non-marker slot on the target layer (arg-specified) is
+      Provisional (something was staged). The "at least one staged" check is a
+      bounded scan of status[layer][0..slot_count-1].
 
     RollsBackTransaction: >
-      Validates: exactly 1 identity diff (txn_marker slot) and 1 status diff
-      (txn_marker Hole→Provisional). No precondition on staged slots — rollback
-      of an empty staging area is allowed (no-op rollback).
+      Validates: exactly 1 identity diff (txn_marker slot, arg-specified) and
+      1 status diff (txn_marker Hole→Provisional). No precondition on staged
+      slots — rollback of an empty staging area is allowed (no-op rollback).
 
   tool_transcript_artifact:
     name: "tool_transcript.json"
-    normative: true
+    kind: "required derived artifact (like SearchGraphV1, not like concept_registry.json)"
     schema: >
       Canonical JSON object with fields:
       - "schema_version": "tool_transcript.v1"
       - "world_id": string (matches report world_id)
+      - "txn_epoch": integer (0 for single-txn; reserved for multi-txn support)
       - "entries": array of transcript entry objects, each with:
-        - "step_index": integer (0-based, matches trace frame index)
+        - "step_index": integer (0-based, matches SearchTape frame index)
         - "operator": string (operator name from registry, e.g., "STAGE", "COMMIT", "ROLLBACK")
         - "op_code": [d, k, lo, hi] (Code32 bytes for deterministic round-trip)
-        - "args": object (operator-specific structured args, not raw bytes)
-        - "outcome": "applied" | "precondition_failed" (only "applied" in valid traces)
+        - "args": object (operator-specific structured args, canonical key order)
+        - "outcome": "applied" (only "applied" in valid traces; invalid outcomes are trace failures, not transcript entries)
       - "entry_count": integer (matches entries array length, for tamper detection)
 
+    rendering: >
+      render_tool_transcript(tape: &SearchTapeV1, registry: &OperatorRegistryV1) -> Vec<u8>.
+      Pure, deterministic function. Iterates SearchTape expansion records for
+      the winning path, extracts frames where op_code matches a tool operator
+      (STAGE/COMMIT/ROLLBACK), and renders each as a transcript entry.
+      Output is canonical JSON bytes. The function lives in the harness crate
+      (not search) because it bridges tape evidence with bundle artifact concerns.
+
     digest_binding: >
-      tool_transcript_digest = binding_hex(canonical_hash(DOMAIN_BUNDLE_ARTIFACT, transcript_bytes)).
+      tool_transcript_digest = binding_hex(canonical_hash(BundleArtifact, transcript_bytes)).
       Threaded through: graph metadata (raw hex), tape header (raw hex),
       verification report (full sha256:hex). Following BIND-001 convention.
 
     corridor_position: >
       New verification step 12e: tool transcript coherence (after 12d compilation replay).
-      Checks: (1) tool_transcript.json present if world declares tool operators,
+      Checks: (1) presence gated on evidence_obligations (not registry contents),
       (2) digest matches cross-references in graph metadata + tape header + report,
       (3) entry_count matches entries array length,
-      (4) step_index sequence is monotonically increasing and within trace bounds.
+      (4) step_index sequence is monotonically increasing and within trace bounds,
+      (5) Cert only: equivalence render from tape + registry == shipped transcript bytes,
+      (6) Cert only: trace-order audit for committed-write safety.
 
     cert_requirement: >
-      Cert profile: tool_transcript.json is mandatory for bundles containing
-      tool operators (OP_STAGE, OP_COMMIT, OP_ROLLBACK) in the operator registry.
-      Absence is a typed verification error. Base profile: required-if-present.
+      Cert profile: tool_transcript.json is mandatory when evidence_obligations
+      in fixture.json contains "tool_transcript_v1". Absence is a typed error.
+      Equivalence render must match shipped transcript byte-for-byte.
+      Base profile: required-if-present digest binding only.
+
+  evidence_obligations: >
+    New additive field in fixture dimensions (FixtureDimensions / fixture.json):
+    evidence_obligations: Vec<String>. Default empty for existing worlds.
+    ToolKvStore sets evidence_obligations: ["tool_transcript_v1"].
+
+    This is the declaration surface the verifier reads to determine which
+    derived artifacts are mandatory. Each obligation is a named, versioned
+    contract. The verifier maps obligation names to verification steps:
+    - "tool_transcript_v1" → Step 12e (transcript presence + equivalence).
+
+    Future obligations (Phase 1b/1c): "belief_update_v1", "seed_witness_v1", etc.
+
+    Belt-and-suspenders cross-check (Cert only): if SearchTape contains frames
+    with tool operator op_codes but evidence_obligations does not include
+    "tool_transcript_v1", Cert fails with ObligationMismatch. This catches
+    worlds that exercise tool operators but forget to declare the obligation.
 
   new_hash_domain: >
-    HashDomain::ToolTranscript => b"STERLING::TOOL_TRANSCRIPT::V1\0"
-    Used for tool_transcript_digest if a dedicated domain is needed. However,
-    per BIND-001 convention, content hashing uses DOMAIN_BUNDLE_ARTIFACT (the
-    artifact-level domain) and the new domain would be for any transcript-internal
-    chain hashing if needed. Decision: start with BundleArtifact domain only;
-    add ToolTranscript domain only if transcript-internal chaining is introduced.
+    No new HashDomain variant needed for Phase 1a. Content hashing uses
+    BundleArtifact per existing convention. A ToolTranscript domain would
+    only be needed if transcript-internal chain hashing is introduced later.
 
   tool_world:
     name: "ToolKvStore"
@@ -164,29 +286,36 @@ design:
       OP_ROLLBACK instead of encoding all operations through SET_SLOT. Same
       concept values (domain 2: kv:empty, kv:commit, kv:rollback, kv:v0..v2).
       Same goal definition (committed layer only). Same write-once semantics.
-      But now the operator choice itself carries semantic meaning that is
-      recorded in the tool transcript.
+      The operator choice carries semantic meaning recorded in the derived
+      tool transcript.
 
     key_differences_from_b2:
       - "Uses OP_STAGE instead of SET_SLOT for staging writes"
       - "Uses OP_COMMIT instead of SET_SLOT(txn_marker, kv:commit)"
       - "Uses OP_ROLLBACK instead of SET_SLOT(txn_marker, kv:rollback)"
-      - "Still uses SET_SLOT for commit-writes to layer 0 (these are direct writes, not staged)"
-      - "Emits tool_transcript.json as normative artifact"
+      - "Still uses SET_SLOT for commit-writes to layer 0 (direct writes, not staged)"
+      - "Emits tool_transcript.json as required derived artifact"
       - "Operator registry includes 4 operators: SET_SLOT, STAGE, COMMIT, ROLLBACK"
+      - "fixture.json declares evidence_obligations: ['tool_transcript_v1']"
 
     candidate_ordering: >
       Deterministic: stage candidates (slot ascending, value ascending),
       then commit (if staging non-empty and marker unset),
-      then commit-writes via SET_SLOT (slot ascending, only if committed),
+      then commit-writes via SET_SLOT (slot ascending, only after committed),
       then rollback (if staging non-empty and marker unset).
+      No candidates emitted after rollback marker.
+
+    committed_write_rule: >
+      SET_SLOT(layer=0, ...) candidates are ONLY emitted after OP_COMMIT has
+      been applied (txn_marker == kv:commit). No layer 0 writes before commit.
+      No writes of any kind after OP_ROLLBACK. This is enforced at the proposer
+      level AND independently verified by the Cert trace-order audit in Step 12e.
 
   backward_compatibility: >
     Existing worlds (RomeMini, RomeMiniSearch, SlotLatticeSearch, TransactionalKvStore)
-    use only OP_SET_SLOT with EffectKind::WritesOneSlotFromArgs. They do not emit
-    tool_transcript.json. verify_bundle() must continue to pass for these worlds
-    without any tool transcript. The new verification step (12e) is conditional on
-    tool operators being present in the operator registry.
+    have evidence_obligations: [] (empty, default). They do not emit
+    tool_transcript.json. verify_bundle() Step 12e is skipped when
+    evidence_obligations does not contain "tool_transcript_v1". No regressions.
 
 scope:
   in:
@@ -221,36 +350,50 @@ invariants:
     INV-TOOL-01: OP_STAGE, OP_COMMIT, OP_ROLLBACK are kernel-level operators with
     distinct Code32 IDs, registered in kernel_operator_registry() with their own
     EffectKind variants. They go through the same three-phase apply() check as
-    OP_SET_SLOT.
+    OP_SET_SLOT. Each EffectKind is validated using only pre/post state bytes,
+    operator args, and schema-known slot locations (bounded scan, no world context).
   - >-
-    INV-TOOL-02: tool_transcript.json is a normative artifact. Its digest is
+    INV-TOOL-02: tool_transcript.json is a required derived artifact rendered
+    deterministically from SearchTape + OperatorRegistryV1. Its digest is
     bound in graph metadata (raw hex), tape header (raw hex), and verification
     report (sha256:hex). Binding follows BIND-001 convention.
   - >-
-    INV-TOOL-03: Cert verification fail-closes on tool_transcript.json absence
-    when the operator registry contains tool operators (STAGE/COMMIT/ROLLBACK).
-    Base profile: required-if-present.
+    INV-TOOL-03: Transcript obligation is gated on evidence_obligations in
+    fixture.json, NOT on operator registry contents. Cert: mandatory when
+    evidence_obligations contains "tool_transcript_v1". Base: required-if-present.
   - >-
-    INV-TOOL-04: Existing worlds that do not use tool operators continue to
-    build and verify without any tool transcript. verify_bundle() is backward-
-    compatible.
+    INV-TOOL-04: Cert equivalence check: verifier independently renders
+    tool_transcript.json from SearchTape + OperatorRegistryV1 and asserts
+    byte-identical match to shipped artifact. Analogous to tape→graph equivalence.
   - >-
-    INV-TOOL-05: tool_transcript.json entry_count must equal the entries array
-    length. step_index values must be monotonically increasing and correspond to
-    actual trace frame indices.
+    INV-TOOL-05: Existing worlds with evidence_obligations: [] continue to
+    build and verify without tool transcript. verify_bundle() is backward-compatible.
   - >-
-    INV-TOOL-06: OP_COMMIT precondition requires at least one Provisional
-    (staged) slot on the target layer before the commit marker can be written.
-    Empty commits are rejected.
+    INV-TOOL-06: tool_transcript.json entry_count must equal entries array length.
+    step_index values must be monotonically increasing and correspond to SearchTape
+    frame indices.
   - >-
-    INV-TOOL-07: OP_ROLLBACK has no staged-slot precondition. Empty rollbacks
+    INV-TOOL-07: OP_COMMIT precondition requires at least one Provisional (staged)
+    non-marker slot on the target layer. Empty commits are rejected at the kernel level.
+  - >-
+    INV-TOOL-08: OP_ROLLBACK has no staged-slot precondition. Empty rollbacks
     (no-op) are permitted.
+  - >-
+    INV-TOOL-09: No writes to committed layer (layer 0) are permitted before
+    OP_COMMIT. No writes to any layer are permitted after OP_ROLLBACK. Enforced
+    at proposer level (enumerate_candidates) AND independently verified by Cert
+    trace-order audit in Step 12e. Double-finalization (commit+rollback, rollback+commit,
+    double-commit, double-rollback) is rejected by write-once on txn_marker.
+  - >-
+    INV-TOOL-10: Cert cross-check: if SearchTape contains frames with tool operator
+    op_codes but evidence_obligations does not include "tool_transcript_v1",
+    verification fails with ObligationMismatch.
 
 errors:
   - id: TOOL-ERR-TRANSCRIPT-MISSING
     variant: "ToolTranscriptMissing"
     description: >-
-      Cert verification: operator registry contains tool operators but
+      Cert verification: evidence_obligations includes "tool_transcript_v1" but
       tool_transcript.json is absent from the bundle.
 
   - id: TOOL-ERR-TRANSCRIPT-DIGEST-MISMATCH
@@ -259,16 +402,24 @@ errors:
       tool_transcript.json content hash does not match the digest declared in
       graph metadata, tape header, or verification report.
 
+  - id: TOOL-ERR-TRANSCRIPT-EQUIVALENCE
+    variant: "ToolTranscriptEquivalenceMismatch { expected_hash: String, rendered_hash: String }"
+    description: >-
+      Cert only: independently rendered transcript from SearchTape + OperatorRegistryV1
+      does not byte-match the shipped tool_transcript.json. Reports content hashes
+      of both blobs (BundleArtifact domain), not raw bytes. Analogous to
+      tape→graph equivalence failure.
+
   - id: TOOL-ERR-TRANSCRIPT-ENTRY-COUNT
     variant: "ToolTranscriptEntryCountMismatch { declared: usize, actual: usize }"
     description: >-
-      entry_count field in tool_transcript.json does not match the entries array length.
+      entry_count field in tool_transcript.json does not match entries array length.
 
   - id: TOOL-ERR-TRANSCRIPT-STEP-INDEX
     variant: "ToolTranscriptStepIndexInvalid { detail: String }"
     description: >-
-      step_index values in tool transcript entries are not monotonically increasing
-      or reference frame indices outside the trace bounds.
+      step_index values in transcript entries are not monotonically increasing
+      or reference frame indices outside the SearchTape bounds.
 
   - id: TOOL-ERR-TRANSCRIPT-DIGEST-MISSING
     variant: "ToolTranscriptDigestMissing { location: String }"
@@ -276,11 +427,25 @@ errors:
       tool_transcript_digest expected in graph metadata / tape header / report
       but field is absent.
 
+  - id: TOOL-ERR-OBLIGATION-MISMATCH
+    variant: "ObligationMismatch { detail: String }"
+    description: >-
+      Cert cross-check: SearchTape contains tool operator frames but
+      evidence_obligations does not include "tool_transcript_v1", or
+      evidence_obligations declares transcript but fixture does not
+      match the expected obligation contract.
+
+  - id: TOOL-ERR-COMMITTED-WRITE-ORDER
+    variant: "CommittedWriteOrderViolation { step_index: usize, detail: String }"
+    description: >-
+      Cert trace-order audit: a write to committed layer (layer 0) occurred
+      before OP_COMMIT, or a write to any layer occurred after OP_ROLLBACK.
+
   - id: TOOL-ERR-COMMIT-EMPTY
     variant: "CommitWithoutStagedSlots"
     description: >-
-      OP_COMMIT applied to a layer with no Provisional (staged) slots.
-      Violates INV-TOOL-06.
+      OP_COMMIT applied to a layer with no Provisional (staged) non-marker slots.
+      Violates INV-TOOL-07.
 
 acceptance:
   - id: TOOL-001-KERNEL-OPS
@@ -293,19 +458,33 @@ acceptance:
   - id: TOOL-001-EFFECT-KINDS
     description: >-
       StagesOneSlot, CommitsTransaction, RollsBackTransaction are new EffectKind
-      variants with correct validation logic. WritesOneSlotFromArgs unchanged.
+      variants with correct validation logic. Each validated using only pre/post
+      state bytes, args, and schema-known slot locations. WritesOneSlotFromArgs
+      unchanged. Validator-negative tests: each operator attempts out-of-contract
+      effect, kernel rejects with typed EffectContractViolation.
     status: pending
 
   - id: TOOL-001-WORLD
     description: >-
       ToolKvStore world implementation using OP_STAGE/OP_COMMIT/OP_ROLLBACK for
       transaction operations and SET_SLOT for commit-writes to layer 0.
+      evidence_obligations: ["tool_transcript_v1"] declared in fixture dimensions.
     status: pending
 
-  - id: TOOL-001-TRANSCRIPT-ARTIFACT
+  - id: TOOL-001-TRANSCRIPT-DERIVED
     description: >-
-      tool_transcript.json emitted as normative artifact with correct schema,
-      canonical JSON, entry_count/step_index integrity.
+      tool_transcript.json rendered deterministically from SearchTape +
+      OperatorRegistryV1 via render_tool_transcript(). Pure function.
+      Canonical JSON output. txn_epoch field present (0 for single-txn).
+    status: pending
+
+  - id: TOOL-001-TRANSCRIPT-EQUIVALENCE
+    description: >-
+      Cert: verifier independently renders transcript from SearchTape +
+      OperatorRegistryV1, asserts byte-identical match to shipped
+      tool_transcript.json. Coherently forged transcript (digest bindings
+      updated to match tampered transcript) fails Cert via equivalence
+      render, not via digest mismatch.
     status: pending
 
   - id: TOOL-001-CORRIDOR-BINDING
@@ -314,24 +493,64 @@ acceptance:
       verification report. verify_bundle() checks binding consistency.
     status: pending
 
-  - id: TOOL-001-CERT-FAIL-CLOSED
+  - id: TOOL-001-OBLIGATION-GATING
     description: >-
-      Cert verification rejects bundles with tool operators in the registry but
-      missing tool_transcript.json. Base accepts bundles without transcript.
+      Transcript obligation gated on evidence_obligations in fixture.json.
+      Non-tool worlds (empty obligations) do NOT require transcript even if
+      operator registry includes tool operators. Tool worlds require transcript
+      in Cert regardless of whether a particular run exercised tool operators.
+    status: pending
+
+  - id: TOOL-001-OBLIGATION-CROSSCHECK
+    description: >-
+      Cert cross-check: SearchTape containing tool operator frames but
+      evidence_obligations missing "tool_transcript_v1" fails with
+      ObligationMismatch.
+    status: pending
+
+  - id: TOOL-001-COMMITTED-WRITE-SAFETY
+    description: >-
+      Cert trace-order audit rejects any trace where a layer 0 write occurs
+      before OP_COMMIT, or any write occurs after OP_ROLLBACK. This is verified
+      from the authoritative SearchTape, not from proposer behavior.
+    status: pending
+
+  - id: TOOL-001-DOUBLE-FINALIZATION
+    description: >-
+      Commit after rollback, rollback after commit, double-commit, and
+      double-rollback are all rejected. Write-once on txn_marker slot
+      enforces this at the kernel level (Provisional→Provisional is an
+      EffectContractViolation).
     status: pending
 
   - id: TOOL-001-BACKWARD-COMPAT
     description: >-
       RomeMini, RomeMiniSearch, SlotLatticeSearch, TransactionalKvStore bundles
       continue to build and verify without changes. No regressions.
+      evidence_obligations defaults to empty; Step 12e skipped.
+    status: pending
+
+  - id: TOOL-001-COHERENT-FORGE
+    description: >-
+      Given a forged bundle where tape/header/graph digest bindings are updated
+      to match a tampered transcript (coherent forgery), Base may pass but Cert
+      fails with ToolTranscriptEquivalenceMismatch via independent render.
+    status: pending
+
+  - id: TOOL-001-ORDERING-PERMUTATIONS
+    description: >-
+      Explicit expected behavior for ordering permutations: stage→commit (valid),
+      stage→rollback (valid), commit without stage (rejected INV-TOOL-07),
+      rollback without stage (valid INV-TOOL-08), stage→rollback→commit (rejected,
+      double-finalization), stage→commit→rollback (rejected, double-finalization).
     status: pending
 
   - id: TOOL-001-LOCK-TESTS
     description: >-
-      Lock tests for: commit path (stage→commit→commit_write→verify),
-      rollback path (stage→rollback→verify), empty commit rejection,
-      transcript digest tamper detection, Cert fail-closed on missing transcript,
-      backward compat with non-tool bundles.
+      Lock tests covering all acceptance criteria above: commit path, rollback path,
+      empty commit rejection, transcript equivalence, coherent forgery detection,
+      obligation gating, obligation cross-check, committed-write safety, double
+      finalization, backward compat.
     status: pending
 
 milestones:
@@ -343,41 +562,50 @@ milestones:
       - "kernel/src/operators/operator_registry.rs: kernel_operator_registry() includes 4 operators"
       - "kernel/src/operators/apply.rs: 3 new dispatch handlers + effect validation"
       - "kernel/src/operators/apply.rs: OP_STAGE, OP_COMMIT, OP_ROLLBACK constants"
-      - "Unit tests for each operator: preconditions, effect validation, argument parsing"
+      - "Unit tests: preconditions, effect validation, argument parsing"
+      - "Validator-negative tests: each operator attempts out-of-contract effect, kernel rejects"
     notes:
       - "OP_STAGE has same mechanical effect as SET_SLOT but distinct EffectKind"
-      - "OP_COMMIT validates at least one staged slot exists"
+      - "OP_COMMIT validates at least one non-marker staged slot exists (bounded scan)"
       - "OP_ROLLBACK has no staged-slot precondition"
+      - "All validation uses only pre/post state bytes + args + schema-known offsets"
       - "Existing SET_SLOT behavior MUST NOT change"
 
   - id: M2
-    title: "ToolKvStore world implementation"
+    title: "ToolKvStore world + evidence_obligations"
     status: pending
     deliverables:
       - "harness/src/worlds/tool_kv_store.rs: ToolKvStore (WorldHarnessV1 + SearchWorldV1)"
       - "harness/src/worlds/mod.rs: pub mod tool_kv_store"
-      - "Unit tests for world: compile, enumerate_candidates, is_goal, program"
+      - "harness/src/contract.rs: evidence_obligations field in FixtureDimensions"
+      - "Unit tests: compile, enumerate_candidates, is_goal, program, evidence_obligations"
     notes:
       - "Same concept values as TransactionalKvStore (domain 2)"
       - "Uses OP_STAGE for staging, OP_COMMIT/OP_ROLLBACK for markers, SET_SLOT for commit-writes"
       - "Distinct world_id: tool_kv_store:v1:..."
       - "Distinct schema_basis (schema_version: tool_kv.v1)"
+      - "evidence_obligations: ['tool_transcript_v1']"
+      - "Existing worlds get evidence_obligations: [] (default, backward-compat)"
 
   - id: M3
-    title: "Tool transcript artifact + corridor binding"
+    title: "Tool transcript rendering + corridor binding + equivalence"
     status: pending
     deliverables:
-      - "harness/src/runner.rs: build tool_transcript.json from trace + operator registry"
-      - "harness/src/bundle.rs: tool_transcript.json as normative artifact"
+      - "harness/src/transcript.rs (new): render_tool_transcript() pure function"
+      - "harness/src/runner.rs: render transcript from tape, include in bundle"
+      - "harness/src/bundle.rs: tool_transcript.json as required derived artifact"
       - "search/src/search.rs: tool_transcript_digest in MetadataBindings"
       - "search/src/graph.rs: tool_transcript_digest in SearchGraphMetadata"
       - "search/src/tape_render.rs: tool_transcript_digest in tape header rendering"
-      - "harness/src/bundle.rs: verify_bundle Step 12e (transcript coherence)"
-      - "harness/src/bundle.rs: 5 new BundleVerifyError variants"
+      - "harness/src/bundle.rs: verify_bundle Step 12e (transcript coherence + equivalence)"
+      - "harness/src/bundle.rs: 8 new BundleVerifyError variants"
     notes:
+      - "render_tool_transcript() is pure: tape + registry → canonical JSON bytes"
       - "Digest follows BIND-001 convention: raw hex in graph/tape, sha256:hex in report"
-      - "Conditional: only present when operator registry contains tool operators"
-      - "Cert fail-closed on absence when tool operators in registry"
+      - "Conditional on evidence_obligations, not registry contents"
+      - "Cert: digest binding + equivalence render + trace-order audit"
+      - "Base: required-if-present digest binding only"
+      - "Belt-and-suspenders: Cert cross-checks tool ops in tape vs obligations"
       - "Bundle artifact count becomes 9 (uniform) / 10 (table) for tool worlds"
 
   - id: M4
@@ -389,12 +617,18 @@ milestones:
       - "tests/lock/fixtures/tool_kv_rollback/: golden rollback-path fixtures"
       - "tests/lock/tests/tool_transcript.rs: lock tests"
     notes:
-      - "Commit path: stage→commit→commit_write→bundle_verifies"
+      - "Commit path: stage→commit→commit_write→bundle_verifies (Cert)"
       - "Rollback path: stage→rollback→bundle_verifies (committed layer unchanged)"
-      - "Empty commit rejection (OP_COMMIT without staged slots → CommitWithoutStagedSlots)"
-      - "Transcript digest tamper → ToolTranscriptDigestMismatch"
-      - "Cert fail-closed on missing transcript → ToolTranscriptMissing"
-      - "Backward compat: RomeMiniSearch bundle still verifies (no transcript needed)"
+      - "Empty commit rejection: OP_COMMIT without staged slots → CommitWithoutStagedSlots"
+      - "Transcript equivalence: Cert renders from tape, matches shipped transcript"
+      - "Coherent forgery: tampered transcript with updated bindings → Cert equivalence fail"
+      - "Obligation gating: non-tool world with tool ops in registry → no transcript needed"
+      - "Obligation cross-check: tool ops in tape + missing obligation → ObligationMismatch"
+      - "Committed-write safety: layer 0 write before commit → CommittedWriteOrderViolation"
+      - "Post-rollback write: any write after rollback → CommittedWriteOrderViolation"
+      - "Double finalization: commit+rollback, rollback+commit → kernel rejection"
+      - "Ordering permutations: all 6 orderings with explicit expected outcomes"
+      - "Backward compat: RomeMiniSearch bundle still verifies (empty obligations)"
       - "Search determinism: ToolKvStore search produces deterministic graph/tape/transcript"
 
 evidence:
@@ -406,14 +640,16 @@ non_functional:
   a11y: []
   perf:
     note: >-
-      Tool transcript construction adds one JSON serialization per run_search()
-      for tool worlds. Non-tool worlds are unaffected. Transcript size scales
-      linearly with trace length (one entry per tool-operator frame).
+      Tool transcript rendering adds one SearchTape traversal + JSON serialization
+      per run_search() for tool worlds. Non-tool worlds are unaffected.
+      Cert equivalence adds one additional render for verification. Transcript
+      size scales linearly with tool-operator frame count (not total frame count).
   security:
     note: >-
-      Tool transcript provides audit trail for every tool action. Cert fail-closed
-      prevents bundles from omitting tool evidence. Digest binding prevents
-      transcript tampering without detection.
+      Transcript is derived from authoritative trace, not independently authored.
+      Cert equivalence render prevents coherently forged transcripts.
+      Obligation gating prevents accidental omission of evidence obligations.
+      Trace-order audit independently verifies committed-write safety from tape.
 
 contracts:
   - id: CTR-TOOL-01
@@ -421,30 +657,50 @@ contracts:
     description: >-
       apply(state, op_code, args, registry) dispatches OP_STAGE, OP_COMMIT,
       OP_ROLLBACK through the same three-phase check as OP_SET_SLOT. New
-      EffectKind variants validated post-apply.
+      EffectKind variants validated post-apply using only pre/post state bytes,
+      args, and schema-known slot locations.
     parties: [kernel/operators/apply, kernel/operators/operator_registry]
 
   - id: CTR-TOOL-02
-    type: artifact_binding
+    type: derived_artifact
     description: >-
-      tool_transcript.json is normative. Content hash via
+      tool_transcript.json is a required derived artifact rendered by
+      render_tool_transcript(tape, registry). Content hash via
       canonical_hash(BundleArtifact, bytes). Digest threaded through graph
       metadata (raw hex), tape header (raw hex), report (sha256:hex).
-      verify_bundle() Step 12e enforces consistency.
-    parties: [harness/bundle, harness/runner, search/search, search/graph, search/tape_render]
+      Cert: equivalence render from tape must byte-match shipped artifact.
+    parties: [harness/transcript, harness/bundle, harness/runner, search/search, search/graph, search/tape_render]
 
   - id: CTR-TOOL-03
     type: verification_step
     description: >-
-      verify_bundle Step 12e: tool transcript coherence. Conditional on tool
-      operators in registry. Checks: presence (Cert mandatory), digest binding
-      (graph/tape/report), entry_count integrity, step_index monotonicity.
+      verify_bundle Step 12e: tool transcript coherence + equivalence.
+      Conditional on evidence_obligations (not registry contents).
+      Checks: presence (Cert mandatory per obligations), digest binding
+      (graph/tape/report), entry_count integrity, step_index monotonicity,
+      equivalence render (Cert), trace-order audit (Cert).
     parties: [harness/bundle]
 
   - id: CTR-TOOL-04
+    type: obligation_surface
+    description: >-
+      evidence_obligations in fixture.json is the declaration surface for
+      verification obligations. Verifier reads obligations, maps to steps.
+      "tool_transcript_v1" → Step 12e. Belt-and-suspenders: Cert cross-checks
+      tool ops in tape vs declared obligations.
+    parties: [harness/contract, harness/bundle, harness/runner]
+
+  - id: CTR-TOOL-05
     type: backward_compat
     description: >-
-      Worlds without tool operators (SET_SLOT-only) continue to build and
-      verify without tool_transcript.json. verify_bundle() Step 12e is skipped
-      when no tool operators in registry.
+      Worlds with evidence_obligations: [] (default) continue to build and
+      verify without tool_transcript.json. Step 12e skipped. No regressions.
     parties: [harness/bundle, harness/runner]
+
+  - id: CTR-TOOL-06
+    type: safety_boundary
+    description: >-
+      Committed-write safety: no layer 0 writes before OP_COMMIT, no writes
+      after OP_ROLLBACK. Enforced at proposer (enumerate_candidates) AND
+      independently verified by Cert trace-order audit from SearchTape.
+    parties: [harness/worlds/tool_kv_store, harness/bundle]
