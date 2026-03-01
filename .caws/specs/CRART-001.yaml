@@ -1,7 +1,7 @@
 id: CRART-001
 type: feature
 title: 'Concept Registry Artifact — shipping + independent digest verification'
-status: in_progress
+status: closed
 risk_tier: 2
 mode: development
 created_at: '2026-02-28T23:30:00.000Z'

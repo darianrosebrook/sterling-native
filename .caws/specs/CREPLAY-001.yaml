@@ -1,0 +1,226 @@
+id: CREPLAY-001
+type: feature
+title: 'Compilation Boundary Replay Verification (Cert)'
+status: draft
+risk_tier: 3
+mode: development
+created_at: '2026-03-01T00:00:00.000Z'
+updated_at: '2026-03-01T00:00:00.000Z'
+blast_radius:
+  modules:
+    - kernel/carrier/registry
+    - harness/bundle
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 10m
+
+purpose: >
+  Add a Cert-only verification step that independently replays the kernel
+  compilation boundary by calling compile(payload_bytes, schema_descriptor, registry)
+  using only bundle-shipped inputs (fixture payload + concept_registry bytes +
+  schema descriptor fields), and proves the resulting compilation_manifest canonical
+  bytes match the bundle's compilation_manifest.json byte-for-byte.
+  This closes the "coherence without recomputation" gap: Step 12b/12c enforce
+  field-level agreement, but a coherently forged bundle where manifest + graph +
+  tape all agree on wrong values passes those checks. Replay detects that class
+  of forgery by recomputing from first principles.
+
+depends_on:
+  - "CRART-001: concept_registry.json shipped as normative artifact (Step 12c)."
+  - "MANIFEST-001: compilation_manifest.json field-level coherence (Step 12b)."
+  - "IDCOH-001: root identity/evidence corridor threading (typically present, not required)."
+
+non_goals:
+  - "No new artifacts — reuses concept_registry.json, fixture.json, compilation_manifest.json."
+  - "No changes to compile() semantics or output fields."
+  - "No Base-profile replay (Base remains 'verify what is present')."
+  - "No new hash domains — reuses DOMAIN_COMPILATION_PAYLOAD, DOMAIN_REGISTRY_SNAPSHOT."
+  - "No attempt to replay full search; only compilation boundary."
+  - "No RegistryV1 round-trip fuzz testing (valuable but separate scope)."
+  - "No operator registry replay — operator_registry.json is OperatorRegistryV1 (different object)."
+
+design:
+  profile_posture: >
+    Base: skip replay entirely.
+    Cert: replay is mandatory for search bundles (when search_graph.json exists).
+
+  inputs:
+    payload_bytes: >
+      Decode fixture.json.initial_payload_hex (exact bytes; compile() re-canonicalizes internally).
+    schema_descriptor: >
+      Reconstruct SchemaDescriptor { id, version, hash } from compilation_manifest.json
+      fields schema_id, schema_version, schema_hash. Step 12b already binds these
+      to graph metadata schema_descriptor.
+    registry: >
+      Parse concept_registry.json bytes into RegistryV1 via
+      RegistryV1::from_canonical_bytes(). Strict canonical round-trip enforced.
+
+  replay_action: >
+    Call kernel::carrier::compile::compile(payload_bytes, &schema_descriptor, &registry).
+    Obtain CompilationResultV1.compilation_manifest (canonical Vec<u8>).
+
+  comparison: >
+    Require byte-identical equality: replay_result.compilation_manifest ==
+    bundle.artifacts["compilation_manifest.json"].content. This implicitly
+    checks all 8 manifest fields (schema_id, schema_version, schema_hash,
+    payload_hash, registry_epoch, registry_hash, identity_digest,
+    evidence_digest) and their canonical ordering.
+
+  failure_ordering: >
+    Replay runs after Step 12b (manifest coherence) and Step 12c (concept
+    registry digest binding), so basic field mismatches fail early. Replay is
+    reserved for "coherently forged" cases where all corridor surfaces agree
+    but don't correspond to the actual compile() output from shipped inputs.
+
+  from_canonical_bytes: >
+    RegistryV1::from_canonical_bytes(bytes: &[u8]) -> Result<RegistryV1, RegistryError>.
+    Strict inverse of canonical_bytes(): (1) parse JSON, (2) require object with
+    exactly "allocations" array and "epoch" string, (3) for each allocation parse
+    [concept_id, [d,k,lo,hi]] with each code byte in 0..=255, (4) reconstruct via
+    RegistryV1::new(epoch, allocations) so bijection enforcement stays centralized,
+    (5) re-canonicalize and assert canonical_json_bytes(parsed) == input bytes
+    (reject non-canonical input).
+
+  error_taxonomy: >
+    Typed errors, each failure mode gets its own variant. No string-packing.
+    CompilationReplayRegistryParseFailed wraps RegistryError from from_canonical_bytes().
+    CompilationReplayCompileFailed wraps CompilationFailure from compile().
+    CompilationReplayManifestMismatch reports content hashes of both manifest blobs
+    (DOMAIN_BUNDLE_ARTIFACT) rather than embedding full bytes in the error.
+
+scope:
+  in:
+    - kernel/src/carrier/registry.rs
+    - harness/src/bundle.rs
+    - tests/lock/src/bundle_test_helpers.rs
+    - tests/lock/tests/
+    - .caws/specs/
+  out:
+    - kernel/src/carrier/compile.rs
+    - kernel/src/carrier/bytestate.rs
+    - harness/src/runner.rs
+    - search/
+    - benchmarks/
+
+change_budget:
+  max_files: 8
+  max_loc: 400
+
+invariants:
+  - >-
+    INV-CREPLAY-01: Cert verification of a search bundle MUST replay compile()
+    from bundle contents and assert the output compilation_manifest bytes are
+    identical to the stored compilation_manifest.json.
+  - >-
+    INV-CREPLAY-02: RegistryV1::from_canonical_bytes() MUST reject non-canonical
+    input (re-canonicalize and compare; mismatch is a typed error).
+  - >-
+    INV-CREPLAY-03: RegistryV1::from_canonical_bytes(r.canonical_bytes()) MUST
+    round-trip for any well-formed RegistryV1 r.
+  - >-
+    INV-CREPLAY-04: Base profile MUST NOT execute compilation replay.
+
+errors:
+  - id: CREPLAY-ERR-REGISTRY-PARSE
+    variant: "CompilationReplayRegistryParseFailed { detail: String }"
+    description: "concept_registry.json bytes failed RegistryV1::from_canonical_bytes() parsing."
+  - id: CREPLAY-ERR-COMPILE-FAILED
+    variant: "CompilationReplayCompileFailed { detail: String }"
+    description: "compile() returned CompilationFailure when replaying from bundle inputs."
+  - id: CREPLAY-ERR-MANIFEST-MISMATCH
+    variant: "CompilationReplayManifestMismatch { expected_hash: String, recomputed_hash: String }"
+    description: >-
+      Replayed compilation_manifest bytes differ from stored compilation_manifest.json.
+      Reports DOMAIN_BUNDLE_ARTIFACT content hashes of both blobs, not raw bytes.
+
+acceptance:
+  - id: CREPLAY-001-FROM-BYTES
+    description: >-
+      RegistryV1::from_canonical_bytes() exists, round-trips with canonical_bytes(),
+      rejects non-canonical input, rejects malformed JSON shapes and out-of-range
+      code byte values.
+    status: pending
+  - id: CREPLAY-001-REPLAY-PASS
+    description: >-
+      Cert verification replays compile() from bundle contents and passes on
+      a valid RomeMiniSearch bundle.
+    status: pending
+  - id: CREPLAY-001-COHERENT-FORGE
+    description: >-
+      A coherently forged bundle where compilation_manifest.json + graph metadata +
+      tape header all agree with each other (passing Steps 12b/12c) but do not
+      correspond to the actual compile() output is rejected by replay mismatch.
+      This is the unique value proposition of replay over field-level coherence.
+    status: pending
+  - id: CREPLAY-001-TAMPER-REGISTRY
+    description: >-
+      Tampered concept_registry.json (valid canonical JSON, wrong allocations)
+      causes compilation replay manifest mismatch or compile failure.
+    status: pending
+  - id: CREPLAY-001-BASE-SKIP
+    description: >-
+      Base profile does not execute compilation replay. A valid bundle
+      verifies in Base without invoking the replay step.
+    status: pending
+  - id: CREPLAY-001-NON-CANONICAL-REJECTED
+    description: >-
+      from_canonical_bytes() rejects syntactically valid JSON that is not in
+      canonical form (extra whitespace, unsorted keys, non-integer numbers).
+    status: pending
+
+milestones:
+  - id: M1
+    title: "Kernel inverse parser: RegistryV1::from_canonical_bytes()"
+    status: pending
+    deliverables:
+      - "kernel/src/carrier/registry.rs: from_canonical_bytes() with strict validation + canonical round-trip enforcement"
+      - "kernel/src/carrier/registry.rs: unit tests (round-trip, malformed shapes, out-of-range bytes, non-canonical rejection, bijection violation)"
+  - id: M2
+    title: "Cert-only compilation replay verification step"
+    status: pending
+    deliverables:
+      - "harness/src/bundle.rs: verify_compilation_replay(bundle, profile) wired after Step 12c"
+      - "harness/src/bundle.rs: 3 typed error variants (registry parse, compile failed, manifest mismatch)"
+  - id: M3
+    title: "Lock tests for compilation replay"
+    status: pending
+    deliverables:
+      - "Positive: Cert replay passes for golden RomeMiniSearch bundle"
+      - "Negative: coherently forged manifest+graph surfaces pass Step 12b/12c but fail replay"
+      - "Negative: invalid-but-canonical-shape registry bytes rejected (parse error)"
+      - "Base: replay skipped, bundle still verifies"
+
+evidence:
+  commits: []
+  total_tests: 560
+  lock_tests: []
+
+non_functional:
+  a11y: []
+  perf:
+    note: >-
+      Adds one compile() call per Cert verify_bundle. compile() is fast
+      (sub-millisecond for RomeMini payloads). Base profile is unaffected.
+      Cert-only cost is acceptable for certification-grade verification.
+  security:
+    note: >-
+      Replay provides independent recomputation of compilation boundary;
+      reduces producer-trust assumptions. Detects coherently forged bundles
+      that pass field-level coherence checks.
+
+contracts:
+  - id: CTR-CREPLAY-01
+    type: kernel_api
+    description: >-
+      RegistryV1::from_canonical_bytes(bytes) -> Result<RegistryV1, RegistryError>.
+      Strict: parse JSON, validate structure, reconstruct via new(), assert
+      canonical_json_bytes(parsed) == input. Rejects non-canonical.
+    parties: [kernel/carrier/registry, harness/bundle]
+  - id: CTR-CREPLAY-02
+    type: verification_step
+    description: >-
+      verify_compilation_replay(bundle, profile) called in verify_bundle_with_profile()
+      for Cert only, after Step 12c. Inputs: concept_registry.json bytes,
+      fixture.json initial_payload_hex, compilation_manifest.json schema fields.
+      Comparison: compile() manifest bytes == stored manifest bytes (byte-identical).
+    parties: [harness/bundle]
