@@ -616,4 +616,16 @@ mod tests {
             "expected NotCanonical for unsorted allocations, got: {err:?}"
         );
     }
+
+    #[test]
+    fn from_canonical_bytes_rejects_wrong_key_order() {
+        // Allocations sorted correctly, but top-level keys are in wrong order
+        // ("epoch" before "allocations"). Canonical JSON requires sorted keys.
+        let bad = br#"{"epoch":"e","allocations":[["a",[1,0,0,0]]]}"#;
+        let err = RegistryV1::from_canonical_bytes(bad).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::NotCanonical),
+            "expected NotCanonical for wrong key order, got: {err:?}"
+        );
+    }
 }
