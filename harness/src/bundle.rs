@@ -18,6 +18,9 @@
 
 use std::collections::BTreeMap;
 
+use sterling_kernel::carrier::bytestate::SchemaDescriptor;
+use sterling_kernel::carrier::compile::compile;
+use sterling_kernel::carrier::registry::RegistryV1;
 use sterling_kernel::carrier::trace_reader::bytes_to_trace;
 use sterling_kernel::proof::canon::canonical_json_bytes;
 use sterling_kernel::proof::hash::{canonical_hash, ContentHash, HashDomain};
@@ -341,6 +344,16 @@ pub enum BundleVerifyError {
     TapeDigestMismatch { declared: String, recomputed: String },
     /// `search_tape.stap` tape render to `SearchGraphV1` failed.
     TapeRenderFailed { source: String },
+    /// `concept_registry.json` bytes failed `RegistryV1::from_canonical_bytes()`.
+    CompilationReplayRegistryParseFailed { detail: String },
+    /// `compile()` returned `CompilationFailure` when replaying from bundle inputs.
+    CompilationReplayCompileFailed { detail: String },
+    /// Replayed `compilation_manifest` bytes differ from stored
+    /// `compilation_manifest.json`. Reports content hashes of both blobs.
+    CompilationReplayManifestMismatch {
+        expected_hash: String,
+        recomputed_hash: String,
+    },
 }
 
 /// Verification profile controlling tape evidence requirements.
@@ -482,6 +495,9 @@ pub fn verify_bundle_with_profile(
 
     // Step 12c: Concept registry artifact digest binding.
     verify_concept_registry_artifact(bundle, profile)?;
+
+    // Step 12d: Compilation boundary replay (Cert only).
+    verify_compilation_replay(bundle, profile)?;
 
     // Step 13: Scorer digest binding (report ↔ scorer.json).
     verify_scorer_digest_binding(bundle)?;
@@ -1106,6 +1122,123 @@ fn verify_concept_registry_artifact(
         return Err(BundleVerifyError::ConceptRegistryDigestMismatch {
             in_artifact: semantic_digest.hex_digest().to_string(),
             in_manifest: graph_registry_hex.to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+/// Replay the compilation boundary from bundle contents (Cert only).
+///
+/// Reconstructs `compile()` inputs from shipped artifacts:
+/// - `fixture.json.initial_payload_hex` → payload bytes
+/// - `compilation_manifest.json` schema fields → `SchemaDescriptor`
+/// - `concept_registry.json` bytes → `RegistryV1` via `from_canonical_bytes()`
+///
+/// Calls `compile()` and asserts the output `compilation_manifest` bytes are
+/// identical to the stored `compilation_manifest.json`. This is the strongest
+/// compilation boundary check: it proves the entire manifest is reproducible.
+///
+/// Base profile skips entirely. Cert is mandatory for search bundles.
+fn verify_compilation_replay(
+    bundle: &ArtifactBundleV1,
+    profile: VerificationProfile,
+) -> Result<(), BundleVerifyError> {
+    // Only applies to search bundles.
+    if !bundle.artifacts.contains_key("search_graph.json") {
+        return Ok(());
+    }
+
+    // Base: skip replay entirely.
+    if profile == VerificationProfile::Base {
+        return Ok(());
+    }
+
+    // --- Reconstruct registry ---
+    let registry_artifact = bundle
+        .artifacts
+        .get("concept_registry.json")
+        .ok_or(BundleVerifyError::ConceptRegistryMissing)?;
+    let registry = RegistryV1::from_canonical_bytes(&registry_artifact.content).map_err(|e| {
+        BundleVerifyError::CompilationReplayRegistryParseFailed {
+            detail: format!("{e:?}"),
+        }
+    })?;
+
+    // --- Reconstruct schema descriptor ---
+    let manifest_artifact = bundle
+        .artifacts
+        .get("compilation_manifest.json")
+        .ok_or(BundleVerifyError::CompilationManifestMissing)?;
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&manifest_artifact.content).map_err(|e| {
+            BundleVerifyError::CompilationManifestNotJson {
+                detail: format!("{e}"),
+            }
+        })?;
+
+    let schema_id = manifest
+        .get("schema_id")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestMissingField {
+            field: "schema_id",
+        })?;
+    let schema_version = manifest
+        .get("schema_version")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestMissingField {
+            field: "schema_version",
+        })?;
+    let schema_hash = manifest
+        .get("schema_hash")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestMissingField {
+            field: "schema_hash",
+        })?;
+
+    let schema_descriptor = SchemaDescriptor {
+        id: schema_id.to_string(),
+        version: schema_version.to_string(),
+        hash: schema_hash.to_string(),
+    };
+
+    // --- Reconstruct payload bytes ---
+    let fixture_artifact = bundle
+        .artifacts
+        .get("fixture.json")
+        .ok_or(BundleVerifyError::CompilationManifestFixtureMissing)?;
+    let fixture: serde_json::Value =
+        serde_json::from_slice(&fixture_artifact.content).map_err(|e| {
+            BundleVerifyError::CanonError {
+                detail: format!("{e:?}"),
+            }
+        })?;
+    let payload_hex = fixture
+        .get("initial_payload_hex")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestFixtureMissingField {
+            field: "initial_payload_hex",
+        })?;
+    let payload_bytes = hex::decode(payload_hex).map_err(|e| {
+        BundleVerifyError::CompilationManifestPayloadDecodeFailed {
+            detail: format!("{e}"),
+        }
+    })?;
+
+    // --- Replay compile() ---
+    let result = compile(&payload_bytes, &schema_descriptor, &registry).map_err(|e| {
+        BundleVerifyError::CompilationReplayCompileFailed {
+            detail: format!("{e:?}"),
+        }
+    })?;
+
+    // --- Compare manifest bytes ---
+    if result.compilation_manifest != manifest_artifact.content {
+        let expected_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &manifest_artifact.content);
+        let recomputed_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &result.compilation_manifest);
+        return Err(BundleVerifyError::CompilationReplayManifestMismatch {
+            expected_hash: expected_hash.as_str().to_string(),
+            recomputed_hash: recomputed_hash.as_str().to_string(),
         });
     }
 
