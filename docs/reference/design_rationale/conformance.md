@@ -18,6 +18,10 @@ theory rather than merely passing benchmarks. Unlike hard merge-blocking
 invariants, conformance violations trigger investigation, not automatic
 rejection.
 
+**Current coverage:** 5 of 11 invariants are partially exercised by existing
+lock tests (TC-2, TC-4, TC-5, TC-9A, TC-11). The remaining 6 require ML
+components not yet present and represent future proof obligations.
+
 ## Invariant Summary
 
 | ID | Name | Proof Obligation |

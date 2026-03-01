@@ -219,7 +219,18 @@ def get_staged_docs():
 
 
 def get_all_docs():
-    """Get all .md files under docs/."""
+    """Get all tracked .md files under docs/.
+
+    Uses git ls-files to respect .gitignore (skips docs/ephemeral/ etc.).
+    Falls back to filesystem walk if git is unavailable.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "docs/", "--exclude-standard"],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return [f for f in result.stdout.strip().split("\n") if f.endswith(".md") and f]
+    # Fallback: filesystem walk (no .gitignore filtering)
     docs_dir = Path("docs")
     if not docs_dir.exists():
         return []
