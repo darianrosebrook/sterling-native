@@ -1,7 +1,7 @@
 id: MANIFEST-001
 type: feature
 title: 'Compilation Manifest Coherence in Search Evidence Corridor'
-status: in_progress
+status: closed
 risk_tier: 3
 mode: development
 created_at: '2026-02-28T18:00:00.000Z'
@@ -72,37 +72,39 @@ invariants:
 acceptance:
   - id: MANIFEST-001-SCHEMA
     description: "Positive: manifest schema fields match graph metadata schema_descriptor"
-    status: pending
+    status: complete
   - id: MANIFEST-001-PAYLOAD
     description: "Positive: manifest payload_hash matches recomputed hash from fixture"
-    status: pending
+    status: complete
   - id: MANIFEST-001-SCHEMA-TAMPER
     description: "Negative: tampered manifest schema_id triggers CompilationManifestSchemaMismatch"
-    status: pending
+    status: complete
   - id: MANIFEST-001-PAYLOAD-TAMPER
     description: "Negative: tampered manifest payload_hash triggers CompilationManifestPayloadMismatch"
-    status: pending
+    status: complete
   - id: MANIFEST-001-MISSING
     description: "Negative: missing compilation_manifest.json triggers CompilationManifestMissing"
-    status: pending
+    status: complete
 
 milestones:
   - id: M1
     title: "Production code — coherence checks in verify_bundle pipeline"
-    status: in_progress
+    status: closed
     deliverables:
       - "harness/src/bundle.rs (error variants, verify_compilation_manifest_coherence, call site)"
   - id: M2
     title: "Lock tests"
-    status: pending
+    status: complete
     deliverables:
       - "tests/lock/src/bundle_test_helpers.rs (resign helper)"
       - "tests/lock/tests/compilation_manifest_coherence.rs (5 tests)"
 
 evidence:
-  commits: []
-  total_tests: 539
-  lock_tests: []
+  commits:
+    - f384dfe  # feat(bind): compilation manifest coherence checks in verify_bundle
+  total_tests: 544
+  lock_tests:
+    - tests/lock/tests/compilation_manifest_coherence.rs (5 tests)
 
 non_functional:
   a11y: []
