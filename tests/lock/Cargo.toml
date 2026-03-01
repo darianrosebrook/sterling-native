@@ -9,6 +9,7 @@ workspace = true
 [dependencies]
 hex = "0.4"
 serde_json = "1"
+sha2 = "0.10"
 sterling-kernel = { path = "../../kernel" }
 sterling-search = { path = "../../search" }
 sterling-harness = { path = "../../harness" }

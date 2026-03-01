@@ -9,8 +9,8 @@
 //! - Missing `compilation_manifest.json` is fail-closed (not silently skipped).
 
 use lock_tests::bundle_test_helpers::{
-    rebuild_with_modified_graph, rebuild_without_artifact,
-    resign_bundle_with_modified_compilation_manifest,
+    rebuild_with_modified_graph, rebuild_with_modified_graph_and_tape_header,
+    rebuild_without_artifact, resign_bundle_with_modified_compilation_manifest,
 };
 use sterling_harness::bundle::{verify_bundle, BundleVerifyError};
 use sterling_harness::runner::{run_search, ScorerInputV1};
@@ -473,4 +473,152 @@ fn tape_header_carries_root_digests() {
 
     assert_eq!(tape_id, graph_id, "tape header root_identity_digest must match graph metadata");
     assert_eq!(tape_ev, graph_ev, "tape header root_evidence_digest must match graph metadata");
+}
+
+// ---------------------------------------------------------------------------
+// Base-compat: legacy bundles without root digests (IDCOH-001-BASECOMPAT)
+// ---------------------------------------------------------------------------
+
+/// A "legacy" bundle with root digest fields stripped from both graph metadata
+/// and tape header passes Base verification but fails Cert.
+///
+/// This is the only proof that Base tolerance actually works and prevents
+/// future refactors from silently converting "required-if-present" into
+/// "mandatory everywhere."
+#[test]
+fn legacy_bundle_without_root_digests_passes_base_fails_cert() {
+    let bundle = default_bundle();
+    verify_bundle(&bundle).expect("original must pass");
+
+    let strip_root_digests = |obj: &mut serde_json::Value| {
+        if let Some(meta) = obj.get_mut("metadata").and_then(|m| m.as_object_mut()) {
+            meta.remove("root_identity_digest");
+            meta.remove("root_evidence_digest");
+        } else if let Some(obj) = obj.as_object_mut() {
+            // Tape header: fields are top-level.
+            obj.remove("root_identity_digest");
+            obj.remove("root_evidence_digest");
+        }
+    };
+
+    let legacy = rebuild_with_modified_graph_and_tape_header(
+        &bundle,
+        strip_root_digests,
+        |header| {
+            header
+                .as_object_mut()
+                .unwrap()
+                .remove("root_identity_digest");
+            header
+                .as_object_mut()
+                .unwrap()
+                .remove("root_evidence_digest");
+        },
+    );
+
+    // Base: passes (fields absent on both sides → required-if-present → ok).
+    sterling_harness::bundle::verify_bundle_with_profile(
+        &legacy,
+        sterling_harness::bundle::VerificationProfile::Base,
+    )
+    .expect("Base must pass for legacy bundle without root digests");
+
+    // Cert: fails (mandatory fields absent).
+    let err = sterling_harness::bundle::verify_bundle_with_profile(
+        &legacy,
+        sterling_harness::bundle::VerificationProfile::Cert,
+    )
+    .expect_err("Cert must fail for legacy bundle");
+    assert!(
+        matches!(
+            err,
+            BundleVerifyError::CompilationManifestGraphMissingField {
+                field: "root_identity_digest"
+            }
+        ),
+        "expected CompilationManifestGraphMissingField for root_identity_digest, got: {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// check_optional_tape_header_field arm coverage (IDCOH-001-ARMS)
+// ---------------------------------------------------------------------------
+
+/// Tape header has `root_identity_digest` but graph metadata does not → error
+/// in both profiles (one-sided presence is always invalid).
+#[test]
+fn tape_header_one_sided_root_digest_rejected() {
+    let bundle = default_bundle();
+    verify_bundle(&bundle).expect("original must pass");
+
+    // Strip from graph metadata only; tape header retains the field.
+    let tampered = rebuild_with_modified_graph(&bundle, |graph| {
+        graph["metadata"]
+            .as_object_mut()
+            .unwrap()
+            .remove("root_identity_digest");
+        graph["metadata"]
+            .as_object_mut()
+            .unwrap()
+            .remove("root_evidence_digest");
+    });
+
+    // Step 12b passes in Base (both graph fields absent → skip).
+    // Step 18 sees tape header has root_identity_digest but graph doesn't → error.
+    let err = sterling_harness::bundle::verify_bundle_with_profile(
+        &tampered,
+        sterling_harness::bundle::VerificationProfile::Base,
+    )
+    .expect_err("must fail: one-sided tape header field");
+    assert!(
+        matches!(err, BundleVerifyError::TapeHeaderBindingMismatch { field: "root_identity_digest", .. }),
+        "expected TapeHeaderBindingMismatch for root_identity_digest, got: {err:?}"
+    );
+}
+
+/// Both tape header and graph metadata absent for root digests → Cert rejects
+/// at Step 12b (before Step 18 can fire).
+#[test]
+fn both_absent_root_digests_cert_rejects_at_step_12b() {
+    let bundle = default_bundle();
+
+    let legacy = rebuild_with_modified_graph_and_tape_header(
+        &bundle,
+        |graph| {
+            graph["metadata"]
+                .as_object_mut()
+                .unwrap()
+                .remove("root_identity_digest");
+            graph["metadata"]
+                .as_object_mut()
+                .unwrap()
+                .remove("root_evidence_digest");
+        },
+        |header| {
+            header
+                .as_object_mut()
+                .unwrap()
+                .remove("root_identity_digest");
+            header
+                .as_object_mut()
+                .unwrap()
+                .remove("root_evidence_digest");
+        },
+    );
+
+    // Cert rejects at Step 12b (graph missing mandatory field).
+    let err = sterling_harness::bundle::verify_bundle_with_profile(
+        &legacy,
+        sterling_harness::bundle::VerificationProfile::Cert,
+    )
+    .expect_err("Cert must fail");
+    assert!(
+        matches!(
+            err,
+            BundleVerifyError::CompilationManifestGraphMissingField {
+                field: "root_identity_digest"
+            }
+        ),
+        "expected CompilationManifestGraphMissingField, got: {err:?}"
+    );
 }
