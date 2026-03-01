@@ -33,6 +33,8 @@ fn default_bindings() -> MetadataBindings {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     }
 }
 
@@ -685,7 +687,9 @@ fn frontier_invariant_stage_serializes_in_json() {
             search_policy_digest: "0".repeat(64),
             fixture_digest: String::new(),
             scorer_digest: None,
-        operator_set_digest: None,
+            operator_set_digest: None,
+            root_identity_digest: None,
+            root_evidence_digest: None,
             total_expansions: 0,
             total_candidates_generated: 0,
             total_duplicates_suppressed: 0,

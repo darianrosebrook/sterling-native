@@ -35,6 +35,8 @@ fn bindings_for(regime: &Regime) -> MetadataBindings {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     }
 }
 
@@ -168,7 +170,9 @@ fn make_outcome_exhaustive_fixture() -> SearchGraphV1 {
             root_state_fingerprint: "root_fp".into(),
             fixture_digest: String::new(),
             scorer_digest: None,
-        operator_set_digest: None,
+            operator_set_digest: None,
+            root_identity_digest: None,
+            root_evidence_digest: None,
             total_expansions: 1,
             total_candidates_generated: 7,
             total_duplicates_suppressed: 1,

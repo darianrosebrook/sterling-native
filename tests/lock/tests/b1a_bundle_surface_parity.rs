@@ -9,7 +9,7 @@
 //! 6. All normative artifact content hashes match between golden and regenerated
 
 use sterling_harness::bundle::{verify_bundle, ArtifactBundleV1};
-use sterling_harness::bundle_dir::{read_bundle_dir, verify_bundle_dir};
+use sterling_harness::bundle_dir::{read_bundle_dir, verify_bundle_dir, write_bundle_dir};
 use sterling_harness::runner::{run_search, ScorerInputV1};
 use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
 use sterling_search::policy::SearchPolicyV1;
@@ -175,4 +175,32 @@ fn regen_content_hashes_match_golden() {
 fn regen_bundle_passes_verify_bundle() {
     let regen = regen_bundle();
     verify_bundle(&regen).expect("regenerated bundle must pass verify_bundle");
+}
+
+// ---------------------------------------------------------------------------
+// Fixture regeneration (run manually with --ignored)
+// ---------------------------------------------------------------------------
+
+/// Regenerate the golden fixture directory from a fresh search run.
+///
+/// Run with: `cargo test -p lock-tests --test b1a_bundle_surface_parity regen_golden_fixtures -- --ignored`
+#[test]
+#[ignore = "manual fixture regeneration"]
+fn regen_golden_fixtures() {
+    let dir = std::path::Path::new(GOLDEN_DIR);
+
+    // Remove and recreate the directory.
+    if dir.exists() {
+        std::fs::remove_dir_all(dir).expect("remove old fixtures");
+    }
+    std::fs::create_dir_all(dir).expect("create fixture dir");
+
+    let bundle = regen_bundle();
+    write_bundle_dir(&bundle, dir).expect("write bundle dir failed");
+
+    // Verify the written fixtures round-trip.
+    let readback = read_bundle_dir(dir).expect("read back failed");
+    verify_bundle(&readback).expect("readback must verify");
+
+    eprintln!("Regenerated golden fixtures at {}", dir.display());
 }

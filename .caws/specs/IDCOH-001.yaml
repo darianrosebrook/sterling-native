@@ -1,0 +1,125 @@
+id: IDCOH-001
+type: feature
+title: 'Root State Digest Coherence in Search Evidence Corridor'
+status: in_progress
+risk_tier: 2
+mode: development
+created_at: '2026-02-28T23:00:00.000Z'
+updated_at: '2026-02-28T23:00:00.000Z'
+blast_radius:
+  modules:
+    - search/search
+    - search/graph
+    - search/tape_render
+    - harness/bundle
+    - harness/runner
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 10m
+
+purpose: >
+  compilation_manifest.json carries identity_digest and evidence_digest — the
+  SHA-256 hashes of the compiled root ByteStateV1's identity and evidence planes.
+  These are currently write-only: no corridor surface cross-checks them. This
+  creates a split-brain surface where the compilation manifest can silently
+  disagree with the search it describes about what root state was compiled.
+  Fix: thread root_identity_digest and root_evidence_digest as corridor-native
+  metadata bindings (graph metadata + tape header), then cross-check against
+  compilation_manifest.json in Step 12b. Recompute from compilation.state in
+  runner.rs to create two independent surfaces that must agree.
+
+non_goals:
+  - "No independent recomputation by the verifier (requires RegistryV1 or ByteStateV1 bytes in bundle)."
+  - "No new normative artifacts (root digests are metadata bindings, not standalone evidence)."
+  - "No identity_digest or evidence_digest in verification_report.json (metadata + manifest is sufficient)."
+
+design:
+  compute_source: >
+    Recompute from compilation.state in runner.rs using HashDomain::IdentityPlane
+    and HashDomain::EvidencePlane. Do NOT parse compilation_manifest JSON. Two
+    independent computation surfaces that must agree is the coherence argument.
+  format_convention: >
+    Raw hex (no sha256: prefix) in graph metadata and tape header, matching
+    fixture_digest/registry_digest convention. sha256:hex in compilation_manifest
+    (ContentHash format). Strip prefix before comparison in Step 12b.
+  base_cert_posture: >
+    Base: required-if-present (verify if the field exists, skip if absent).
+    Cert: mandatory (fail-closed, field must exist). Consistent with fixture_digest
+    (BIND-001) pattern. Allows older bundles without root digests to verify in Base.
+  golden_cascade: >
+    Adding metadata keys changes search_graph.json bytes, which cascades through
+    content_hash, search_graph_digest in report, bundle digest basis, bundle digest,
+    and tape header. Entire b1a_rome_mini_search fixture directory must regenerate.
+
+scope:
+  in:
+    - search/src/search.rs
+    - search/src/graph.rs
+    - search/src/tape_render.rs
+    - harness/src/bundle.rs
+    - harness/src/runner.rs
+    - tests/lock/
+    - benchmarks/src/lib.rs
+    - .caws/specs/
+  out:
+    - kernel/
+
+change_budget:
+  max_files: 14
+  max_loc: 300
+
+invariants:
+  - "INV-IDCOH-01: If search_graph.json exists, graph metadata root_identity_digest and root_evidence_digest are Cert-mandatory, Base required-if-present."
+  - "INV-IDCOH-02: compilation_manifest.json identity_digest and evidence_digest MUST be sha256:<hex> format."
+  - "INV-IDCOH-03: strip_prefix(identity_digest) MUST equal metadata.root_identity_digest. Same for evidence_digest vs root_evidence_digest."
+  - "INV-IDCOH-04: Tape header root_identity_digest and root_evidence_digest MUST equal graph metadata values (Cert via equivalence; Base via field-level check if present)."
+
+acceptance:
+  - id: IDCOH-001-POS
+    description: "Positive: default bundle root digests match compilation manifest (both profiles)"
+    status: pending
+  - id: IDCOH-001-IDENTITY-TAMPER
+    description: "Negative: tampered manifest identity_digest triggers CompilationManifestIdentityMismatch"
+    status: pending
+  - id: IDCOH-001-EVIDENCE-TAMPER
+    description: "Negative: tampered manifest evidence_digest triggers CompilationManifestEvidenceMismatch"
+    status: pending
+  - id: IDCOH-001-GRAPH-MISSING-IDENTITY
+    description: "Negative: missing graph root_identity_digest triggers CompilationManifestGraphMissingField (Cert)"
+    status: pending
+  - id: IDCOH-001-GRAPH-MISSING-EVIDENCE
+    description: "Negative: missing graph root_evidence_digest triggers CompilationManifestGraphMissingField (Cert)"
+    status: pending
+  - id: IDCOH-001-TAPE-HEADER
+    description: "Positive: tape header carries root_identity_digest and root_evidence_digest matching graph metadata"
+    status: pending
+
+milestones:
+  - id: M1
+    title: "Thread root digest fields through production code"
+    status: in_progress
+    deliverables:
+      - "search/src/search.rs (MetadataBindings fields, build_tape_header)"
+      - "search/src/graph.rs (SearchGraphMetadata fields, metadata_to_json)"
+      - "search/src/tape_render.rs (header extraction, metadata wiring)"
+      - "harness/src/runner.rs (recompute from compilation.state)"
+      - "All MetadataBindings construction sites updated"
+  - id: M2
+    title: "Verification checks, golden regen, lock tests"
+    status: pending
+    deliverables:
+      - "harness/src/bundle.rs (Step 12b checks 4-5, Step 18 tape header checks)"
+      - "tests/lock/fixtures/b1a_rome_mini_search/ (full regen)"
+      - "tests/lock/tests/ (6 lock tests)"
+
+evidence:
+  commits: []
+  total_tests: 548
+  lock_tests: []
+
+non_functional:
+  a11y: []
+  perf:
+    note: "Adds two SHA-256 hashes of ByteStateV1 planes in runner.rs (small byte arrays). Two string comparisons in Step 12b. Negligible."
+  security: []
+contracts: []

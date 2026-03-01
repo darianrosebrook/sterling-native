@@ -276,6 +276,13 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
     };
 
     // Binding format: raw hex (no algorithm prefix). See bundle.rs::binding_hex().
+    // Recompute root state plane digests from compilation.state (independent surface
+    // from compilation_manifest — two sources that must agree is the coherence argument).
+    let root_identity_digest =
+        canonical_hash(HashDomain::IdentityPlane, &compilation.state.identity_bytes());
+    let root_evidence_digest =
+        canonical_hash(HashDomain::EvidencePlane, &compilation.state.evidence_bytes());
+
     let bindings = MetadataBindings {
         world_id: WorldHarnessV1::world_id(world).to_string(),
         schema_descriptor: format!("{}:{}:{}", schema.id, schema.version, schema.hash),
@@ -287,6 +294,8 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         operator_set_digest: Some(
             operator_registry_content_hash.hex_digest().to_string(),
         ),
+        root_identity_digest: Some(root_identity_digest.hex_digest().to_string()),
+        root_evidence_digest: Some(root_evidence_digest.hex_digest().to_string()),
     };
 
     // Phase 3: run search (with tape).

@@ -37,6 +37,8 @@ fn default_bindings() -> MetadataBindings {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     }
 }
 
@@ -154,6 +156,8 @@ fn inv_sc_05_search_dedup_uses_identity_fingerprint() {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     };
 
     let result = search(

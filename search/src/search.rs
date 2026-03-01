@@ -215,6 +215,13 @@ fn build_tape_header(
         obj["scorer_digest"] = serde_json::json!(digest);
     }
 
+    if let Some(ref digest) = bindings.root_identity_digest {
+        obj["root_identity_digest"] = serde_json::json!(digest);
+    }
+    if let Some(ref digest) = bindings.root_evidence_digest {
+        obj["root_evidence_digest"] = serde_json::json!(digest);
+    }
+
     // Canonical JSON (sorted keys, compact)
     sterling_kernel::proof::canon::canonical_json_bytes(&obj)
         .map_err(|e| crate::tape::TapeWriteError::CanonError(e.to_string()))
@@ -905,6 +912,10 @@ pub struct MetadataBindings {
     pub scorer_digest: Option<String>,
     /// Operator registry content-hash digest (`None` until M2b wires it).
     pub operator_set_digest: Option<String>,
+    /// Root `ByteStateV1` identity plane digest (raw hex). `None` for pre-IDCOH-001 bundles.
+    pub root_identity_digest: Option<String>,
+    /// Root `ByteStateV1` evidence plane digest (raw hex). `None` for pre-IDCOH-001 bundles.
+    pub root_evidence_digest: Option<String>,
 }
 
 /// Reconstruct the path from root to a goal node.
@@ -982,6 +993,8 @@ fn build_graph(
             fixture_digest: bindings.fixture_digest.clone(),
             scorer_digest: bindings.scorer_digest.clone(),
             operator_set_digest: bindings.operator_set_digest.clone(),
+            root_identity_digest: bindings.root_identity_digest.clone(),
+            root_evidence_digest: bindings.root_evidence_digest.clone(),
             total_expansions,
             total_candidates_generated,
             total_duplicates_suppressed,

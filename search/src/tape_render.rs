@@ -54,6 +54,14 @@ pub fn render_graph(tape: &SearchTapeV1) -> Result<SearchGraphV1, TapeRenderErro
         .get("scorer_digest")
         .and_then(|v| v.as_str())
         .map(String::from);
+    let root_identity_digest = header
+        .get("root_identity_digest")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let root_evidence_digest = header
+        .get("root_evidence_digest")
+        .and_then(|v| v.as_str())
+        .map(String::from);
 
     let dedup_key = match header_str(header, "dedup_key")?.as_str() {
         "identity_only" => DedupKeyV1::IdentityOnly,
@@ -185,6 +193,8 @@ pub fn render_graph(tape: &SearchTapeV1) -> Result<SearchGraphV1, TapeRenderErro
             fixture_digest,
             scorer_digest,
             operator_set_digest,
+            root_identity_digest,
+            root_evidence_digest,
             total_expansions,
             total_candidates_generated,
             total_duplicates_suppressed,

@@ -142,6 +142,10 @@ pub struct SearchGraphMetadata {
     pub scorer_digest: Option<String>,
     /// Operator registry content-hash digest (`None` until wired).
     pub operator_set_digest: Option<String>,
+    /// Root `ByteStateV1` identity plane digest (raw hex). `None` for pre-IDCOH-001 bundles.
+    pub root_identity_digest: Option<String>,
+    /// Root `ByteStateV1` evidence plane digest (raw hex). `None` for pre-IDCOH-001 bundles.
+    pub root_evidence_digest: Option<String>,
 
     // Counters
     pub total_expansions: u64,
@@ -372,6 +376,13 @@ fn metadata_to_json(m: &SearchGraphMetadata) -> serde_json::Value {
 
     if let Some(ref digest) = m.scorer_digest {
         obj["scorer_digest"] = serde_json::json!(digest);
+    }
+
+    if let Some(ref digest) = m.root_identity_digest {
+        obj["root_identity_digest"] = serde_json::json!(digest);
+    }
+    if let Some(ref digest) = m.root_evidence_digest {
+        obj["root_evidence_digest"] = serde_json::json!(digest);
     }
 
     obj
@@ -647,6 +658,8 @@ mod tests {
                 fixture_digest: "fixture_abc".into(),
                 scorer_digest: None,
                 operator_set_digest: None,
+                root_identity_digest: None,
+                root_evidence_digest: None,
                 total_expansions: 0,
                 total_candidates_generated: 0,
                 total_duplicates_suppressed: 0,

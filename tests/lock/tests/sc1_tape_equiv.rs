@@ -42,6 +42,8 @@ fn bindings_for(regime: &Regime) -> MetadataBindings {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     }
 }
 
@@ -108,6 +110,8 @@ fn tape_equiv_rome_mini_search() {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     };
     let root = ByteStateV1::new(1, 2);
 

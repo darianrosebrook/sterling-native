@@ -69,6 +69,8 @@ pub fn prepare_search_setup<W: SearchWorldV1 + WorldHarnessV1>(
         fixture_digest: String::new(),
         scorer_digest: scorer_digest_hex,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     };
 
     SearchSetup {

@@ -25,6 +25,8 @@ fn default_bindings() -> MetadataBindings {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     }
 }
 
@@ -213,6 +215,8 @@ fn loop_detection_terminates_without_infinite_expansion() {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     };
 
     let result = search(
@@ -279,6 +283,8 @@ fn exhaustive_dead_end_tagged_correctly() {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     };
 
     let result = search(
@@ -325,6 +331,8 @@ fn expansion_budget_overflow() {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     };
 
     let result = search(
@@ -388,6 +396,8 @@ fn illegal_candidate_triggers_world_contract_violation() {
         fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
+        root_identity_digest: None,
+        root_evidence_digest: None,
     };
 
     // WorldContractViolation is now a soft termination — returns Ok with graph evidence
