@@ -76,7 +76,9 @@ search:
 - **TC-8:** Hypotheses must generalize across examples before gaining
   influence.
 - **TC-9A:** Hypothesis influence only reorders the candidate set, never
-  modifying its membership. Enforced by a CandidateSetDiff runtime witness.
+  modifying its membership. This maps to the existing advisory-only scorer
+  invariant — enforcement would use a membership-equality check on the
+  candidate set before and after scoring.
 - **TC-10:** Hypothesis interpreters must be registered, preventing black-box
   interpretation.
 

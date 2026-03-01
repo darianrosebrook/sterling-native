@@ -85,7 +85,7 @@ Options include: KG as a pre-compilation lookup (resolve entities before compile
 
 ## Parity Audit Reference
 
-This document covers capabilities **D1** (World harness contract) and **D2** (Transfer packs / certification packets) from the [parity audit](../../architecture/v1_v2_parity_audit.md), specifically the knowledge graph aspects of world adapter protocol and domain transfer.
+This document covers knowledge graph aspects relevant to capabilities **D1** (World harness contract — specifically domain specification as a world-level concern) and **D2** (Transfer packs / certification packets — specifically how KG artifacts participate in transfer evidence) from the [parity audit](../../architecture/v1_v2_parity_audit.md).
 
 What v2 already proves:
 - RegistryV1 bijective Code32-to-ConceptID mapping (A1, A3: **Implemented**)

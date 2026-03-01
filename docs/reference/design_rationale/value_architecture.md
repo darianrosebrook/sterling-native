@@ -40,6 +40,8 @@ enabled components participate. Scores are in [0, 1] by convention.
   participate.
 - **V-3:** With latent disabled, behavior is identical to pre-latent
   baseline.
+- **V-4:** *(Gap — not documented in original v1 source; reserved for future
+  assignment.)*
 - **V-5:** Dialogue scoring fallback is never silent -- always records
   reason.
 
@@ -77,7 +79,7 @@ penalty are configurable.
 
 ## MDL Component
 
-Minimum description length parsimony line penalizes overly complex solutions:
+Minimum description length parsimony penalty penalizes overly complex solutions:
 
 ```
 MDL_total = L_struct + L_params + L_ex

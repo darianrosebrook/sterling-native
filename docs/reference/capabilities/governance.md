@@ -3,7 +3,7 @@ authority: reference
 status: advisory
 date: 2026-03-01
 capability: governance
-parity_audit_sections: "C1, C3, G1, G7"
+parity_audit_sections: "C1, C3, Guardrail G1, Guardrail G7"
 ---
 
 # Governance and Certification
@@ -87,13 +87,15 @@ Every governance claim must be reducible to Rust-verified artifacts (ADR 0006). 
 
 ## Parity Audit Reference
 
-This document covers capabilities **C1** (Proof-carrying artifacts + verification), **C3** (Policy snapshots), and governance aspects of **G1** (Two codebases without authority boundary) and **G7** (Operator registry) from the [parity audit](../../architecture/v1_v2_parity_audit.md).
+This document covers capabilities **C1** (Proof-carrying artifacts + verification) and **C3** (Policy snapshots), plus governance aspects of **Guardrail G1** (Two codebases without authority boundary) and **Guardrail G7** (Operator registry phase boundary) from the [parity audit](../../architecture/v1_v2_parity_audit.md).
+
+Note: The parity audit uses "G" as a prefix for both capability IDs (§Capabilities) and guardrail IDs (§Guardrails). Capability G1 is "Tool world + transactional operators" (Not started). The references here are to Guardrails G1 and G7, not capability G1.
 
 What v2 already proves:
 - Content-addressed bundles with fail-closed verification (C1: **Implemented**)
 - Policy snapshots as normative artifacts (C3: **Implemented**)
 - Operator registry with digest binding (A3: **Partial**, Phase 0 complete)
-- Authority boundary pinned by ADR 0006 (G1: **Resolved**)
+- Authority boundary pinned by ADR 0006 (Guardrail G1: **Resolved**)
 
 What remains:
 - Campaign-level binding (Import Group C)

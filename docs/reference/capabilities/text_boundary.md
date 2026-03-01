@@ -53,7 +53,7 @@ This aligns with the existing `apply()` contract where operators declare effects
 |----------|---------|------------|
 | IR layer count | 2 (surface/authority) or 4 (surface/structure/committed/frontier) | Must enforce trust boundary; more layers adds expressiveness but complexity |
 | IR as ByteState or new type | Encode text IR into ByteState slots or define a parallel TextStateV1 | ByteState reuse gets existing verification for free; new type allows text-specific optimizations |
-| Realizer location | Rust (native render) or Python (external render with artifact handoff) | Python realizer is pragmatic short-term; Rust realizer is the long-term target per ADR 0006 |
+| Realizer location | Rust (native render) or Python (external render with artifact handoff) | Python realizer is pragmatic short-term; Rust realizer is the long-term target (ADR 0006 governs the certification authority boundary, not realizer location specifically) |
 | Hole representation | Reuse slot Hole status or define TextHoleV1 | Slot Hole is proven but may be too coarse for linguistic holes |
 | Budget profiles | Reuse SearchPolicyV1 budget model or define TextPolicyV1 | Text processing has different resource profiles than search |
 

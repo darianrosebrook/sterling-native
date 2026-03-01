@@ -19,7 +19,7 @@ capability status.
 | **F** | Frontier size | `max_frontier_size` (default 10,000) |
 | **V** | Unique visited states | Practical: E x b |
 | **T** | Scorer table entries | Input-dependent |
-| **s** | State fingerprint size | Constant (identity bytes, 2 planes) |
+| **s** | State fingerprint size | Constant (identity bytes, 1 plane) |
 | **b** | Average branching factor | World-dependent |
 | **d** | Search depth | `max_depth` (default 100) |
 | **N** | Total nodes created | E x c worst case |
@@ -99,7 +99,7 @@ convert this to a linear scan bounded by E x c.
 
 ## Deduplication
 
-- **Key:** SHA-256 fingerprint of identity_bytes() (identity + status planes)
+- **Key:** SHA-256 fingerprint of identity_bytes() (identity plane only)
 - **Policy:** DedupKeyV1::IdentityOnly (default)
 - **Semantics:** First-seen-wins. Once a state fingerprint enters the
   visited set, all subsequent arrivals at the same state are suppressed.
@@ -120,11 +120,10 @@ rather than exponential in d.
 
 ## Known Inefficiencies
 
-### Node summary construction: O(N x E)
+### ~~Node summary construction: O(N x E)~~ (resolved)
 
-Node summaries are built after search completes by scanning all expansions
-per node via linear search. A HashMap built during expansion recording would
-reduce this to O(N). Impact is post-search only, not in the hot loop.
+Node summaries are now built via `expansion_index` HashMap lookup, reducing
+this from O(N x E) to O(N). See `search/src/search.rs`.
 
 ### Double candidate sort
 

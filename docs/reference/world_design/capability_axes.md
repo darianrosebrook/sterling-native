@@ -13,9 +13,9 @@ status.
 ## Ten Orthogonal Capability Axes
 
 A deployable, domain-agnostic reasoning engine must close proof obligations
-along axes that existing toy worlds only partially touch. Each axis below
-defines what must be true in deployment, how to get a clean pass/fail signal,
-and cert-grade acceptance criteria.
+along axes that existing worlds only partially touch. Each axis below defines
+what must be true in deployment, how to get a clean pass/fail signal, and
+cert-grade acceptance criteria.
 
 ### 1. Domain Induction
 

@@ -57,12 +57,12 @@ policy knobs. Six canonical regimes exercise distinct failure modes:
 
 | Regime | Config | Exercises |
 |--------|--------|-----------|
-| baseline_small | N=4, V=3 | Basic search, shallow depth |
-| deep_narrow | N=3, V=5 | Deep search, narrow branching |
-| wide_shallow | N=6, V=2 | Wide branching, shallow goals |
-| trap_heavy | N=4, V=4, traps | Trap avoidance, dead-end detection |
-| goal_sparse | N=5, V=3, sparse goals | Exhaustive search, budget pressure |
+| truncation | N=8, V=4, cap=5 | Candidate truncation (32 candidates → 5) |
+| duplicates | N=4, V=2, goal=Never | Duplicate suppression from permuted slot assignments |
+| exhaustive_dead_end | N=4, V=3, trap=Slot0Eq(2) | Trap avoidance, dead-end detection |
+| budget_limited | N=6, V=3, max_expansions=3 | Early budget termination |
 | scale_1000 | N=10, V=4, 1000 expansions | Performance envelope, large state space |
+| frontier_pressure | N=6, V=3, max_frontier=8 | Frontier pruning under pressure |
 
 **Capability axes exercised:** (4) adversarial robustness (trap regimes),
 (7) transfer (same search contracts across regimes), (10) compute governance

@@ -32,7 +32,7 @@ In the native substrate, this maps naturally to the content-addressing and chain
 
 Frequently-traversed reasoning paths can be promoted to certified corridors — pre-verified fast paths that skip redundant search. Corridor promotion is itself a governed operation: it requires evidence that the path was certified under a specific policy snapshot, and that the corridor's preconditions still hold.
 
-This is analogous to the existing operator promotion lifecycle (Shadow → Provisional → Production) and should share the same governance surface.
+This is analogous to the operator promotion lifecycle described in the [induction reference](induction.md) (Shadow → Provisional → Production) and should share the same governance surface once implemented.
 
 ### Three-Tier Decay Hierarchy
 
