@@ -36,10 +36,11 @@ Sterling Native implements a complete **deterministic execution + search + evide
 - **RomeMini**: 1 layer, 2 slots, 1 operator — minimal carrier-level fixture
 - **RomeMiniSearch**: 2 slots × 4 values — minimal search fixture
 - **SlotLatticeSearch**: parameterized N×V world with 6 regime constructors (trap rules, goal profiles) — stress-tests search at scale (1000+ expansions)
+- **TransactionalKvStore**: 2-layer write-once KV with marker-based transactions (stage/commit/rollback)
 
 ### Evidence
 
-439 tests (lock + unit + integration), all passing. Cross-process determinism fixtures verify independent processes produce identical artifacts. CI runs on Linux + macOS.
+578 tests (lock + unit + integration), all passing. Cross-process determinism fixtures verify independent processes produce identical artifacts. CI runs on Linux + macOS.
 
 ## Quickstart
 

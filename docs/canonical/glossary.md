@@ -9,7 +9,7 @@ scope: "Definitions enforced by contracts, invariants, and ADRs. For the compreh
 
 ## Carrier Layer
 
-**Code32:** A 32-bit identity atom composed of `(domain: 5 bits, kind: 5 bits, local_id: 22 bits)`. Every semantic entity in Sterling has exactly one Code32 identity. The registry is bijective: one entity ↔ one Code32. See [`code32_bytestate.md`](code32_bytestate.md).
+**Code32:** A 32-bit identity atom composed of `[domain: u8, kind: u8, local_id: u16le]` (8/8/16 byte-structured layout). Every semantic entity in Sterling has exactly one Code32 identity. The registry is bijective: one entity ↔ one Code32. See [`code32_bytestate.md`](code32_bytestate.md).
 
 **ByteState:** The canonical packed runtime representation of Sterling's semantic state. ByteStateV1 uses a two-plane encoding (identity plane + status plane) at ~640 bytes per state snapshot. ByteState is the only runtime truth — all reasoning operates on compiled ByteState, not on IR objects directly. See [`bytestate_compilation_boundary.md`](bytestate_compilation_boundary.md).
 
@@ -25,7 +25,7 @@ scope: "Definitions enforced by contracts, invariants, and ADRs. For the compreh
 
 **WorldState:** External context and environment state that accompanies an UtteranceState. Includes domain-specific observations, dialogue phase, and any external signals relevant to reasoning.
 
-**StateGraph:** The graph of state nodes connected by operator applications (edges). Append-only and deterministic — once a state and transition are added, they are never altered. StateGraph is a derived view from ByteTrace, not the canonical persistence format.
+**StateGraph:** *(v1 terminology)* The graph of state nodes connected by operator applications (edges). In Sterling Native, the search-layer equivalent is `SearchGraphV1` (`search_graph.json`) — a deterministic derived view rendered from `SearchTapeV1`. At the carrier layer, `ByteTraceV1` is the canonical persistence format with no separate graph artifact. See [ADR 0002](../adr/0002-byte-trace-is-canonical.md).
 
 ---
 
@@ -114,6 +114,20 @@ scope: "Definitions enforced by contracts, invariants, and ADRs. For the compreh
 2. **Search replay** — `SearchTapeV1` (`.stap`) + `SearchGraphV1`: proves deterministic search execution with chain-hash integrity and (Cert) tape→graph equivalence.
 
 Both can coexist in a bundle and are verified independently.
+
+### Corridor Binding Artifacts
+
+**OperatorRegistryV1:** A normative bundle artifact (`operator_registry.json`) containing the operator catalog: op IDs, signatures, effect kinds, precondition/effect masks, and contract metadata. Its content hash is bound as `operator_set_digest` in the verification report, search graph metadata, and tape header. `apply()` requires a registry snapshot — there is no callable path that bypasses it. See `kernel/src/operators/operator_registry.rs`.
+
+**ConceptRegistryV1:** A normative bundle artifact (`concept_registry.json`) containing the `RegistryV1` canonical bytes — the Code32↔ConceptID bijective mapping used during compilation. Its semantic digest (computed via `HashDomain::RegistrySnapshot`) is bound into the compilation manifest (`registry_hash`) and graph metadata (`registry_digest`). In Cert mode, presence is mandatory and compilation replay uses it to prove the compilation boundary is reproducible. See `kernel/src/carrier/registry.rs`.
+
+**CompilationManifestV1:** A normative bundle artifact (`compilation_manifest.json`) recording compilation boundary provenance: schema descriptor, registry digest, payload hash, root identity digest, and root evidence digest. Field-level coherence is verified against graph metadata and the verification report by `verify_bundle()`. This artifact enables offline audit of what inputs produced the initial ByteState.
+
+**Registry Coherence:** The invariant that `registry_digest` / `registry_hash` values in `compilation_manifest.json`, `search_graph.json` metadata, `verification_report.json`, and the `concept_registry.json` artifact all agree. Enforced by `verify_bundle()` Steps 12b–12c (RCOH-001, CRART-001).
+
+**Root State Fingerprint:** The SHA-256 digest of the initial ByteState before any operator application. Bound in the `SearchTapeV1` header and `search_graph.json` metadata. Proves that search frontier initialization is deterministic and traceable to a specific compilation output (BIND-001, IDCOH-001).
+
+**Compilation Replay:** The process of reconstructing identical ByteState from bundle-shipped inputs (`concept_registry.json` bytes, schema descriptor from `compilation_manifest.json`, fixture payload) via `compile()`. Cert-mode verification performs this replay and asserts byte-identical output, proving the compilation boundary is reproducible without access to the original domain state (CREPLAY-001).
 
 ## Learning
 

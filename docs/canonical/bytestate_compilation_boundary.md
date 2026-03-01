@@ -3,7 +3,7 @@ version: "1.0"
 authority: canonical
 date: 2026-02-15
 author: "@darianrosebrook"
-status: "Partially implemented (core compilation boundary operational; epoch transitions and dynamic domain handshake not yet wired)"
+status: "Implemented in Rust (core compilation boundary + replay verification operational; epoch transitions and dynamic domain handshake not yet wired)"
 notice: "This is a canonical definition. Do not edit without a version bump or CANONICAL-CHANGE PR label."
 ---
 # ByteState Compilation Boundary
@@ -383,26 +383,31 @@ The key constraint: **learned operators do not get special treatment**. They ent
 
 ## 8. Implementation Status
 
-As of 2026-02-16, the following aspects of this boundary are implemented:
+As of 2026-03-01, the compilation boundary is implemented in Rust across the `kernel` crate:
 
 **Implemented:**
-- Pure-function compilation: `DomainCompiler` protocol in `core/carrier/compiler.py` with `compile_step_log()` and `compile_events()` methods
-- Four domain compilers: Rome, Mastermind, EscapeGame, WordNet (in `core/carrier/schemas/`)
-- `RegistrySnapshotV1` with content-addressed epoch hashing (`core/carrier/compiler.py`)
-- `OperatorCodeBookV1` with deterministic operator→Code32 mapping (`core/carrier/operator_codebook.py`)
-- Fail-closed behavior: unknown concepts raise `KeyError`; schema mismatches raise `ValueError`
-- ByteTraceV1 envelope/payload split with deterministic payload hashing (`core/carrier/bytetrace.py`)
-- Golden conformance tests: byte-for-byte regression gates for all 4 domains (`tests/conformance/carrier/`)
-- Round-trip tests: `compile_state()` → `decompile_state()` equivalence per domain
-- Registry materialization CLI: `scripts/carrier/generate_registry.py` (from traces or fixtures)
+- Pure-function compilation: `compile(payload_bytes, schema_descriptor, registry) → CompilationResultV1` in `kernel/src/carrier/compile.rs`
+- `CompilationResultV1` with compiled `ByteStateV1`, schema descriptor, registry descriptor, and `compilation_manifest` (canonical JSON provenance artifact)
+- `CompilationFailure` as a typed enum (`InvalidPayload`, `UnknownConcept`, `SchemaViolation`, etc.) — fail-closed, no partial results
+- `RegistryV1` bijective Code32↔ConceptID mapping with content-addressed digest in `kernel/src/carrier/registry.rs`
+- `RegistryV1::from_canonical_bytes()` for deserializing registry from bundle-shipped artifact bytes (CREPLAY-001)
+- `SchemaDescriptor` with `(schema_id, schema_version, schema_hash)` in `kernel/src/carrier/compile.rs`
+- ByteTraceV1 envelope/payload split with deterministic payload hashing in `kernel/src/carrier/trace_writer.rs` + `trace_reader.rs`
+- `replay_verify()` frame-by-frame replay verification with O(1) divergence localization in `kernel/src/proof/replay.rs`
+- Canonical hashing: SHA-256 with domain-separated prefixes via `canonical_hash(HashDomain, &[u8])` in `kernel/src/proof/hash.rs`
+- Golden conformance tests: byte-for-byte regression gates in `tests/lock/tests/s1_m1_golden_fixtures.rs` (v1 oracle fixtures)
+- Cross-process determinism: independent processes produce identical compilation artifacts (`tests/lock/tests/s1_m1_crossproc.rs`)
+- Compilation manifest coherence: verified against graph metadata and report in `verify_bundle()` (MANIFEST-001)
+- Compilation boundary replay: Cert-mode recompilation from bundle-shipped inputs proves reproducibility (CREPLAY-001)
+- `concept_registry.json` as normative bundle artifact with independent digest verification (CRART-001)
 
 **Not yet implemented:**
-- `CompilationRequestV1` / `CompilationResultV1` / `DecompilationResultV1` as formal dataclasses (§4) — compilation currently uses domain compiler methods directly
-- `CompilationFailure` as a typed artifact (§2.4) — failures currently raise Python exceptions
+- `CompilationRequestV1` envelope (§3, §4.1) — compilation currently takes raw inputs, not a structured request artifact
+- `DecompilationResultV1` (§4.3) — no decompile path yet (ByteState → domain payload)
 - Cross-epoch migration tests (§5.3) — only single-epoch compilation tested
 - Epoch transition machinery (§6.2) — registries are per-run, not yet governed by promotion pipeline
-- Dynamic domain handshake (§6.1) — domain compilers are statically registered
-- Learned operator compilation (§6.4) — operator codebooks are hand-authored
+- Dynamic domain handshake (§6.1) — world compilers are trait-based, not dynamically registered
+- Learned operator compilation (§6.4) — operator registry is static
 
 ---
 

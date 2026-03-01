@@ -1,5 +1,5 @@
 ---
-status: "Accepted (Design target)"
+status: Accepted
 authority: adr
 date: 2026-02-23
 ---
@@ -9,9 +9,11 @@ date: 2026-02-23
 
 Sterling Native treats the compilation boundary as the core architectural contract:
 
-compile(payload, schema_descriptor, registry_snapshot) → ByteState
+```
+compile(payload_bytes, schema_descriptor, registry) → CompilationResultV1
+```
 
-ByteState is the only runtime truth used by the inner loop for compute, hash, diff, and replay.
+`CompilationResultV1` contains the compiled `ByteStateV1` plus provenance metadata (schema descriptor, registry descriptor, compilation manifest). ByteState is the only runtime truth used by the inner loop for compute, hash, diff, and replay. Policy lives in the harness layer, not the carrier layer — `compile()` is purely a substrate operation.
 
 ## Rationale
 

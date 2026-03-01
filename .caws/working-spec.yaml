@@ -38,7 +38,7 @@ scope:
     - node_modules/
     - .caws/
 invariants:
-  - "Compilation boundary: compile(payload, schema_descriptor, registry_snapshot, policy_snapshot) → ByteState is the only entry point"
+  - "Compilation boundary: compile(payload_bytes, schema_descriptor, registry) → CompilationResultV1 is the only entry point"
   - "ByteTrace is the canonical persisted trace (ADR 0002); StateGraph is derived"
   - "Neural is advisory only — no mutation, no operator creation, no precondition bypass (ADR 0003)"
   - "Operator taxonomy is S/M/P/K/C: Seek/Memorize/Perceive/Knowledge/Control (ADR 0004)"

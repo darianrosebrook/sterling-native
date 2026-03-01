@@ -193,9 +193,9 @@ pub fn build_table_scorer_input(
 /// 3. `search_with_tape(root_state, world, policy, scorer)` → `(SearchResult, TapeOutput)`
 /// 4. Assemble bundle with `search_graph.json` + `search_tape.stap` (both normative)
 ///
-/// For `ScorerInputV1::Table`, the bundle includes 7 artifacts (adding
+/// For `ScorerInputV1::Table`, the bundle includes 9 artifacts (adding
 /// `scorer.json` as normative). For `ScorerInputV1::Uniform`, the bundle
-/// has 6 artifacts.
+/// has 8 artifacts.
 ///
 /// # Errors
 ///

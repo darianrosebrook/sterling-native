@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "5231e4bb661f7e66",
+  "aggregate_hash": "7e08a574c14b58c8",
   "entry_count": 111,
   "entries": [
     {
@@ -16,18 +16,18 @@
       "path": "docs/adr/0001-compilation-boundary.md",
       "title": "ADR 0001: Compilation Boundary as Architectural Spine",
       "authority": "adr",
-      "status": "Accepted (Design target)",
+      "status": "Accepted",
       "scope": null,
-      "content_hash": "af6028d454d07bcd",
+      "content_hash": "cd99bf5f0b1e07ee",
       "links": []
     },
     {
       "path": "docs/adr/0002-byte-trace-is-canonical.md",
-      "title": "ADR 0002: ByteTrace is the Canonical Trace Artifact",
+      "title": "ADR 0002: Binary Traces are the Canonical Evidence Artifacts",
       "authority": "adr",
-      "status": "Accepted (Design target)",
+      "status": "Accepted",
       "scope": null,
-      "content_hash": "70f143d54414dbe3",
+      "content_hash": "50d405610a6118a5",
       "links": []
     },
     {
@@ -181,9 +181,9 @@
       "path": "docs/canonical/bytestate_compilation_boundary.md",
       "title": "ByteState Compilation Boundary",
       "authority": "canonical",
-      "status": "Partially implemented (core compilation boundary operational; epoch transitions and dynamic domain handshake not yet wired)",
+      "status": "Implemented in Rust (core compilation boundary + replay verification operational; epoch transitions and dynamic domain handshake not yet wired)",
       "scope": null,
-      "content_hash": "bbbc0ba86893bafc",
+      "content_hash": "57b2964a42866f9f",
       "links": [
         {
           "text": "code32_bytestate.md",
@@ -301,7 +301,7 @@
       "authority": "canonical",
       "status": "v2 canonical — curated vocabulary for Sterling Native.",
       "scope": "Definitions enforced by contracts, invariants, and ADRs. For the comprehensive v1 glossary (historical), see docs/reference/v1/glossary_full.md.",
-      "content_hash": "ad65b085738611f7",
+      "content_hash": "52c7abd3268c7b64",
       "links": [
         {
           "text": "`code32_bytestate.md`",
@@ -318,6 +318,10 @@
         {
           "text": "ADR 0001",
           "target": "docs/canonical/../adr/0001-compilation-boundary.md"
+        },
+        {
+          "text": "ADR 0002",
+          "target": "docs/canonical/../adr/0002-byte-trace-is-canonical.md"
         },
         {
           "text": "ADR 0004",
@@ -398,7 +402,7 @@
       "authority": "canonical",
       "status": "v2 canonical",
       "scope": null,
-      "content_hash": "90a335dfc3d24741",
+      "content_hash": "145c141801520999",
       "links": []
     },
     {
