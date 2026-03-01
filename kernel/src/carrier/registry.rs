@@ -43,6 +43,11 @@ pub enum RegistryError {
     },
     /// Canonical JSON serialization failed (non-integer number).
     CanonicalizationError { detail: String },
+    /// `from_canonical_bytes` failed to parse the input.
+    ParseError { detail: String },
+    /// `from_canonical_bytes` input was valid JSON but not canonical
+    /// (re-canonicalized bytes differ from input).
+    NotCanonical,
 }
 
 impl RegistryV1 {
@@ -155,6 +160,117 @@ impl RegistryV1 {
         canonical_json_bytes(&value).map_err(|e| RegistryError::CanonicalizationError {
             detail: e.to_string(),
         })
+    }
+
+    /// Reconstruct a `RegistryV1` from canonical JSON bytes.
+    ///
+    /// Strict inverse of [`canonical_bytes()`](Self::canonical_bytes): parses
+    /// the JSON structure, validates all fields, reconstructs via [`Self::new()`]
+    /// (so bijection enforcement stays centralized), and enforces canonical
+    /// round-trip (`canonical_bytes()` on the result must equal the input).
+    ///
+    /// # Format
+    ///
+    /// ```json
+    /// {"allocations":[["concept_id",[d,k,lo,hi]],...], "epoch":"..."}
+    /// ```
+    ///
+    /// Each code byte must be an integer in `0..=255`.
+    ///
+    /// # Errors
+    ///
+    /// - [`RegistryError::ParseError`] for malformed JSON, missing fields,
+    ///   wrong types, or out-of-range code bytes.
+    /// - [`RegistryError::NotCanonical`] if the input is valid but not in
+    ///   canonical form.
+    /// - [`RegistryError::DuplicateCode32`] or [`RegistryError::DuplicateConceptId`]
+    ///   if the allocations violate the bijection (propagated from `new()`).
+    pub fn from_canonical_bytes(bytes: &[u8]) -> Result<Self, RegistryError> {
+        let value: serde_json::Value =
+            serde_json::from_slice(bytes).map_err(|e| RegistryError::ParseError {
+                detail: format!("JSON parse: {e}"),
+            })?;
+
+        let obj = value
+            .as_object()
+            .ok_or_else(|| RegistryError::ParseError {
+                detail: "expected JSON object".into(),
+            })?;
+
+        let epoch = obj
+            .get("epoch")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| RegistryError::ParseError {
+                detail: "missing or non-string 'epoch'".into(),
+            })?
+            .to_string();
+
+        let allocs_arr = obj
+            .get("allocations")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| RegistryError::ParseError {
+                detail: "missing or non-array 'allocations'".into(),
+            })?;
+
+        let mut allocations = Vec::with_capacity(allocs_arr.len());
+        for (i, entry) in allocs_arr.iter().enumerate() {
+            let pair = entry.as_array().ok_or_else(|| RegistryError::ParseError {
+                detail: format!("allocation[{i}]: expected array"),
+            })?;
+            if pair.len() != 2 {
+                return Err(RegistryError::ParseError {
+                    detail: format!("allocation[{i}]: expected [concept_id, [d,k,lo,hi]]"),
+                });
+            }
+
+            let concept_id =
+                pair[0]
+                    .as_str()
+                    .ok_or_else(|| RegistryError::ParseError {
+                        detail: format!("allocation[{i}][0]: expected string concept_id"),
+                    })?;
+
+            let code_arr =
+                pair[1]
+                    .as_array()
+                    .ok_or_else(|| RegistryError::ParseError {
+                        detail: format!("allocation[{i}][1]: expected [d,k,lo,hi] array"),
+                    })?;
+            if code_arr.len() != 4 {
+                return Err(RegistryError::ParseError {
+                    detail: format!("allocation[{i}][1]: expected 4 code bytes, got {}", code_arr.len()),
+                });
+            }
+
+            let mut code_bytes = [0u8; 4];
+            for (j, val) in code_arr.iter().enumerate() {
+                let n = val.as_u64().ok_or_else(|| RegistryError::ParseError {
+                    detail: format!("allocation[{i}][1][{j}]: expected integer"),
+                })?;
+                if n > 255 {
+                    return Err(RegistryError::ParseError {
+                        detail: format!("allocation[{i}][1][{j}]: {n} > 255"),
+                    });
+                }
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    code_bytes[j] = n as u8;
+                }
+            }
+
+            let code = Code32::from_le_bytes(code_bytes);
+            allocations.push((code, concept_id.to_string()));
+        }
+
+        let registry = Self::new(epoch, allocations)?;
+
+        // Enforce canonical round-trip: reject non-canonical input.
+        let recanonized = registry.canonical_bytes()?;
+        if recanonized != bytes {
+            return Err(RegistryError::NotCanonical);
+        }
+
+        Ok(registry)
     }
 
     /// Compute the canonical digest for this registry.
@@ -351,5 +467,141 @@ mod tests {
         assert!(!bytes.is_empty());
         let h = reg.digest().unwrap();
         assert_eq!(h.algorithm(), "sha256");
+    }
+
+    // --- from_canonical_bytes tests ---
+
+    #[test]
+    fn from_canonical_bytes_round_trip() {
+        let reg = sample_registry();
+        let bytes = reg.canonical_bytes().unwrap();
+        let restored = RegistryV1::from_canonical_bytes(&bytes).unwrap();
+        assert_eq!(restored.epoch(), reg.epoch());
+        assert_eq!(restored.len(), reg.len());
+        assert_eq!(restored.digest().unwrap(), reg.digest().unwrap());
+        // Verify all allocations match.
+        for (code, concept_id) in &reg.allocations {
+            assert_eq!(restored.concept_for_code(code), Some(concept_id.as_str()));
+        }
+    }
+
+    #[test]
+    fn from_canonical_bytes_empty_registry_round_trip() {
+        let reg = RegistryV1::new("epoch-empty".into(), vec![]).unwrap();
+        let bytes = reg.canonical_bytes().unwrap();
+        let restored = RegistryV1::from_canonical_bytes(&bytes).unwrap();
+        assert!(restored.is_empty());
+        assert_eq!(restored.epoch(), "epoch-empty");
+    }
+
+    #[test]
+    fn from_canonical_bytes_rejects_non_canonical_whitespace() {
+        let reg = sample_registry();
+        let bytes = reg.canonical_bytes().unwrap();
+        // Add leading whitespace — valid JSON but not canonical.
+        let mut padded = vec![b' '];
+        padded.extend_from_slice(&bytes);
+        let err = RegistryV1::from_canonical_bytes(&padded).unwrap_err();
+        // Whitespace before JSON is a parse error (serde may or may not accept it),
+        // or a NotCanonical error. Either is acceptable.
+        assert!(
+            matches!(err, RegistryError::ParseError { .. } | RegistryError::NotCanonical),
+            "expected ParseError or NotCanonical, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn from_canonical_bytes_rejects_pretty_printed() {
+        let reg = sample_registry();
+        let bytes = reg.canonical_bytes().unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        // Pretty-print: valid JSON, same data, but not canonical.
+        let pretty = serde_json::to_vec_pretty(&value).unwrap();
+        let err = RegistryV1::from_canonical_bytes(&pretty).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::NotCanonical),
+            "expected NotCanonical, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn from_canonical_bytes_rejects_not_json() {
+        let err = RegistryV1::from_canonical_bytes(b"not json").unwrap_err();
+        assert!(
+            matches!(err, RegistryError::ParseError { .. }),
+            "expected ParseError, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn from_canonical_bytes_rejects_non_object() {
+        let err = RegistryV1::from_canonical_bytes(b"[1,2,3]").unwrap_err();
+        assert!(
+            matches!(err, RegistryError::ParseError { .. }),
+            "expected ParseError, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn from_canonical_bytes_rejects_missing_epoch() {
+        let err =
+            RegistryV1::from_canonical_bytes(br#"{"allocations":[]}"#).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::ParseError { .. }),
+            "expected ParseError, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn from_canonical_bytes_rejects_missing_allocations() {
+        let err =
+            RegistryV1::from_canonical_bytes(br#"{"epoch":"e"}"#).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::ParseError { .. }),
+            "expected ParseError, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn from_canonical_bytes_rejects_out_of_range_byte() {
+        // Code byte 256 is out of u8 range.
+        let bad = br#"{"allocations":[["concept",[256,0,0,0]]],"epoch":"e"}"#;
+        let err = RegistryV1::from_canonical_bytes(bad).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::ParseError { .. }),
+            "expected ParseError for out-of-range byte, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn from_canonical_bytes_rejects_wrong_code_length() {
+        // Only 3 code bytes instead of 4.
+        let bad = br#"{"allocations":[["concept",[1,0,0]]],"epoch":"e"}"#;
+        let err = RegistryV1::from_canonical_bytes(bad).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::ParseError { .. }),
+            "expected ParseError for wrong code length, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn from_canonical_bytes_rejects_non_string_concept_id() {
+        let bad = br#"{"allocations":[[42,[1,0,0,0]]],"epoch":"e"}"#;
+        let err = RegistryV1::from_canonical_bytes(bad).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::ParseError { .. }),
+            "expected ParseError for non-string concept_id, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn from_canonical_bytes_propagates_bijection_violation() {
+        // Duplicate code32 in allocations — canonical form but invalid data.
+        let bad = br#"{"allocations":[["a",[1,0,0,0]],["b",[1,0,0,0]]],"epoch":"e"}"#;
+        let err = RegistryV1::from_canonical_bytes(bad).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::DuplicateCode32 { .. }),
+            "expected DuplicateCode32, got: {err:?}"
+        );
     }
 }
