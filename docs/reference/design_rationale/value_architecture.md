@@ -10,6 +10,26 @@ Sterling's composable value function architecture. Do not cite as canonical.
 See [parity audit](../../architecture/v1_v2_parity_audit.md) for capability
 status.
 
+## Proven by Existing Code
+
+- **UniformScorer** — `search/src/scorer.rs`: all candidates receive equal
+  score (mandatory baseline)
+- **TableScorer** — `search/src/scorer.rs`: per-action scoring via
+  content-addressed lookup tables with integer-only bonuses and
+  `scorer_digest` binding through the full verification chain
+- **Advisory-only invariant** — scorer reorders candidates but cannot add,
+  remove, or change operator legality
+- **CandidateScoreV1** — `search/src/scorer.rs`: structured score type with
+  `ScoreSourceV1` provenance (Uniform, Table, Composite)
+
+## Future Proof Obligations
+
+The seven composable heads, 39-D feature vector, `ConfigurableValueModel`,
+and MDL component described below are aspirational designs from v1 Python.
+None exist in the v2 Rust codebase. The integration point is the `ValueScorer`
+trait — any future learned component would implement this trait or produce
+`TableScorer` entries.
+
 ## HybridValueFunction Architecture
 
 The value function estimates quality of search states to guide reasoning

@@ -17,6 +17,30 @@ convergent when it defines falsifiers, exposes stress axes, transfers across
 domains with zero capsule changes, and produces deterministic, replayable
 artifacts that can be bundled and regression-tested through promotion gates.
 
+## Proven by Existing Code
+
+The following elements of the promotion framework are already exercised by the
+codebase:
+
+- **Content-addressed artifact bundles** with fail-closed verification —
+  `harness/src/bundle.rs` `verify_bundle()`
+- **Determinism harness** (CPG-5 equivalent): cross-process lock tests in
+  `tests/lock/` verify identical digests across N runs and varied hash seeds
+- **Hash surface lock tests** (CPG-1 equivalent): golden digest lock tests
+  throughout `tests/lock/tests/`
+- **Ordering invariance**: `from_canonical_bytes()` rejects unsorted allocations
+  (`kernel/src/proof/canon.rs`)
+- **Policy sensitivity**: changing policy changes all downstream digests
+  (`harness/src/policy.rs` `PolicySnapshotV1`)
+
+## Future Proof Obligations
+
+The D0–D4 ladder, CPG gates, falsification budget, and promotion artifacts
+described below are target criteria for a future capability promotion system.
+None are currently tracked or enforced by code. The promotion artifact types
+(`CapsuleSpec`, `CPGResults`, `CPGVerdictBundle`, `PromotionProposal`) are
+proposed — they do not exist in the codebase.
+
 ## D0-D4 Promotion Ladder
 
 The D-levels are progress labels for tracking demo maturity. They are not

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "b41c9a237d4e7760",
+  "aggregate_hash": "c4219923f9437265",
   "entry_count": 76,
   "entries": [
     {
@@ -601,7 +601,7 @@
       "authority": "reference",
       "status": "advisory",
       "scope": null,
-      "content_hash": "8c3831a38dad0e7a",
+      "content_hash": "f7e875d6e64b513b",
       "links": [
         {
           "text": "parity audit",
@@ -629,7 +629,7 @@
       "authority": "reference",
       "status": "advisory",
       "scope": null,
-      "content_hash": "d083caa1a897ebf5",
+      "content_hash": "a36691769cf1a76d",
       "links": [
         {
           "text": "parity audit",
@@ -657,7 +657,7 @@
       "authority": "reference",
       "status": "advisory",
       "scope": null,
-      "content_hash": "1908a670bdfde62e",
+      "content_hash": "6b36c372024f2862",
       "links": [
         {
           "text": "parity audit",
@@ -713,7 +713,7 @@
       "authority": "reference",
       "status": "advisory",
       "scope": null,
-      "content_hash": "b843147a438b81a4",
+      "content_hash": "bee2fa31b2095d97",
       "links": [
         {
           "text": "parity audit",

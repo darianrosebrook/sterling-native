@@ -39,6 +39,28 @@ the remaining problem is easy, known, or low-entropy. Operator learning is
 therefore implicitly learning: "If I apply operator o in state s, I am likely
 to land in a region where future progress is reliable."
 
+## Proven by Existing Code
+
+- **Operator registry with effect contracts** — `kernel/src/operators/operator_registry.rs`
+  `OperatorRegistryV1` enforces three-phase apply: registry lookup →
+  dispatch → effect validation
+- **Operator masks via preconditions** — `kernel/src/operators/apply.rs`
+  `apply()` checks operator legality before execution (masks are structural,
+  not learned)
+- **ValueScorer trait** — `search/src/scorer.rs` provides `UniformScorer`
+  (mandatory baseline) and `TableScorer` (per-action scoring via
+  content-addressed lookup tables)
+- **Advisory-only invariant** — scorer reorders candidates but cannot add,
+  remove, or change legality (`search/src/scorer.rs`)
+
+## Future Proof Obligations
+
+The loss function, baseline requirements, evaluation contract, and landmark
+learning described below are design blueprints for a future learned operator
+policy. No ML training pipeline exists in the codebase. The connection point
+is the `ValueScorer` trait — a learned policy would produce `TableScorer`
+entries.
+
 ## Masked Gold Cross-Entropy Loss
 
 The primary loss for operator-supervised examples:
