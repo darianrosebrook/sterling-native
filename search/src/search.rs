@@ -196,6 +196,7 @@ fn build_tape_header(
 
     let mut obj = serde_json::json!({
         "dedup_key": dedup_key,
+        "fixture_digest": bindings.fixture_digest,
         "policy_snapshot_digest": bindings.policy_snapshot_digest,
         "prune_visited_policy": prune_visited,
         "registry_digest": bindings.registry_digest,
@@ -898,6 +899,8 @@ pub struct MetadataBindings {
     pub registry_digest: String,
     pub policy_snapshot_digest: String,
     pub search_policy_digest: String,
+    /// `fixture.json` artifact content-hash digest (raw hex, always present).
+    pub fixture_digest: String,
     /// Scorer artifact digest (Table mode only; `None` for Uniform).
     pub scorer_digest: Option<String>,
     /// Operator registry content-hash digest (`None` until M2b wires it).
@@ -976,6 +979,7 @@ fn build_graph(
             policy_snapshot_digest: bindings.policy_snapshot_digest.clone(),
             search_policy_digest: bindings.search_policy_digest.clone(),
             root_state_fingerprint: root_fp_hex.to_string(),
+            fixture_digest: bindings.fixture_digest.clone(),
             scorer_digest: bindings.scorer_digest.clone(),
             operator_set_digest: bindings.operator_set_digest.clone(),
             total_expansions,

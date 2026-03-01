@@ -41,6 +41,11 @@ pub fn render_graph(tape: &SearchTapeV1) -> Result<SearchGraphV1, TapeRenderErro
     let policy_snapshot_digest = header_str(header, "policy_snapshot_digest")?;
     let search_policy_digest = header_str(header, "search_policy_digest")?;
     let root_state_fingerprint = header_str(header, "root_state_fingerprint")?;
+    let fixture_digest = header
+        .get("fixture_digest")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_default();
     let operator_set_digest = header
         .get("operator_set_digest")
         .and_then(|v| v.as_str())
@@ -177,6 +182,7 @@ pub fn render_graph(tape: &SearchTapeV1) -> Result<SearchGraphV1, TapeRenderErro
             policy_snapshot_digest,
             search_policy_digest,
             root_state_fingerprint,
+            fixture_digest,
             scorer_digest,
             operator_set_digest,
             total_expansions,

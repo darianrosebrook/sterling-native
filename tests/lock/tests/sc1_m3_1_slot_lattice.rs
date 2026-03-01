@@ -32,6 +32,7 @@ fn bindings_for(regime: &Regime) -> MetadataBindings {
         registry_digest: "test_registry_digest".into(),
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
+        fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
     }

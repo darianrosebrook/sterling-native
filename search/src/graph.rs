@@ -136,6 +136,8 @@ pub struct SearchGraphMetadata {
     pub policy_snapshot_digest: String,
     pub search_policy_digest: String,
     pub root_state_fingerprint: String,
+    /// `fixture.json` artifact content-hash digest (raw hex, always present).
+    pub fixture_digest: String,
     /// Scorer artifact digest (Table mode only; `None` for Uniform).
     pub scorer_digest: Option<String>,
     /// Operator registry content-hash digest (`None` until wired).
@@ -347,6 +349,7 @@ fn node_summary_to_json(n: &SearchGraphNodeSummaryV1) -> serde_json::Value {
 fn metadata_to_json(m: &SearchGraphMetadata) -> serde_json::Value {
     let mut obj = serde_json::json!({
         "dedup_key": dedup_key_str(m.dedup_key),
+        "fixture_digest": m.fixture_digest,
         "frontier_high_water": m.frontier_high_water,
         "policy_snapshot_digest": m.policy_snapshot_digest,
         "prune_visited_policy": prune_policy_str(m.prune_visited_policy),
@@ -641,6 +644,7 @@ mod tests {
                 policy_snapshot_digest: "def456".into(),
                 search_policy_digest: "ghi789".into(),
                 root_state_fingerprint: "root_fp".into(),
+                fixture_digest: "fixture_abc".into(),
                 scorer_digest: None,
                 operator_set_digest: None,
                 total_expansions: 0,

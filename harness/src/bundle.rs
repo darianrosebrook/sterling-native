@@ -277,6 +277,12 @@ pub enum BundleVerifyError {
     /// `search_graph.json` metadata has `operator_set_digest` but
     /// `operator_registry.json` is absent.
     MetadataBindingOperatorRegistryMissing,
+    /// `fixture_digest` in `search_graph.json` metadata does not match
+    /// `fixture.json`'s `content_hash`.
+    MetadataBindingFixtureMismatch { in_graph: String, in_fixture: String },
+    /// `search_graph.json` metadata has `fixture_digest` but
+    /// `fixture.json` is absent, or `fixture_digest` is missing from metadata.
+    MetadataBindingFixtureMissing,
     /// Canonical JSON error during verification.
     CanonError { detail: String },
     /// Cert profile requires `search_tape.stap` but it is absent.
@@ -704,6 +710,26 @@ fn verify_metadata_bindings(bundle: &ArtifactBundleV1) -> Result<(), BundleVerif
         }
     }
 
+    // Cross-verify fixture_digest (required-if-present: no schema bump).
+    let graph_fixture_digest = graph
+        .get("metadata")
+        .and_then(|m| m.get("fixture_digest"))
+        .and_then(|v| v.as_str());
+
+    if let Some(digest) = graph_fixture_digest {
+        let fixture_artifact = bundle
+            .artifacts
+            .get("fixture.json")
+            .ok_or(BundleVerifyError::MetadataBindingFixtureMissing)?;
+        let fixture_hex = binding_hex(&fixture_artifact.content_hash);
+        if digest != fixture_hex {
+            return Err(BundleVerifyError::MetadataBindingFixtureMismatch {
+                in_graph: digest.to_string(),
+                in_fixture: fixture_hex.to_string(),
+            });
+        }
+    }
+
     Ok(())
 }
 
@@ -1060,6 +1086,29 @@ fn verify_tape(
 
     // root_state_fingerprint (both raw hex, from graph metadata)
     check_tape_header_field(header, metadata, "root_state_fingerprint")?;
+
+    // fixture_digest (required-if-present: both sides must agree when field exists)
+    let tape_fixture = header.get("fixture_digest").and_then(|v| v.as_str());
+    let graph_fixture = metadata.get("fixture_digest").and_then(|v| v.as_str());
+    match (tape_fixture, graph_fixture) {
+        (Some(t), Some(g)) => {
+            if t != g {
+                return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                    field: "fixture_digest",
+                    in_tape: t.to_string(),
+                    in_artifact: g.to_string(),
+                });
+            }
+        }
+        (Some(_), None) | (None, Some(_)) => {
+            return Err(BundleVerifyError::TapeHeaderBindingMismatch {
+                field: "fixture_digest",
+                in_tape: tape_fixture.unwrap_or("<absent>").to_string(),
+                in_artifact: graph_fixture.unwrap_or("<absent>").to_string(),
+            });
+        }
+        (None, None) => {} // Old bundle without fixture_digest — pass.
+    }
 
     // policy_snapshot_digest: authoritative source is policy_snapshot.json content_hash.
     // Fail-closed: require policy artifact and tape header field.

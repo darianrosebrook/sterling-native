@@ -1,0 +1,124 @@
+id: BIND-001
+type: feature
+title: 'Fixture Digest Binding in Search Evidence Corridor'
+status: in_progress
+risk_tier: 3
+mode: development
+created_at: '2026-02-28T12:00:00.000Z'
+updated_at: '2026-02-28T12:00:00.000Z'
+blast_radius:
+  modules:
+    - search/search
+    - search/graph
+    - search/tape_render
+    - harness/runner
+    - harness/bundle
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 5m
+
+purpose: >
+  Thread fixture_digest (content hash of fixture.json) through the search
+  evidence binding corridor: graph metadata, tape header, verification report,
+  and verify_bundle cross-checks. Closes the semantic gap where program,
+  dimensions, and initial payload are not cryptographically bound into search
+  artifacts. After this, world_id can safely become a family label without
+  weakening verification.
+
+non_goals:
+  - "No schema version bump — fixture_digest is additive; verification uses required-if-present semantics."
+  - "No changes to the linear trace path (ByteTrace already has fixture_hash)."
+  - "No changes to kernel crate."
+  - "No golden fixture regeneration — new field is additive."
+
+design:
+  binding_definition: >
+    fixture_digest = binding_hex(canonical_hash(DOMAIN_BUNDLE_ARTIFACT, fixture_json_bytes)).
+    Raw hex format (no sha256: prefix), matching the binding corridor convention.
+  backward_compat: >
+    Emitted always in new bundles. Verification uses required-if-present: if fixture_digest
+    is present in graph metadata, it MUST match fixture.json artifact content_hash. If absent
+    (old bundle), verification passes. This avoids a breaking schema bump while providing
+    full binding for all new bundles.
+  tape_render: >
+    tape_render.rs extracts fixture_digest from header as optional field (like
+    operator_set_digest/scorer_digest). Old tapes without the field render correctly.
+    Cert equivalence is maintained because build_tape_header and render_graph both
+    propagate the same field.
+  report_binding: >
+    fixture_digest added to verification_report.json (full sha256:hex format, like
+    scorer_digest and operator_set_digest), for third-party consumers who want to
+    authenticate fixture identity from the report alone.
+
+scope:
+  in:
+    - search/src/search.rs
+    - search/src/graph.rs
+    - search/src/tape_render.rs
+    - harness/src/runner.rs
+    - harness/src/bundle.rs
+    - tests/lock/
+    - .caws/specs/
+  out:
+    - kernel/
+    - ml/
+    - reference/
+    - benchmarks/
+
+change_budget:
+  max_files: 10
+  max_loc: 250
+
+invariants:
+  - "INV-BIND-01: fixture_digest is binding_hex(fixture.json artifact content_hash), not DOMAIN_HARNESS_FIXTURE or any other domain."
+  - "INV-BIND-02: fixture_digest is mandatory in new bundles, required-if-present in verification (no schema bump)."
+  - "INV-BIND-03: fixture_digest is policy-independent — same world under different policies produces identical fixture_digest."
+  - "INV-BIND-04: tape_render.rs propagates fixture_digest from header to rendered graph metadata (Cert equivalence)."
+
+acceptance:
+  - id: BIND-001-GRAPH
+    description: "fixture_digest present in search_graph.json metadata as non-empty 64-char hex"
+    status: pending
+  - id: BIND-001-MATCH
+    description: "Graph metadata fixture_digest matches fixture.json artifact content_hash"
+    status: pending
+  - id: BIND-001-TAPE
+    description: "fixture_digest present in tape header, matches graph metadata"
+    status: pending
+  - id: BIND-001-TAMPER
+    description: "Tampered fixture.json detected by verify_bundle"
+    status: pending
+  - id: BIND-001-DETERMINISTIC
+    description: "fixture_digest is deterministic across runs"
+    status: pending
+  - id: BIND-001-POLICY-INDEPENDENT
+    description: "fixture_digest unchanged across different policy configs"
+    status: pending
+
+milestones:
+  - id: M1
+    title: "Production code — thread fixture_digest through corridor"
+    status: pending
+    deliverables:
+      - "search/src/search.rs (MetadataBindings field, tape header)"
+      - "search/src/graph.rs (SearchGraphMetadata field, metadata_to_json)"
+      - "search/src/tape_render.rs (optional extraction in render_graph)"
+      - "harness/src/runner.rs (compute before bindings, add to report)"
+      - "harness/src/bundle.rs (verify_metadata_bindings, verify_tape Step 16d, error variants)"
+  - id: M2
+    title: "Lock tests"
+    status: pending
+    deliverables:
+      - "tests/lock/tests/fixture_digest_binding.rs (6 lock tests)"
+
+evidence:
+  commits: []
+  total_tests: 527
+  lock_tests: []
+
+non_functional:
+  a11y: []
+  perf:
+    note: "One additional canonical_hash call per run_search() (already computed for bundle, now precomputed earlier)"
+  security: []
+contracts: []

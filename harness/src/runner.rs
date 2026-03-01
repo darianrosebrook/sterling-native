@@ -264,6 +264,11 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
 
     let codebook_hash = build_codebook_hash(world).map_err(SearchRunError::RunError)?;
 
+    // Compute fixture JSON + content hash before bindings (policy-independent).
+    let fixture_json =
+        build_fixture_json(world, &payload_bytes).map_err(SearchRunError::RunError)?;
+    let fixture_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &fixture_json);
+
     // Extract scorer digest for metadata bindings (Table mode only).
     let scorer_digest_hex = match scorer_input {
         ScorerInputV1::Uniform => None,
@@ -277,6 +282,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         registry_digest: registry_digest.hex_digest().to_string(),
         policy_snapshot_digest: policy_content_hash.hex_digest().to_string(),
         search_policy_digest: search_policy_digest.hex_digest().to_string(),
+        fixture_digest: fixture_content_hash.hex_digest().to_string(),
         scorer_digest: scorer_digest_hex.clone(),
         operator_set_digest: Some(
             operator_registry_content_hash.hex_digest().to_string(),
@@ -308,9 +314,6 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
                 detail: format!("{e:?}"),
             })?;
 
-    let fixture_json =
-        build_fixture_json(world, &payload_bytes).map_err(SearchRunError::RunError)?;
-
     // Build verification report for search.
     let search_graph_content_hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &search_graph_bytes);
 
@@ -331,13 +334,19 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         &codebook_hash,
         scorer_digest_for_report.as_deref(),
         Some(operator_registry_content_hash.as_str()),
+        &fixture_content_hash,
         &health_metrics,
         &tape_content_hash,
     )
     .map_err(SearchRunError::RunError)?;
 
     let mut artifacts: Vec<ArtifactInput> = vec![
-        ("fixture.json".into(), fixture_json, true).into(),
+        ArtifactInput {
+            name: "fixture.json".into(),
+            content: fixture_json,
+            normative: true,
+            precomputed_hash: Some(fixture_content_hash),
+        },
         (
             "compilation_manifest.json".to_string(),
             compilation.compilation_manifest,
@@ -404,6 +413,7 @@ fn build_search_verification_report(
     codebook_hash: &ContentHash,
     scorer_digest: Option<&str>,
     operator_set_digest: Option<&str>,
+    fixture_content_hash: &ContentHash,
     health_metrics: &sterling_search::graph::SearchHealthMetricsV1,
     tape_content_hash: &ContentHash,
 ) -> Result<Vec<u8>, RunError> {
@@ -414,6 +424,8 @@ fn build_search_verification_report(
         "diagnostics": {
             "health_metrics": health_metrics.to_json_value(),
         },
+        // BINDING: verified against fixture.json content_hash.
+        "fixture_digest": fixture_content_hash.as_str(),
         "mode": "search",
         // BINDING: verified against policy_snapshot.json content_hash.
         "policy_digest": policy_content_hash.as_str(),

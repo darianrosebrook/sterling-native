@@ -32,6 +32,7 @@ fn bindings_for(regime: &Regime) -> MetadataBindings {
         registry_digest: "test_registry_digest".into(),
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
+        fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
     }
@@ -165,6 +166,7 @@ fn make_outcome_exhaustive_fixture() -> SearchGraphV1 {
             policy_snapshot_digest: "def456".into(),
             search_policy_digest: "ghi789".into(),
             root_state_fingerprint: "root_fp".into(),
+            fixture_digest: String::new(),
             scorer_digest: None,
         operator_set_digest: None,
             total_expansions: 1,

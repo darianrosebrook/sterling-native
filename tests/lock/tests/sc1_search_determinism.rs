@@ -22,6 +22,7 @@ fn default_bindings() -> MetadataBindings {
         registry_digest: "test_registry_digest".into(),
         policy_snapshot_digest: "test_policy_digest".into(),
         search_policy_digest: "test_search_policy_digest".into(),
+        fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
     }
@@ -209,6 +210,7 @@ fn loop_detection_terminates_without_infinite_expansion() {
         registry_digest: "test".into(),
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
+        fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
     };
@@ -274,6 +276,7 @@ fn exhaustive_dead_end_tagged_correctly() {
         registry_digest: "test".into(),
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
+        fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
     };
@@ -319,6 +322,7 @@ fn expansion_budget_overflow() {
         registry_digest: "test".into(),
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
+        fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
     };
@@ -381,6 +385,7 @@ fn illegal_candidate_triggers_world_contract_violation() {
         registry_digest: "test".into(),
         policy_snapshot_digest: "test".into(),
         search_policy_digest: "test".into(),
+        fixture_digest: String::new(),
         scorer_digest: None,
         operator_set_digest: None,
     };
