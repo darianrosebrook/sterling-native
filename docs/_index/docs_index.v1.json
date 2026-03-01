@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "7e08a574c14b58c8",
+  "aggregate_hash": "7dc5c247c4ce55ad",
   "entry_count": 111,
   "entries": [
     {
@@ -27,7 +27,7 @@
       "authority": "adr",
       "status": "Accepted",
       "scope": null,
-      "content_hash": "50d405610a6118a5",
+      "content_hash": "217909dd500fda5e",
       "links": []
     },
     {
@@ -237,7 +237,7 @@
       "authority": "canonical",
       "status": "Implemented (V1 substrate complete)",
       "scope": null,
-      "content_hash": "377377c7c1980aef",
+      "content_hash": "bcf77d585c657b19",
       "links": [
         {
           "text": "light_vs_full.md",
@@ -246,6 +246,10 @@
         {
           "text": "Neural Usage Contract",
           "target": "docs/canonical/neural_usage_contract.md"
+        },
+        {
+          "text": "`docs/policy/benchmarking_policy.md`",
+          "target": "docs/canonical/../policy/benchmarking_policy.md"
         },
         {
           "text": "light_vs_full.md",
@@ -301,7 +305,7 @@
       "authority": "canonical",
       "status": "v2 canonical — curated vocabulary for Sterling Native.",
       "scope": "Definitions enforced by contracts, invariants, and ADRs. For the comprehensive v1 glossary (historical), see docs/reference/v1/glossary_full.md.",
-      "content_hash": "52c7abd3268c7b64",
+      "content_hash": "f2bf79369bf66a40",
       "links": [
         {
           "text": "`code32_bytestate.md`",
@@ -491,8 +495,13 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "82c3baba2523fafd",
-      "links": []
+      "content_hash": "e160ac1a2e3d2e65",
+      "links": [
+        {
+          "text": "`docs/policy/benchmarking_policy.md`",
+          "target": "docs/reference/v1/../../policy/benchmarking_policy.md"
+        }
+      ]
     },
     {
       "path": "docs/reference/v1/README.md",
@@ -1613,8 +1622,12 @@
       "authority": null,
       "status": null,
       "scope": null,
-      "content_hash": "ae8157cd72543bf8",
+      "content_hash": "4f070f5a4f977d0e",
       "links": [
+        {
+          "text": "`docs/policy/benchmarking_policy.md`",
+          "target": "docs/reference/v1/../../policy/benchmarking_policy.md"
+        },
         {
           "text": "Sterling Architecture Layers",
           "target": "docs/reference/v1/../../reference/canonical/sterling_architecture_layers.md"

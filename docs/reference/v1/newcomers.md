@@ -39,6 +39,8 @@
 
 ### Evidence (as of v1.3.1)
 
+> **Eligibility note**: All numbers in this section are v1 measurements. They are not backed by v2 benchmarking policy artifact bundles and are not eligible for published claims until reproduced under v2 CERTIFIED mode. See [`docs/policy/benchmarking_policy.md`](../../policy/benchmarking_policy.md).
+
 #### Benchmark Results (v9.5 Audit)
 
 | Benchmark            | Status  | Key Metrics                                       |

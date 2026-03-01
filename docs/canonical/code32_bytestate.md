@@ -537,6 +537,8 @@ to 0.11ms (numpy) or 0.24ms (Rust).
 Full benchmark, rationale, and next steps are in `test-scenarios/bytestate-benchmark/`
 (v1 test artifact — to be recreated in v2 benchmarks).
 
+> **Eligibility note**: These numbers are v1 measurements produced before the v2 benchmarking policy ([`docs/policy/benchmarking_policy.md`](../policy/benchmarking_policy.md)) existed. They are not backed by policy-governed artifact bundles and are not eligible for published claims until reproduced under CERTIFIED mode with sealed inputs, canonical traces, and verification bundles.
+
 ### Step 3: One Relational Operator Slice — NOT YET STARTED
 
 Pick a representative WordNet operator (neighbor expansion + rank, or hypernym chain check). Measure whether the bottleneck is table lookup. If yes, ByteState still helps by making candidate state packing and post-lookup scoring cheap, but it won't make graph traversal "byte arithmetic." Document the boundary honestly.

@@ -28,3 +28,12 @@ Sterling Native has two evidence layers, each following this pattern:
 - All certified runs must emit binary traces (ByteTrace for carrier, SearchTape for search).
 - Any visualization or analysis layer (e.g., SearchGraphV1) must be derived, not authoritative.
 - Cert verification requires tape→graph equivalence, proving the derived view is faithful.
+
+## Branching and Layer Separation (resolved)
+
+ByteTrace remains linear (one frame sequence per execution). Search-level branching (frontier expansion, candidate enumeration, dead-end tracking) is represented at the search evidence layer via SearchTapeV1/SearchGraphV1, not encoded into ByteTrace itself. This separation is deliberate:
+
+- **Carrier layer** (ByteTrace): records compile→apply sequences. Linear per execution. Fixed-width frames enable O(1) divergence localization.
+- **Search layer** (SearchTape): records expansion events, candidate actions, and frontier decisions. Represents the branching DAG structure of search.
+
+Collapsing these layers (encoding branching directly in ByteTrace) would complicate the verifier, break the fixed-width frame guarantee, and force a format evolution problem. The current separation keeps each layer's verification simple and independently testable. The crate structure reflects this: `kernel/` owns ByteTrace, `search/` owns SearchTape.

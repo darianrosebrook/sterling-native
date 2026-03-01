@@ -172,6 +172,8 @@ Still lacking direct benchmark evidence:
 
 ## Addendum: Unified Benchmark Snapshot (2026-02-18)
 
+> **Eligibility note**: All numbers below are v1 development measurements using temporary `tmp/` artifacts. They are not backed by v2 benchmarking policy artifact bundles (sealed inputs, canonical traces, verification bundles) and are not eligible for published claims. LLM comparison asymmetries are not explicitly documented (Sterling produces verified traces; LLM outputs are unverified final answers). See [`docs/policy/benchmarking_policy.md`](../../policy/benchmarking_policy.md).
+
 Commands executed:
 
 ```bash

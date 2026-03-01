@@ -105,6 +105,8 @@ scope: "Definitions enforced by contracts, invariants, and ADRs. For the compreh
 
 `verify_bundle()` defaults to Base. `verify_bundle_with_profile(bundle, Cert)` enables the stricter profile.
 
+> **Two independent axes:** DEV/CERTIFIED (above) controls *run eligibility* — whether a run may produce promotion-grade artifacts. Base/Cert controls *verification strictness* — what post-hoc checks are applied to a bundle. These are orthogonal: a CERTIFIED run's bundle can be verified at Base or Cert profile; a DEV run cannot produce promotion-eligible bundles regardless of verification profile.
+
 **PolicySnapshotV1:** A canonical JSON artifact capturing the policy configuration used for a run. Included as a normative bundle artifact and bound into the verification report via `policy_digest`.
 
 **Verification report:** A normative JSON artifact (`verification_report.json`) containing binding digests that cross-reference other artifacts in the bundle: `search_graph_digest`, `policy_digest`, `tape_digest`, `codebook_hash`, and optional `scorer_digest`. The report is the "glue" that binds independently-hashed artifacts into a coherent evidence package.
