@@ -54,13 +54,13 @@ fn search_bundle_verifies() {
 #[test]
 fn search_bundle_artifact_count() {
     let bundle = search_bundle();
-    // 7 artifacts: fixture.json, compilation_manifest.json, policy_snapshot.json,
-    //              operator_registry.json, search_graph.json, search_tape.stap,
-    //              verification_report.json
+    // 8 artifacts: fixture.json, compilation_manifest.json, concept_registry.json,
+    //              policy_snapshot.json, operator_registry.json, search_graph.json,
+    //              search_tape.stap, verification_report.json
     assert_eq!(
         bundle.artifacts.len(),
-        7,
-        "uniform scorer bundle must have 7 artifacts"
+        8,
+        "uniform scorer bundle must have 8 artifacts"
     );
 }
 

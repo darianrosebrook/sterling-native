@@ -623,7 +623,7 @@ fn run_search_generic_single_world_compiles_and_runs() {
     let policy = SearchPolicyV1::default();
     // This test verifies the generic signature compiles with a single world arg.
     let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
-    assert_eq!(bundle.artifacts.len(), 7);
+    assert_eq!(bundle.artifacts.len(), 8);
     verify_bundle(&bundle).unwrap();
 }
 

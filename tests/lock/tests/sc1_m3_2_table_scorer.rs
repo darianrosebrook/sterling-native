@@ -190,8 +190,8 @@ fn scorer_artifact_in_bundle() {
     assert!(scorer_artifact.normative, "scorer.json must be normative");
     assert_eq!(
         bundle.artifacts.len(),
-        8,
-        "table scorer bundle has 8 artifacts"
+        9,
+        "table scorer bundle has 9 artifacts"
     );
 
     // Verify bytes are preserved (content matches what the input provided).
@@ -360,7 +360,7 @@ fn uniform_scorer_no_scorer_artifact() {
         !bundle.artifacts.contains_key("scorer.json"),
         "uniform scorer bundle must not contain scorer.json"
     );
-    assert_eq!(bundle.artifacts.len(), 7, "uniform bundle has 7 artifacts");
+    assert_eq!(bundle.artifacts.len(), 8, "uniform bundle has 8 artifacts");
     verify_bundle(&bundle).unwrap();
 }
 
@@ -380,8 +380,8 @@ fn bundle_persistence_roundtrip_with_scorer() {
     verify_bundle_dir(dir.path()).unwrap();
     verify_bundle(&loaded).unwrap();
 
-    // All 8 artifacts must round-trip identically.
-    assert_eq!(loaded.artifacts.len(), 8);
+    // All 9 artifacts must round-trip identically.
+    assert_eq!(loaded.artifacts.len(), 9);
     for (name, orig) in &bundle.artifacts {
         let loaded_art = loaded
             .artifacts

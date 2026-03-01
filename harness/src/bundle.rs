@@ -316,6 +316,11 @@ pub enum BundleVerifyError {
     /// A required field is missing from `search_graph.json` metadata during
     /// compilation manifest coherence checking.
     CompilationManifestGraphMissingField { field: &'static str },
+    /// `concept_registry.json` is missing when required (Cert profile).
+    ConceptRegistryMissing,
+    /// `concept_registry.json` semantic digest does not match
+    /// `compilation_manifest.json.registry_hash`.
+    ConceptRegistryDigestMismatch { in_artifact: String, in_manifest: String },
     /// Canonical JSON error during verification.
     CanonError { detail: String },
     /// Cert profile requires `search_tape.stap` but it is absent.
@@ -474,6 +479,9 @@ pub fn verify_bundle_with_profile(
 
     // Step 12b: Compilation manifest coherence (schema + payload + registry + root digests).
     verify_compilation_manifest_coherence(bundle, profile)?;
+
+    // Step 12c: Concept registry artifact digest binding.
+    verify_concept_registry_artifact(bundle, profile)?;
 
     // Step 13: Scorer digest binding (report ↔ scorer.json).
     verify_scorer_digest_binding(bundle)?;
@@ -1014,6 +1022,91 @@ fn verify_compilation_manifest_coherence(
         }
         // Base: absent fields are ok (older bundles without root digests).
         _ => {}
+    }
+
+    Ok(())
+}
+
+/// Verify `concept_registry.json` semantic digest against corridor claims.
+///
+/// When `concept_registry.json` is present, recomputes the semantic digest
+/// using `HashDomain::RegistrySnapshot` and checks it matches:
+/// - `compilation_manifest.json.registry_hash` (full `sha256:` string)
+/// - `search_graph.json.metadata.registry_digest` (raw hex)
+///
+/// Profile posture:
+/// - Base: required-if-present (skip if artifact absent)
+/// - Cert: mandatory (fail-closed if absent in search bundles)
+fn verify_concept_registry_artifact(
+    bundle: &ArtifactBundleV1,
+    profile: VerificationProfile,
+) -> Result<(), BundleVerifyError> {
+    // Only applies to search bundles.
+    if !bundle.artifacts.contains_key("search_graph.json") {
+        return Ok(());
+    }
+
+    let registry_artifact = bundle.artifacts.get("concept_registry.json");
+
+    match (registry_artifact, profile) {
+        (None, VerificationProfile::Cert) => {
+            return Err(BundleVerifyError::ConceptRegistryMissing);
+        }
+        (None, VerificationProfile::Base) => return Ok(()),
+        _ => {}
+    }
+
+    let reg_art = registry_artifact.expect("presence checked above");
+
+    // Recompute semantic digest from artifact bytes.
+    let semantic_digest = canonical_hash(HashDomain::RegistrySnapshot, &reg_art.content);
+
+    // Check against compilation manifest registry_hash (full sha256:hex string).
+    let manifest_artifact = bundle
+        .artifacts
+        .get("compilation_manifest.json")
+        .ok_or(BundleVerifyError::CompilationManifestMissing)?;
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&manifest_artifact.content).map_err(|e| {
+            BundleVerifyError::CompilationManifestNotJson {
+                detail: format!("{e}"),
+            }
+        })?;
+    let manifest_registry_hash = manifest
+        .get("registry_hash")
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestMissingField {
+            field: "registry_hash",
+        })?;
+
+    if semantic_digest.as_str() != manifest_registry_hash {
+        return Err(BundleVerifyError::ConceptRegistryDigestMismatch {
+            in_artifact: semantic_digest.as_str().to_string(),
+            in_manifest: manifest_registry_hash.to_string(),
+        });
+    }
+
+    // Check against graph metadata registry_digest (raw hex).
+    let graph_artifact = bundle.artifacts.get("search_graph.json").unwrap();
+    let graph: serde_json::Value =
+        serde_json::from_slice(&graph_artifact.content).map_err(|e| {
+            BundleVerifyError::CanonError {
+                detail: format!("{e:?}"),
+            }
+        })?;
+    let graph_registry_hex = graph
+        .get("metadata")
+        .and_then(|m| m.get("registry_digest"))
+        .and_then(|v| v.as_str())
+        .ok_or(BundleVerifyError::CompilationManifestGraphMissingField {
+            field: "registry_digest",
+        })?;
+
+    if semantic_digest.hex_digest() != graph_registry_hex {
+        return Err(BundleVerifyError::ConceptRegistryDigestMismatch {
+            in_artifact: semantic_digest.hex_digest().to_string(),
+            in_manifest: graph_registry_hex.to_string(),
+        });
     }
 
     Ok(())

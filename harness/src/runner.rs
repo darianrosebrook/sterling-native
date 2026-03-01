@@ -224,6 +224,14 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
     let concept_registry = world
         .registry()
         .map_err(|e| SearchRunError::RunError(RunError::WorldError(e)))?;
+    let concept_registry_bytes =
+        concept_registry
+            .canonical_bytes()
+            .map_err(|e| SearchRunError::CanonFailed {
+                detail: format!("concept_registry canonical: {e:?}"),
+            })?;
+    let concept_registry_content_hash =
+        canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &concept_registry_bytes);
     let operator_registry = kernel_operator_registry();
     let operator_registry_bytes =
         operator_registry
@@ -384,6 +392,16 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         content: operator_registry_bytes,
         normative: true,
         precomputed_hash: Some(operator_registry_content_hash),
+    });
+
+    // Include concept registry artifact (normative, always present).
+    // Bytes are exactly RegistryV1::canonical_bytes() — the same bytes
+    // that RegistryV1::digest() hashes with DOMAIN_REGISTRY_SNAPSHOT.
+    artifacts.push(ArtifactInput {
+        name: "concept_registry.json".into(),
+        content: concept_registry_bytes,
+        normative: true,
+        precomputed_hash: Some(concept_registry_content_hash),
     });
 
     // Include scorer artifact for Table mode (normative).
@@ -895,12 +913,13 @@ mod tests {
         let bundle = run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).unwrap();
         assert!(bundle.artifacts.contains_key("fixture.json"));
         assert!(bundle.artifacts.contains_key("compilation_manifest.json"));
+        assert!(bundle.artifacts.contains_key("concept_registry.json"));
         assert!(bundle.artifacts.contains_key("policy_snapshot.json"));
         assert!(bundle.artifacts.contains_key("search_graph.json"));
         assert!(bundle.artifacts.contains_key("search_tape.stap"));
         assert!(bundle.artifacts.contains_key("operator_registry.json"));
         assert!(bundle.artifacts.contains_key("verification_report.json"));
-        assert_eq!(bundle.artifacts.len(), 7);
+        assert_eq!(bundle.artifacts.len(), 8);
     }
 
     #[test]

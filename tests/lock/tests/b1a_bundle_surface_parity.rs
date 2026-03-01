@@ -23,6 +23,7 @@ const GOLDEN_DIR: &str = concat!(
 /// The expected artifact names in a Uniform-scorer `RomeMiniSearch` bundle.
 const EXPECTED_ARTIFACTS: &[&str] = &[
     "compilation_manifest.json",
+    "concept_registry.json",
     "fixture.json",
     "operator_registry.json",
     "policy_snapshot.json",
