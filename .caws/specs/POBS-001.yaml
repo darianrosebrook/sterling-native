@@ -1,0 +1,649 @@
+id: POBS-001
+type: feature
+title: 'Partial Observability World + Winning-Path Witness'
+status: draft
+risk_tier: 2
+mode: development
+created_at: '2026-03-01T00:00:00.000Z'
+updated_at: '2026-03-01T00:00:00.000Z'
+blast_radius:
+  modules:
+    - kernel/operators
+    - harness/worlds
+    - harness/bundle
+    - harness/runner
+    - harness/witness
+    - search/search
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 15m
+
+purpose: >
+  Introduce an epistemic truth regime — hidden truth + observable-only via probes
+  + mechanically-checkable belief monotonicity — and the generic winning-path replay
+  witness that proves correspondence for downstream derived artifacts.
+
+  Phase 1b forces two things simultaneously:
+  (1) A world where the agent's accessible state never contains the truth directly,
+  each probe monotonically shrinks a belief set, and declaring a solution requires
+  justification from the belief state. This is the simplest world where coherence
+  does not imply correspondence.
+  (2) A reusable Cert-only winning-path replay primitive that generalizes beyond
+  this world. The replay walks the goal path, re-applies operators from compiled
+  root state, verifies fingerprints at each step, and checks world-specific
+  invariants (belief monotonicity) on intermediate states.
+
+  TOOLSCRIPT-001 established the downstream binding convention: derived artifacts
+  bind via digest basis (normative artifact) + report convenience field + Cert
+  equivalence render. Phase 1b reuses that convention for the epistemic transcript
+  and adds replay as a second correspondence proof (stronger than render-only
+  equivalence because it re-executes operators and checks intermediate states).
+
+depends_on:
+  - "TOOLSCRIPT-001: evidence_obligations surface, downstream binding convention, derived artifact pattern."
+  - "CREPLAY-001: compilation replay gives verified root state for winning-path replay input."
+  - "BIND-001: corridor binding conventions (upstream 3-point vs downstream report-only)."
+
+non_goals:
+  - "No stochastic evidence (seed/witness binding) — that's Phase 1c."
+  - "No induction or memory systems."
+  - "No changes to compile() semantics or CompilationResultV1."
+  - "No large belief spaces — a 9-64 candidate space is sufficient to prove the regime."
+  - "No multi-tool or tool-safety interactions — this world does not use STAGE/COMMIT/ROLLBACK."
+  - "No changes to existing worlds — backward compatibility required."
+  - "No partial observability over stochastic outcomes — deterministic feedback only."
+  - "No changes to SearchGraphV1 schema version — additive fields only (ADR 0008)."
+
+design:
+  # ---------------------------------------------------------------------------
+  # World design: Mastermind-style hidden-truth + probe + declare
+  # ---------------------------------------------------------------------------
+  world_model: >
+    A Mastermind-style toy world with a small hidden code and deterministic
+    feedback. The harness knows the truth; the search agent can only access it
+    through probes that return structured feedback (e.g., "N correct positions").
+
+    ByteState layout (2 layers):
+    - Layer 0 (truth): hidden code. Written by the harness at compile time via
+      the payload. The search agent has NO operator that reads or writes layer 0
+      directly. All operators target layer 1 only. The truth is accessible to
+      the harness (for computing probe feedback) but not to the search agent's
+      operator surface.
+    - Layer 1 (workspace): observations, belief cardinality, solved marker.
+      Slots are partitioned into:
+      (a) probe_result slots — feedback from each probe (written by OP_PROBE)
+      (b) belief_size slot — current belief set cardinality (written by OP_PROBE)
+      (c) solved_marker slot — set by OP_DECLARE when solution declared
+
+    The truth layer is never modified after compilation. Its slots start as
+    Provisional (not Hole) so no operator can write to them (write-once enforced
+    by the kernel — Provisional→Provisional is an EffectContractViolation).
+
+  truth_encoding: >
+    The hidden code is a sequence of K positions, each drawn from V possible
+    values. Encoded as K slots on layer 0, each containing a concept Code32
+    from domain 3 (e.g., code:c0..code:c(V-1)). The candidate space is V^K.
+
+    Minimal configuration: K=2 positions, V=3 values → 9 candidates. This is
+    enough to exercise nontrivial monotonic elimination (probes reduce from 9
+    toward 1) without bloating ByteState.
+
+    Scaling configuration: K=3, V=4 → 64 candidates. Available for stress
+    tests but not required for correctness.
+
+  belief_representation: >
+    The belief set is NOT stored as an explicit enumeration in ByteState. That
+    would require O(V^K) slots, which violates the "small ByteState" principle.
+
+    Instead, belief is represented implicitly: the combination of probe results
+    accumulated in workspace slots determines which candidates are consistent.
+    The belief_size slot tracks the current cardinality as a convenience for
+    the goal check and for monotonicity verification.
+
+    The harness computes the actual belief set at each step (deterministic
+    function of probe history + truth), but only the cardinality is written
+    to state. The full belief set at each step is reconstructable from the
+    probe history, which is what the winning-path replay does.
+
+    belief_size is written by OP_PROBE as a side-effect. The value is a
+    Code32 encoding of the count (domain 3, kind 1, local_id = count).
+    Monotonicity invariant: belief_size can only decrease or stay equal
+    step-to-step.
+
+  probe_feedback: >
+    OP_PROBE takes a guess (K values encoded in args) and deterministically
+    computes feedback from the truth layer. Feedback is structured:
+    - exact_matches: number of positions where guess == truth
+    - For simplicity (Mastermind Bulls-only variant): just the exact match count.
+
+    The feedback is written to the next available probe_result slot as a Code32
+    encoding: domain 3, kind 2, local_id = exact_match_count.
+
+    The harness also recomputes the belief set (all codes consistent with all
+    probe results so far) and writes the new cardinality to belief_size.
+
+    Key property: the harness needs the truth to compute feedback, but the
+    feedback itself does not reveal the truth (it reveals partial information).
+    Multiple probes monotonically narrow the consistent set.
+
+  # ---------------------------------------------------------------------------
+  # Operators
+  # ---------------------------------------------------------------------------
+  new_operators:
+    OP_PROBE:
+      code: "Code32::new(1, 2, 1) — domain 1 (operators), kind 2 (epistemic), local_id 1"
+      args: >
+        Variable-length: K guess values as Code32 (4 bytes each) = 4*K bytes.
+        For K=2: 8 bytes (2 arg slots). For K=3: 12 bytes (3 arg slots).
+      effect: >
+        Writes to 2 slots on layer 1:
+        (a) probe_result slot (next available) — feedback Code32
+        (b) belief_size slot — updated cardinality Code32
+        Both must be Hole → Provisional (write-once).
+
+        The harness computes feedback deterministically from args (the guess)
+        and layer 0 (the truth). The kernel validates the write surface (exactly
+        2 identity diffs, 2 status diffs on layer 1 only). Semantic correctness
+        (is the feedback actually correct for this guess?) is verified by
+        winning-path replay, not by kernel effect validation.
+      effect_kind: "ProbesAndNarrows"
+      semantics: >
+        Submits a guess, receives deterministic feedback, updates belief.
+        The operator is epistemic: it reduces uncertainty without revealing truth.
+
+    OP_DECLARE:
+      code: "Code32::new(1, 2, 2) — domain 1, kind 2, local_id 2"
+      args: >
+        K values as Code32 (4 bytes each) — the declared solution.
+        Same format as OP_PROBE args.
+      effect: >
+        Writes to 1 slot on layer 1: solved_marker slot.
+        Value is a SOLVED concept (domain 3, kind 3, local_id 0).
+        Slot must be Hole → Provisional (write-once, so only one declaration
+        per episode).
+      effect_kind: "DeclaresSolution"
+      semantics: >
+        Declares a solution. The search goal is defined on the solved_marker
+        being set. Whether the declaration is correct (matches truth) is checked
+        by the harness is_goal() (which can read layer 0) and verified
+        independently by winning-path replay.
+
+  new_effect_kinds:
+    ProbesAndNarrows: >
+      Validates: exactly 2 identity diffs and 2 status diffs, all on layer 1.
+      Both diffs must be Hole→Provisional. One diff is in the probe_result
+      region (slot index < probe_result_count), one is the belief_size slot.
+      No writes to layer 0. The kernel bounds the write surface; it does NOT
+      validate semantic correctness of the feedback value.
+
+    DeclaresSolution: >
+      Validates: exactly 1 identity diff and 1 status diff on layer 1.
+      The diff must be on the solved_marker slot. Hole→Provisional.
+      No writes to layer 0.
+
+  # ---------------------------------------------------------------------------
+  # Winning-path replay (reusable primitive)
+  # ---------------------------------------------------------------------------
+  witness_architecture: >
+    The winning-path replay is the key new verifier capability. It generalizes
+    beyond this world — any future world can opt into it via evidence obligations.
+
+    Replay is Cert-only, gated by evidence_obligations containing
+    "winning_path_replay_v1". The replay facility lives in harness/ (verifier
+    side), not search/ (recording side).
+
+    Inputs:
+    - Compiled root ByteState (from CREPLAY-001 — compilation replay already
+      gives a verified root state)
+    - SearchTape (to reconstruct goal path edges: parent_id chain + applied
+      candidate op_code/op_args)
+    - OperatorRegistryV1 (already verified by Steps 16-17)
+    - World-specific invariant checker (trait callback)
+
+    Procedure:
+    1. Extract goal_node_id from tape termination record.
+    2. Reconstruct goal path node chain via NodeCreation parent_id.
+    3. For each edge parent→child on the path, find the Applied candidate
+       in the Expansion record (op_code + op_args that created child).
+    4. Starting from compiled root ByteState, apply those operators
+       sequentially via kernel apply().
+    5. After each apply, compute state fingerprint and compare to the tape's
+       NodeCreation state_fingerprint for the child. Mismatch → typed error.
+    6. After each apply, invoke the world-specific invariant checker with
+       (step_index, pre_state, post_state, op_code, op_args). The checker
+       returns Ok or a typed violation.
+    7. After all steps, verify the final state matches the goal node's
+       fingerprint.
+
+    The replay proves:
+    - Every operator application on the winning path is reproducible from
+      the compiled root state and the recorded op_code/op_args.
+    - Every intermediate state fingerprint matches what was recorded.
+    - World-specific invariants hold at every step (not just final state).
+
+    For this world, the invariant checker verifies:
+    - belief_size is non-increasing (monotonic elimination)
+    - OP_PROBE feedback is correct (recompute from truth + guess)
+    - OP_DECLARE solution matches truth (if declared)
+    - No operator writes to layer 0
+
+  # ---------------------------------------------------------------------------
+  # Derived artifact: epistemic transcript
+  # ---------------------------------------------------------------------------
+  epistemic_transcript_artifact:
+    name: "epistemic_transcript.json"
+    kind: "required derived artifact (downstream, same convention as tool_transcript.json)"
+    schema: >
+      Canonical JSON object:
+      - "schema_version": "epistemic_transcript.v1"
+      - "world_id": string
+      - "code_length": integer (K)
+      - "value_count": integer (V)
+      - "entries": array of transcript entries, each with:
+        - "step_index": integer (tape expansion order)
+        - "operator": string ("PROBE" or "DECLARE")
+        - "op_code": [d, k, lo, hi]
+        - "args": structured (guess values, feedback, belief_size_before, belief_size_after)
+        - "outcome": "applied"
+      - "entry_count": integer
+      - "final_belief_size": integer (belief set cardinality at end)
+      - "solved": boolean
+
+    rendering: >
+      render_epistemic_transcript(tape, operator_registry, world_id, code_length, value_count)
+      Pure, deterministic. Iterates winning-path edges from tape, extracts
+      OP_PROBE and OP_DECLARE frames, renders each as a transcript entry.
+      Recomputes feedback and belief cardinality from probe history
+      (deterministic function of truth + guesses — but the renderer gets
+      truth from the replay, not from the bundle directly).
+
+      Implementation note: the transcript renderer is tightly coupled to
+      the replay — it needs intermediate states to compute belief evolution.
+      It should be implemented as a visitor/callback on the replay, not as
+      an independent tape scan.
+
+    binding_convention: >
+      Downstream binding (same as tool_transcript.json):
+      - Normative artifact in digest basis (Steps 4-6)
+      - Report convenience field: epistemic_transcript_digest (sha256:hex)
+      - NOT in graph metadata or tape header (downstream of tape)
+      - Cert: equivalence render via replay (stronger than render-only)
+      - Base: required-if-present digest binding
+
+  # ---------------------------------------------------------------------------
+  # Evidence obligations
+  # ---------------------------------------------------------------------------
+  evidence_obligations: >
+    The partial observability world declares two obligations:
+    - "epistemic_transcript_v1": derived artifact with Cert equivalence
+    - "winning_path_replay_v1": Cert-only verifier gate (replay must succeed)
+
+    These are independent obligations. A future world could declare replay
+    without a transcript, or transcript without replay (if render-only
+    equivalence is sufficient, as with tool_transcript).
+
+    The obligations surface (FixtureDimensions.evidence_obligations) is
+    reused from TOOLSCRIPT-001. No schema changes needed.
+
+  # ---------------------------------------------------------------------------
+  # Architectural division: kernel bounds surface, verifier proves correctness
+  # ---------------------------------------------------------------------------
+  validation_philosophy: >
+    Kernel's job: bound the write surface. OP_PROBE writes exactly 2 slots
+    on layer 1, OP_DECLARE writes exactly 1 slot on layer 1. No operator
+    writes to layer 0. The kernel enforces this via EffectKind validation
+    (diff counting, layer checks). This is cheap, O(slot_count) per apply.
+
+    Verifier's job: prove correspondence. The feedback written by OP_PROBE
+    is semantically correct (the exact_match count is actually right for the
+    given guess against the truth). The belief_size is actually the cardinality
+    of consistent candidates after all probes. The solution declared by
+    OP_DECLARE actually matches the truth. These are all semantic properties
+    that require access to intermediate states and truth values. Winning-path
+    replay provides this.
+
+    This is the same architectural bet validated by compilation replay and
+    transcript equivalence: kernel bounds, verifier proves.
+
+  backward_compatibility: >
+    Existing worlds have evidence_obligations: [] (default). They do not
+    produce epistemic_transcript.json. They do not opt into winning-path
+    replay. verify_bundle() new steps are skipped when obligations are absent.
+    No regressions.
+
+scope:
+  in:
+    - kernel/src/operators/apply.rs
+    - kernel/src/operators/operator_registry.rs
+    - harness/src/worlds/
+    - harness/src/bundle.rs
+    - harness/src/runner.rs
+    - harness/src/witness.rs
+    - harness/src/transcript.rs
+    - harness/src/contract.rs
+    - search/src/search.rs
+    - tests/lock/
+    - .caws/specs/
+  out:
+    - kernel/src/carrier/compile.rs
+    - kernel/src/carrier/bytestate.rs
+    - kernel/src/carrier/bytetrace.rs
+    - kernel/src/carrier/trace_writer.rs
+    - kernel/src/carrier/trace_reader.rs
+    - kernel/src/proof/replay.rs
+    - benchmarks/
+    - docs/
+
+change_budget:
+  max_files: 30
+  max_loc: 2500
+
+invariants:
+  - >-
+    INV-POBS-01: No operator writes to layer 0 (truth layer). Layer 0 slots
+    are Provisional after compilation; any attempt to write triggers
+    EffectContractViolation (Provisional→Provisional). Verified by kernel
+    effect validation AND by winning-path replay.
+  - >-
+    INV-POBS-02: belief_size is non-increasing step-to-step across the winning
+    path. Verified by winning-path replay invariant checker. At least one probe
+    in the fixture must strictly decrease belief_size (no degenerate fixtures).
+  - >-
+    INV-POBS-03: OP_PROBE feedback is semantically correct: the exact_match
+    count matches the recomputed count from (guess, truth). Verified by
+    winning-path replay, not by kernel effect validation.
+  - >-
+    INV-POBS-04: OP_DECLARE solution matches truth (layer 0). Verified by
+    winning-path replay and by harness is_goal().
+  - >-
+    INV-POBS-05: Winning-path replay reproduces exact fingerprints for every
+    goal-path node. Compiled root state → sequential apply → fingerprint match
+    at each step.
+  - >-
+    INV-POBS-06: epistemic_transcript.json bytes equal independently rendered
+    transcript bytes (Cert equivalence, downstream binding convention).
+  - >-
+    INV-POBS-07: Existing worlds with evidence_obligations: [] continue to
+    build and verify without changes. No regressions.
+  - >-
+    INV-POBS-08: Winning-path replay is a reusable primitive gated by
+    "winning_path_replay_v1" obligation. It is not world-specific (the world
+    provides an invariant checker callback, but the replay machinery is generic).
+
+errors:
+  - id: POBS-ERR-REPLAY-FINGERPRINT
+    variant: "ReplayFingerprintMismatch { step_index: usize, expected: String, actual: String }"
+    description: >-
+      Winning-path replay: the state fingerprint after applying op at step_index
+      does not match the tape's NodeCreation fingerprint for the child node.
+
+  - id: POBS-ERR-REPLAY-APPLY-FAILED
+    variant: "ReplayApplyFailed { step_index: usize, detail: String }"
+    description: >-
+      Winning-path replay: kernel apply() failed when re-executing an operator
+      on the winning path.
+
+  - id: POBS-ERR-BELIEF-MONOTONICITY
+    variant: "BeliefMonotonicityViolation { step_index: usize, before: usize, after: usize }"
+    description: >-
+      Winning-path replay invariant: belief_size increased after a probe.
+
+  - id: POBS-ERR-PROBE-FEEDBACK
+    variant: "ProbeFeedbackIncorrect { step_index: usize, detail: String }"
+    description: >-
+      Winning-path replay invariant: OP_PROBE feedback value does not match
+      recomputed feedback from (guess, truth).
+
+  - id: POBS-ERR-DECLARE-MISMATCH
+    variant: "DeclareSolutionMismatch { step_index: usize, declared: String, truth: String }"
+    description: >-
+      Winning-path replay invariant: OP_DECLARE solution does not match truth.
+
+  - id: POBS-ERR-TRUTH-WRITE
+    variant: "TruthLayerWriteAttempt { step_index: usize, detail: String }"
+    description: >-
+      Winning-path replay invariant: an operator wrote to layer 0 (truth).
+      This should also be caught by kernel effect validation, but the replay
+      provides a second check.
+
+  - id: POBS-ERR-TRANSCRIPT-MISSING
+    variant: "EpistemicTranscriptMissing"
+    description: >-
+      Cert: evidence_obligations includes "epistemic_transcript_v1" but
+      epistemic_transcript.json is absent.
+
+  - id: POBS-ERR-TRANSCRIPT-EQUIVALENCE
+    variant: "EpistemicTranscriptEquivalenceMismatch { expected_hash: String, rendered_hash: String }"
+    description: >-
+      Cert: independently rendered epistemic transcript does not byte-match
+      the shipped artifact.
+
+  - id: POBS-ERR-NO-STRICT-DECREASE
+    variant: "NoStrictBeliefDecrease"
+    description: >-
+      Cert: no probe in the winning path strictly decreased belief_size.
+      This catches degenerate fixtures where probes never eliminate candidates.
+
+acceptance:
+  - id: POBS-001-KERNEL-OPS
+    description: >-
+      OP_PROBE and OP_DECLARE exist in kernel with distinct Code32 IDs
+      (domain 1, kind 2), EffectKind variants (ProbesAndNarrows,
+      DeclaresSolution), dispatch handlers, and effect validation. Both go
+      through three-phase apply() check. No operator writes to layer 0.
+    status: pending
+
+  - id: POBS-001-EFFECT-KINDS
+    description: >-
+      ProbesAndNarrows validates exactly 2 identity diffs + 2 status diffs
+      on layer 1 only. DeclaresSolution validates exactly 1 identity diff +
+      1 status diff on layer 1 only. Negative tests: attempt to write layer 0,
+      attempt wrong diff count, all rejected with typed EffectContractViolation.
+    status: pending
+
+  - id: POBS-001-WORLD
+    description: >-
+      Partial observability world (Mastermind-style) with K=2, V=3 (9 candidates).
+      Layer 0 = truth (Provisional after compile, unwritable). Layer 1 = workspace
+      (probe results, belief size, solved marker). evidence_obligations includes
+      "epistemic_transcript_v1" and "winning_path_replay_v1".
+    status: pending
+
+  - id: POBS-001-TRUTH-HIDDEN
+    description: >-
+      No operator in the world's candidate enumeration targets layer 0.
+      Layer 0 slots are Provisional after compilation. Kernel rejects any
+      attempt to write Provisional slots (EffectContractViolation).
+    status: pending
+
+  - id: POBS-001-BELIEF-MONOTONICITY
+    description: >-
+      belief_size is non-increasing across the winning path. At least one
+      probe strictly decreases it. Verified by replay invariant checker.
+    status: pending
+
+  - id: POBS-001-PROBE-CORRECTNESS
+    description: >-
+      OP_PROBE feedback is semantically correct: exact_match count matches
+      recomputed count from (guess, truth). Verified by replay, not kernel.
+    status: pending
+
+  - id: POBS-001-DECLARE-CORRECTNESS
+    description: >-
+      OP_DECLARE solution matches truth. Verified by replay and is_goal().
+    status: pending
+
+  - id: POBS-001-REPLAY-GENERIC
+    description: >-
+      Winning-path replay is a generic facility in harness/, not specific to
+      this world. It accepts a trait-based invariant checker. Any world can
+      opt in via "winning_path_replay_v1" obligation.
+    status: pending
+
+  - id: POBS-001-REPLAY-FINGERPRINTS
+    description: >-
+      Replay reproduces exact state fingerprints at every step on the winning
+      path. Compiled root state → sequential apply → fingerprint match at
+      each node.
+    status: pending
+
+  - id: POBS-001-TRANSCRIPT
+    description: >-
+      epistemic_transcript.json rendered from replay (not independent tape scan).
+      Downstream binding: normative artifact + report digest + Cert equivalence.
+      NOT in graph metadata or tape header.
+    status: pending
+
+  - id: POBS-001-BACKWARD-COMPAT
+    description: >-
+      Non-epistemic worlds unaffected. evidence_obligations defaults to empty.
+      New verification steps skipped. No regressions.
+    status: pending
+
+  - id: POBS-001-LOCK-TESTS
+    description: >-
+      Lock tests: probe reduces belief, declare matches truth, replay succeeds
+      (Cert), forged transcript fails Cert, illegal truth write rejected,
+      belief monotonicity violation detected, backward compat.
+    status: pending
+
+milestones:
+  - id: M0
+    title: "Spec + schema layout"
+    status: pending
+    deliverables:
+      - "Finalized ByteState layout: truth slots, workspace slots, slot indices"
+      - "Concept registry entries for domain 3 (code values, feedback, belief, solved)"
+      - "Evidence obligations: epistemic_transcript_v1, winning_path_replay_v1"
+    notes:
+      - "K=2, V=3 as default configuration (9 candidates)"
+      - "Layer 0 (truth): 2 slots, Provisional after compile"
+      - "Layer 1 (workspace): probe_result slots + belief_size + solved_marker"
+
+  - id: M1
+    title: "World implementation"
+    status: pending
+    deliverables:
+      - "harness/src/worlds/partial_obs.rs: world struct + WorldHarnessV1 + SearchWorldV1"
+      - "Concept registry entries: code:c0..c2, feedback:0..2, belief:1..9, solved:yes"
+      - "enumerate_candidates: OP_PROBE guesses + OP_DECLARE when belief_size==1"
+      - "is_goal: solved_marker set AND declared solution matches truth"
+      - "Unit tests: compile, enumerate, is_goal, evidence_obligations"
+    notes:
+      - "Harness needs truth access for probe feedback computation"
+      - "enumerate_candidates sees full state (harness privilege), but only emits layer 1 ops"
+      - "OP_DECLARE only emitted when belief_size == 1 (unique solution determined)"
+
+  - id: M2
+    title: "Kernel operators: OP_PROBE + OP_DECLARE"
+    status: pending
+    deliverables:
+      - "kernel/src/operators/apply.rs: OP_PROBE, OP_DECLARE constants + dispatch + handlers"
+      - "kernel/src/operators/operator_registry.rs: ProbesAndNarrows, DeclaresSolution EffectKind"
+      - "kernel_operator_registry() includes 6 operators (SET_SLOT, STAGE, COMMIT, ROLLBACK, PROBE, DECLARE)"
+      - "Unit tests: effect validation, negative tests (wrong layer, wrong diff count)"
+    notes:
+      - "OP_PROBE handler: reads truth from layer 0, computes feedback, writes to layer 1"
+      - "OP_PROBE handler needs state + args to compute feedback (unlike SET_SLOT which is pure write)"
+      - "Kernel validates write surface only (2 diffs on layer 1). Semantic correctness = replay"
+      - "OP_DECLARE handler: writes solved_marker. Kernel validates 1 diff on layer 1"
+
+  - id: M3
+    title: "Winning-path replay facility"
+    status: pending
+    deliverables:
+      - "harness/src/witness.rs (new): generic replay_winning_path() function"
+      - "ReplayInvariantChecker trait: check(step, pre, post, op_code, op_args) -> Result<()>"
+      - "harness/src/bundle.rs: new verification step gated by winning_path_replay_v1"
+      - "Integration with CREPLAY-001: uses compiled root state as replay starting point"
+    notes:
+      - "Replay lives in harness/ (verifier), not search/ (recorder)"
+      - "Generic over worlds — invariant checker is a trait callback"
+      - "Replay re-executes apply() — needs kernel operators + registry"
+      - "Fingerprint = canonical_hash(StateFingerprint, state.combined_bytes())"
+      - "Reuse reconstruct_path() from search/ for goal path extraction"
+      - "Step numbering: new Step 20 (after Step 19 tool transcript)"
+
+  - id: M4
+    title: "Epistemic transcript rendering + corridor binding"
+    status: pending
+    deliverables:
+      - "Transcript rendered as replay visitor (not independent tape scan)"
+      - "harness/src/runner.rs: render transcript, include in bundle"
+      - "harness/src/bundle.rs: verification step for transcript equivalence"
+      - "Report field: epistemic_transcript_digest (downstream, report-only)"
+    notes:
+      - "Downstream binding convention: normative artifact + report field + Cert equivalence"
+      - "NOT in graph metadata or tape header (dependency cycle prevention)"
+      - "Transcript renderer is a ReplayInvariantChecker that also accumulates entries"
+      - "Belief evolution reconstructed during replay (access to intermediate states)"
+
+  - id: M5
+    title: "Lock tests"
+    status: pending
+    deliverables:
+      - "tests/lock/src/bin/partial_obs_golden_generator.rs: golden fixture generator"
+      - "tests/lock/fixtures/partial_obs_solve/: golden solve-path fixtures"
+      - "tests/lock/tests/partial_obs.rs: lock tests"
+    notes:
+      - "Probe reduces belief (belief_size strictly decreases at least once)"
+      - "Declare matches truth (is_goal passes)"
+      - "Replay succeeds (Cert, fingerprints match at each step)"
+      - "Forged transcript fails Cert (equivalence mismatch)"
+      - "Belief monotonicity violation detected (synthetic)"
+      - "Probe feedback incorrectness detected (synthetic via replay)"
+      - "Backward compat: RomeMiniSearch bundle still verifies"
+      - "Search determinism: partial obs world produces deterministic results"
+
+evidence:
+  commits: []
+  total_tests: 635
+  lock_tests: []
+
+non_functional:
+  a11y: []
+  perf:
+    note: >-
+      Winning-path replay adds one pass of apply() per winning-path edge
+      for Cert verification. Path length is bounded by search depth limit.
+      Non-replay worlds are unaffected. Replay cost is O(path_length *
+      apply_cost), which for small worlds is negligible.
+  security:
+    note: >-
+      Truth layer is kernel-protected (write-once, Provisional after compile).
+      Replay independently verifies probe correctness and belief monotonicity.
+      Downstream binding convention prevents dependency cycle attacks.
+
+contracts:
+  - id: CTR-POBS-01
+    type: kernel_api
+    description: >-
+      apply() dispatches OP_PROBE and OP_DECLARE through three-phase check.
+      ProbesAndNarrows validates 2 diffs on layer 1; DeclaresSolution validates
+      1 diff on layer 1. No operator touches layer 0.
+    parties: [kernel/operators/apply, kernel/operators/operator_registry]
+
+  - id: CTR-POBS-02
+    type: witness_replay
+    description: >-
+      replay_winning_path(tape, root_state, registry, checker) re-executes
+      the winning path from compiled root state. Verifies fingerprints at
+      each step. Invokes checker for world-specific invariants. Generic
+      facility, not world-specific.
+    parties: [harness/witness, harness/bundle]
+
+  - id: CTR-POBS-03
+    type: derived_artifact
+    description: >-
+      epistemic_transcript.json rendered via replay visitor. Downstream
+      binding: normative artifact + report digest + Cert equivalence.
+      Cert equivalence uses replay-based rendering (stronger than tape-only
+      rendering because it verifies intermediate states).
+    parties: [harness/witness, harness/bundle, harness/runner]
+
+  - id: CTR-POBS-04
+    type: backward_compat
+    description: >-
+      Worlds with evidence_obligations: [] unaffected. Replay and transcript
+      steps skipped. No regressions.
+    parties: [harness/bundle, harness/runner]
