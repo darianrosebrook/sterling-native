@@ -67,13 +67,15 @@ design:
     verifier.
 
     The three-way authority division (ADR 0009) governs:
-    - Kernel: New OP_MOVE operator with EffectKind::RecordsTransitionOutcome.
-      Enforces exactly 1 position slot write per move. Does NOT validate whether
-      the written position matches the witness — that is the verifier's job.
-    - World: Consumes witness entries during enumerate_candidates() to determine
-      actual transition outcomes. Encodes the outcome position in OP_MOVE args.
-    - Verifier: During replay, re-reads witness entries and checks that the
-      OP_MOVE args match. Checks distributional properties of the witness stream.
+    - Kernel: OP_INTENT and OP_OUTCOME operators with WritesIntent / WritesOutcome
+      EffectKind variants. Each enforces exactly 1 slot write. Does NOT validate
+      whether the outcome matches the witness — that is the verifier's job.
+    - World: At resolve steps, produces exactly one OP_OUTCOME candidate determined
+      by the witness entry. Witness index derived from state (outcome slot count),
+      not from a mutable cursor. No RNG calls inside enumerate_candidates().
+    - Verifier: During replay, re-reads witness entries and checks that OP_INTENT
+      and OP_OUTCOME args match. Checks structural properties only — no
+      distributional/probabilistic enforcement.
 
   # ---------------------------------------------------------------------------
   # Witness Stream Design (Option 1: Precommitted RNG Tape)
@@ -242,6 +244,90 @@ design:
     reconstructed from the tape. This is an upstream binding check (analogous to
     fixture_digest in graph metadata).
 
+  # ---------------------------------------------------------------------------
+  # Footgun Guards
+  # ---------------------------------------------------------------------------
+  footgun_guards: >
+    FG-1: Stateful witness consumption inside the world object.
+      Symptom: determinism failures that disappear when expansion budget or
+      frontier order changes.
+      Guard: witness index = count of outcome slots written in state (read from
+      slot status). Witness stream stored as immutable Vec<WitnessEntry>.
+      No mutable cursor, no RNG calls, no interior mutability (no Cell/RefCell
+      for witness state). enumerate_candidates(&self, state, _) takes &self,
+      enforced by the SearchWorldV1 trait signature.
+
+    FG-2: Resolve phase offers multiple outcomes.
+      Symptom: search success depends on scorer choice rather than committed
+      randomness. The scorer/search becomes the de facto randomness chooser.
+      Guard: at resolve phase, enumerate_candidates() returns exactly one
+      OP_OUTCOME candidate. Lock test: assert candidates.len() == 1 at every
+      resolve step on the winning path.
+
+    FG-3: Off-by-one mapping between intent/outcome and witness step.
+      Symptom: invariant checker fails only on longer traces, or verifies
+      intent[i] against witness[i-1].
+      Guard: witness step = move index = outcome count. In code:
+      i = outcomes_written_so_far (count of Provisional odd-indexed slots).
+      Intent slot = 2*i, outcome slot = 2*i+1. Lock test with >5 moves
+      exercising the full mapping.
+
+    FG-4: Cyclic dependency between witness digest and tape-derived rendering.
+      Symptom: witness digest accidentally computed from something that depends
+      on the tape or search results.
+      Guard: witness stream bytes + hash computed BEFORE search begins. Witness
+      bytes are an INPUT to search (via the world's enumerate_candidates), not
+      an OUTPUT. ByteTraceFooterV1.witness_store_digest set from pre-computed
+      hash. Matches ADR 0009: world computes, verifier proves.
+
+    FG-5: Conflating witness validity with witness plausibility.
+      Symptom: Cert rejects valid committed witness streams because they
+      "don't look random enough."
+      Guard: Cert checks are structural only (slip_count == count(slip=true),
+      directions are valid, entries are ordered). No probabilistic enforcement.
+      Plausibility tests (if desired) belong in governance artifacts or
+      scorer-health metrics, not Cert gates.
+
+    FG-6: Obligation enforcement only when artifact exists.
+      Symptom: "strip obligation + drop artifact" becomes a bypass.
+      Guard: belt-and-suspenders via check_obligation_belt_and_suspenders()
+      runs before early return. Already implemented and proven in tool/epistemic
+      regimes.
+
+  # ---------------------------------------------------------------------------
+  # Red-Team Mini-Matrix
+  # ---------------------------------------------------------------------------
+  red_team_matrix: >
+    Four targeted tampering scenarios covering 90% of stochastic-specific
+    failure modes. Each should be a lock test (negative control):
+
+    RT-1: Mutate one witness entry's actual_direction.
+      Expected: Cert fails — either WitnessTransitionMismatch (replay invariant)
+      or equivalence mismatch (re-rendered witness != shipped artifact).
+      Tests: replay correctness + witness binding integrity.
+
+    RT-2: Keep witness bytes but mutate one OP_OUTCOME op_args in the tape
+      to a different direction.
+      Expected: Cert fails — replay applies the mutated op_args, producing
+      a state fingerprint mismatch (ReplayFingerprintMismatch) or an
+      invariant checker error (WitnessTransitionMismatch).
+      Tests: replay catches op_args/witness divergence.
+
+    RT-3: Drop stochastic_witness.json while leaving stochastic ops in tape.
+      Expected: Cert fails — belt-and-suspenders detects applied OP_INTENT/
+      OP_OUTCOME without stochastic_witness_v1 obligation (ObligationMismatch),
+      OR obligation-gated artifact-missing check fires.
+      Tests: silent omission defense.
+
+    RT-4: Make enumerate_candidates() use a mutable internal cursor instead
+      of state-derived witness index. Show determinism breaks.
+      Expected: determinism test (N=10 identical digests) FAILS because
+      different exploration orders consume witness entries differently.
+      Tests: world purity under branching (AC12).
+      Note: this is a design-time test — the implementation must not have
+      a mutable cursor. If it does, RT-4 catches it. The &self constraint
+      from SearchWorldV1 provides compile-time enforcement.
+
 scope:
   in:
     - "kernel/src/operators/apply.rs"
@@ -305,13 +391,19 @@ milestones:
       Implement StochasticGrid world with WorldHarnessV1 + SearchWorldV1 traits.
       Witness stream generation (from seed internally, committed as stream).
       Grid world with configurable size, start, goal, slip probability.
-      enumerate_candidates() consumes witness entries for outcome determination.
+      enumerate_candidates() derives witness index from state (outcome slot
+      count), not from a mutable cursor. At resolve steps, exactly one
+      OP_OUTCOME candidate. SearchWorldV1 trait enforces &self (no interior
+      mutability for witness consumption).
     acceptance:
       - "StochasticGrid implements WorldHarnessV1 and SearchWorldV1"
       - "world_id() returns consistent value across both traits"
       - "evidence_obligations includes stochastic_witness_v1 and winning_path_replay_v1"
-      - "enumerate_candidates() returns OP_MOVE candidates with witness-determined outcomes"
-      - "is_goal() detects agent at goal position"
+      - "enumerate_candidates() at intent phase returns OP_INTENT candidates for each valid direction"
+      - "enumerate_candidates() at resolve phase returns exactly 1 OP_OUTCOME candidate (AC14)"
+      - "Witness index derived from state — count of Provisional odd-indexed layer-1 slots (AC12)"
+      - "No mutable cursor, no RNG calls, no Cell/RefCell in StochasticGrid (FG-1)"
+      - "is_goal() computes position from start + cumulative outcomes, checks == goal"
       - "Witness stream is deterministic from constructor parameters"
 
   - id: M3
@@ -333,14 +425,23 @@ milestones:
     description: >
       Add verify_stochastic_witness() to bundle.rs (Steps 22-24).
       Implement StochasticInvariantChecker for ReplayInvariantChecker.
-      Add belt-and-suspenders: tape OP_MOVE detection → obligation check.
+      Add belt-and-suspenders via check_obligation_belt_and_suspenders()
+      with tape predicate for OP_INTENT/OP_OUTCOME.
       Cert equivalence: re-render witness from tape, compare bytes.
+      Cross-binding triangle: ByteTrace footer + report digest + artifact.
+      Structural-only checks: no probabilistic enforcement (AC16).
+      Phase-sequence validation on winning path only (AC17).
     acceptance:
       - "Base verification passes for stochastic bundle"
       - "Cert verification passes for stochastic bundle"
-      - "Forged witness fails Cert equivalence"
-      - "Stripped obligations fail Cert (belt-and-suspenders)"
+      - "Forged witness fails Cert equivalence (RT-1)"
+      - "Mutated OP_OUTCOME op_args fails replay (RT-2)"
+      - "Stripped obligations fail Cert belt-and-suspenders (RT-3)"
       - "StochasticInvariantChecker catches mismatched transition outcomes"
+      - "Cross-binding triangle verified: footer + report + artifact (AC15)"
+      - "Verifier checks structural facts only, no probabilistic expectations (AC16)"
+      - "Phase-sequence violations caught on winning path with typed error (AC17)"
+      - "Witness index mapping: OP_OUTCOME[i] ↔ witness_stream[i] (AC13)"
 
   - id: M5
     title: "Lock tests"
@@ -348,15 +449,25 @@ milestones:
     description: >
       Comprehensive lock tests covering: bundle generation + Base/Cert verification,
       witness artifact presence and structural integrity, replay with invariant
-      checker, determinism (N=10), forged witness fails Cert, backward compatibility
-      (existing worlds unaffected), belt-and-suspenders obligation check.
+      checker, determinism (N=10), backward compatibility, belt-and-suspenders,
+      plus red-team mini-matrix (RT-1 through RT-4) and stochastic-specific
+      acceptance criteria (AC12-AC17).
     acceptance:
       - "All stochastic lock tests pass"
       - "Existing lock tests unchanged and passing"
-      - "Backward compatibility tests verify non-stochastic worlds unaffected"
+      - "Backward compatibility: non-stochastic worlds unaffected"
+      - "RT-1: mutated witness entry actual_direction fails Cert"
+      - "RT-2: mutated OP_OUTCOME op_args fails Cert replay"
+      - "RT-3: dropped stochastic_witness.json with stochastic ops fails Cert"
+      - "RT-4: determinism N=10 proves no mutable cursor (AC12 compile-time guard via &self)"
+      - "Resolve-phase single-candidate assertion on winning path (AC14)"
+      - "Witness index mapping exercised with >5 moves (AC13, FG-3)"
+      - "Phase-sequence violation negative test (AC17)"
+      - "Structural-only verification: slip_count matches, no probabilistic gate (AC16)"
       - "Clippy clean, no new warnings"
 
 acceptance_criteria:
+  # --- Basic corridor criteria ---
   - id: AC1
     description: "StochasticGrid world produces valid bundles that pass Base and Cert verification."
     status: pending
@@ -373,7 +484,7 @@ acceptance_criteria:
     description: "Forged witness (tampered entries) fails Cert verification."
     status: pending
   - id: AC6
-    description: "Belt-and-suspenders: tape with OP_MOVE but missing obligation fails Cert."
+    description: "Belt-and-suspenders: tape with any applied OP_INTENT or OP_OUTCOME but missing stochastic_witness_v1 obligation fails Cert."
     status: pending
   - id: AC7
     description: "witness_store_digest in ByteTrace footer binds witness hash into trace corridor."
@@ -390,6 +501,63 @@ acceptance_criteria:
   - id: AC11
     description: "ADR 0009 committed and referenced."
     status: met
+
+  # --- Stochastic-specific criteria (branching + authority division) ---
+  - id: AC12
+    description: >-
+      World purity under branching: GIVEN the same immutable witness stream
+      and the same state input WHEN enumerate_candidates() is called repeatedly
+      in different search exploration orders THEN it returns identical candidates
+      in the same order. Witness index is derived from state (count of outcome
+      slots written), not from a world-global mutable cursor. No interior
+      mutability, no RNG calls inside enumerate_candidates().
+    status: pending
+  - id: AC13
+    description: >-
+      Witness index mapping is unambiguous in two-phase world: GIVEN a tape
+      containing alternating OP_INTENT / OP_OUTCOME applies WHEN the verifier
+      replays the winning path THEN each OP_OUTCOME at move i maps to
+      witness_stream[i], and each OP_INTENT at move i matches
+      witness_stream[i].intended_direction. Witness step = move index =
+      outcome count, not operator frame index. i = outcomes_written_so_far;
+      intent slot = 2*i; outcome slot = 2*i+1.
+    status: pending
+  - id: AC14
+    description: >-
+      Single-legal candidate at resolve steps: GIVEN a state in resolve phase
+      (next slot is an outcome slot) WHEN enumerate_candidates() runs THEN it
+      emits exactly one OP_OUTCOME candidate determined by witness_stream[i],
+      and zero alternative outcomes. The search/scorer cannot "choose" the
+      stochastic outcome — truth authority stays in the world.
+    status: pending
+  - id: AC15
+    description: >-
+      Cross-binding triangle for witness stream is complete: GIVEN a stochastic
+      bundle WHEN verifying in Cert THEN all three bindings must agree:
+      (1) ByteTraceFooterV1.witness_store_digest == hash(canonical witness bytes),
+      (2) verification_report.stochastic_witness_digest == stochastic_witness.json
+      content_hash, (3) stochastic_witness.json bytes == independently re-rendered
+      bytes (Cert equivalence). Any one missing or mismatched → Cert fails closed.
+    status: pending
+  - id: AC16
+    description: >-
+      Distributional evaluation stays structural, not statistical: GIVEN
+      stochastic_witness.json includes slip_probability, slip_count, and entries
+      WHEN verifying THEN the verifier checks only structural facts (slip_count
+      equals count of slip=true entries, actual_direction consistent with slip
+      flag, directions are valid grid directions) AND does not enforce
+      probabilistic expectations (e.g. slip_count within tolerance of p*N).
+      The committed witness IS the truth; plausibility tests are governance
+      artifacts, not Cert gates.
+    status: pending
+  - id: AC17
+    description: >-
+      Phase-sequence violations caught on winning path: GIVEN a winning path
+      where OP_OUTCOME is applied without a preceding OP_INTENT (or wrong slot
+      parity) WHEN StochasticInvariantChecker runs during replay THEN Cert fails
+      with a typed invariant error. Phase enforcement is winning-path-only, not
+      global-tape, to avoid false positives from legitimate branching.
+    status: pending
 
 invariants:
   - >-
@@ -409,11 +577,15 @@ invariants:
     Truth-dependent validation (does the outcome match the witness?) is the
     verifier's job via replay.
   - >-
-    INV-STOCH-04: Witness entries are consumed in order during
-    enumerate_candidates() at each OP_OUTCOME resolve step. Step index in
-    witness entry matches the outcome step index. No skipping, no reordering.
-    At each resolve step, exactly one legal candidate exists (determined by
-    the next witness entry).
+    INV-STOCH-04: Witness index is derived from state, not from a mutable
+    cursor. enumerate_candidates() computes i = count of outcome slots already
+    written (Provisional status on odd-indexed layer-1 slots), then reads
+    witness_stream[i]. The world object holds the witness stream as immutable
+    bytes/Vec — no mutable cursor, no RNG calls, no interior mutability that
+    could make output depend on frontier exploration order. At each resolve
+    step, exactly one legal OP_OUTCOME candidate exists (determined by
+    witness_stream[i]). This is the primary determinism invariant for
+    stochastic worlds under branching search.
   - >-
     INV-STOCH-05: Replay invariant checker independently verifies each
     transition outcome against the witness stream. At each OP_INTENT step,
@@ -460,6 +632,13 @@ errors:
       Stochastic witness artifact declares a slip_count that does not match
       the number of slip=true entries in the entries array.
 
+  - id: STOCH-ERR-PHASE-SEQUENCE
+    variant: "PhaseSequenceViolation { step_index: usize, expected_phase: String, actual_op: String }"
+    description: >-
+      Winning-path replay: OP_OUTCOME applied without a preceding OP_INTENT,
+      or OP_INTENT applied when an outcome slot was expected. Slot parity
+      violated on the winning path.
+
 acceptance:
   - id: ACC-STOCH-01
     description: >-
@@ -484,16 +663,23 @@ acceptance:
 
   - id: ACC-STOCH-04
     description: >-
-      GIVEN a StochasticGrid bundle with a forged witness (tampered entries)
-      WHEN Cert verification runs
-      THEN verification fails with equivalence mismatch or replay invariant error.
+      RT-1: GIVEN a StochasticGrid bundle with one witness entry's
+      actual_direction mutated WHEN Cert verification runs THEN verification
+      fails with WitnessTransitionMismatch or equivalence mismatch.
+
+  - id: ACC-STOCH-04b
+    description: >-
+      RT-2: GIVEN a StochasticGrid bundle with one OP_OUTCOME op_args mutated
+      in the tape (different direction) WHEN Cert verification runs THEN
+      verification fails with ReplayFingerprintMismatch or
+      WitnessTransitionMismatch.
 
   - id: ACC-STOCH-05
     description: >-
-      GIVEN a StochasticGrid bundle with evidence_obligations stripped from fixture
-      WHEN Cert verification runs
-      THEN verification fails (corridor catches it at fixture_digest binding,
-      tape header binding, or belt-and-suspenders ObligationMismatch).
+      RT-3: GIVEN a StochasticGrid bundle with stochastic_witness.json dropped
+      while OP_INTENT/OP_OUTCOME ops remain in tape WHEN Cert verification runs
+      THEN verification fails (belt-and-suspenders ObligationMismatch or
+      obligation-gated artifact-missing check).
 
   - id: ACC-STOCH-06
     description: >-
