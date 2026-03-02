@@ -370,6 +370,167 @@ acceptance_criteria:
     description: "ADR 0009 committed and referenced."
     status: pending
 
+invariants:
+  - >-
+    INV-STOCH-01: Witness stream is precommitted. The canonical hash of the
+    witness stream bytes is committed in ByteTraceFooterV1.witness_store_digest
+    BEFORE search begins. The witness stream is the authoritative randomness
+    source — the verifier never needs the seed or PRNG algorithm.
+  - >-
+    INV-STOCH-02: Each OP_MOVE writes exactly 1 history slot (Hole→Provisional).
+    No slot is written twice. Position is implicit (computed from move history),
+    not stored in state, avoiding write-once exceptions.
+  - >-
+    INV-STOCH-03: OP_MOVE kernel dispatch does not read the witness stream or
+    validate transition correctness. The kernel enforces write-surface bounds
+    (1 identity diff, 1 status diff). Truth-dependent validation (does the
+    recorded outcome match the witness?) is the verifier's job via replay.
+  - >-
+    INV-STOCH-04: Stochastic witness entries are consumed in order during
+    enumerate_candidates(). Step index in witness entry matches expansion
+    step index. No skipping, no reordering.
+  - >-
+    INV-STOCH-05: Replay invariant checker independently verifies each
+    transition outcome against the witness stream. Intended direction from
+    OP_MOVE args must match witness entry. Actual outcome position must match
+    witness entry's actual_direction applied to grid.
+  - >-
+    INV-STOCH-06: Existing worlds with evidence_obligations: [] continue to
+    build and verify without changes. witness_store_digest: None is the default.
+    No regressions.
+  - >-
+    INV-STOCH-07: stochastic_witness.json bytes equal independently rendered
+    witness bytes (Cert equivalence, downstream binding convention). Witness is
+    rendered from tape + committed witness stream.
+  - >-
+    INV-STOCH-08: Belt-and-suspenders: if tape contains OP_MOVE applied
+    candidates but evidence_obligations does not declare "stochastic_witness_v1",
+    Cert fails with ObligationMismatch. Prevents silent obligation stripping.
+
+errors:
+  - id: STOCH-ERR-WITNESS-MISMATCH
+    variant: "WitnessTransitionMismatch { step_index: usize, expected_direction: String, actual_direction: String }"
+    description: >-
+      Replay invariant: the OP_MOVE intended direction or actual outcome does not
+      match the witness stream entry at the corresponding step index.
+
+  - id: STOCH-ERR-WITNESS-EXHAUSTED
+    variant: "WitnessStreamExhausted { step_index: usize }"
+    description: >-
+      Replay invariant: the search consumed more steps than the witness stream
+      contains entries. Witness stream was too short for the search.
+
+  - id: STOCH-ERR-WITNESS-DIGEST-MISMATCH
+    variant: "WitnessStoreDigestMismatch { trace_digest: String, computed_digest: String }"
+    description: >-
+      ByteTrace footer witness_store_digest does not match the canonical hash
+      of the witness stream bytes. Upstream binding violation.
+
+  - id: STOCH-ERR-SLIP-COUNT
+    variant: "SlipCountMismatch { declared: usize, actual: usize }"
+    description: >-
+      Stochastic witness artifact declares a slip_count that does not match
+      the number of slip=true entries in the entries array.
+
+acceptance:
+  - id: ACC-STOCH-01
+    description: >-
+      GIVEN a StochasticGrid world with default parameters (5x5, slip=0.2)
+      WHEN run_search() completes
+      THEN the bundle passes Base verification AND Cert verification.
+
+  - id: ACC-STOCH-02
+    description: >-
+      GIVEN a StochasticGrid bundle
+      WHEN the stochastic_witness.json artifact is inspected
+      THEN it contains schema_version "stochastic_witness.v1", correct world_id,
+      grid parameters, ordered entries with step indices, and slip_count matching
+      the number of slip=true entries.
+
+  - id: ACC-STOCH-03
+    description: >-
+      GIVEN a StochasticGrid bundle
+      WHEN the ByteTrace footer is inspected
+      THEN witness_store_digest is Some(hash) where hash equals
+      canonical_hash(DOMAIN_WITNESS_STORE, witness_stream_bytes).
+
+  - id: ACC-STOCH-04
+    description: >-
+      GIVEN a StochasticGrid bundle with a forged witness (tampered entries)
+      WHEN Cert verification runs
+      THEN verification fails with equivalence mismatch or replay invariant error.
+
+  - id: ACC-STOCH-05
+    description: >-
+      GIVEN a StochasticGrid bundle with evidence_obligations stripped from fixture
+      WHEN Cert verification runs
+      THEN verification fails (corridor catches it at fixture_digest binding,
+      tape header binding, or belt-and-suspenders ObligationMismatch).
+
+  - id: ACC-STOCH-06
+    description: >-
+      GIVEN the same StochasticGrid world and policy run N=10 times
+      WHEN bundle digests are compared
+      THEN all 10 digests are identical (determinism).
+
+  - id: ACC-STOCH-07
+    description: >-
+      GIVEN existing worlds (RomeMiniSearch, ToolKvStore, PartialObsWorld)
+      WHEN run_search() and verify_bundle_with_profile(Cert) are called
+      THEN all pass without changes. No stochastic artifacts present.
+
+non_functional:
+  a11y: []
+  perf:
+    note: >-
+      Witness stream generation is O(max_steps). Replay cost is O(path_length *
+      apply_cost) plus witness lookup (O(1) per step via index). For the default
+      5x5 grid with max_steps=50, this is negligible. Witness stream storage is
+      O(max_steps * entry_size) — for 50 entries at ~64 bytes each, ~3.2 KB.
+      Non-stochastic worlds unaffected (witness_store_digest: None).
+  security:
+    note: >-
+      Witness stream is precommitted and hash-bound into the trace corridor
+      (ByteTrace footer). Tampering with the witness changes the trace hash,
+      which cascades through fixture_digest → graph metadata → tape header →
+      report. The verifier independently checks each transition against the
+      witness. The kernel never reads the witness — no semantic leak channel.
+      Belt-and-suspenders prevents obligation stripping.
+
+contracts:
+  - id: CTR-STOCH-01
+    type: kernel_api
+    description: >-
+      apply() dispatches OP_MOVE through three-phase check.
+      RecordsTransitionOutcome validates 1 identity diff + 1 status diff
+      (history slot write). No dispatch handler reads the witness stream
+      or validates transition correctness.
+    parties: [kernel/operators/apply, kernel/operators/operator_registry]
+
+  - id: CTR-STOCH-02
+    type: witness_replay
+    description: >-
+      replay_winning_path(tape, root_state, registry, checker) re-executes
+      the winning path. StochasticInvariantChecker verifies each OP_MOVE
+      against the witness stream (direction match, outcome match, slip tracking).
+      Generic replay facility reused from POBS-001.
+    parties: [harness/witness, harness/bundle]
+
+  - id: CTR-STOCH-03
+    type: derived_artifact
+    description: >-
+      stochastic_witness.json rendered from tape + committed witness stream.
+      Downstream binding: normative artifact + report digest + Cert equivalence.
+      Upstream binding: ByteTrace footer witness_store_digest.
+    parties: [harness/witness, harness/bundle, harness/runner]
+
+  - id: CTR-STOCH-04
+    type: backward_compat
+    description: >-
+      Worlds with evidence_obligations: [] unaffected. witness_store_digest
+      remains None. Stochastic verification steps skipped. No regressions.
+    parties: [harness/bundle, harness/runner]
+
 open_questions:
   - id: OQ1
     question: >
