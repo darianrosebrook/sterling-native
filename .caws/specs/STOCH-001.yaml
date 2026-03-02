@@ -112,12 +112,13 @@ design:
 
     State layout:
     - Layer 0: goal position (Provisional at compile time, write-protected)
-    - Layer 1: agent position + move history
-      - Slot 0: current position (row * N + col, encoded as Code32)
-      - Slots 1..MAX_STEPS: outcome record per step (actual_direction Code32)
-      - Slot MAX_STEPS+1: completion marker (solved marker or step-budget marker)
+    - Layer 1: intent/outcome history + completion marker
+      - Slot 2*i: intent_i (intended direction, written by OP_INTENT)
+      - Slot 2*i+1: outcome_i (realized direction, written by OP_OUTCOME)
+      - Slot MAX_STEPS*2: completion marker (solved marker or step-budget marker)
 
-    Goal predicate: agent position == goal position.
+    Goal predicate: position computed from start + cumulative outcomes == goal.
+    Position is implicit — not stored in state, reconstructed from outcome slots.
 
     Default regime: 5×5 grid, start=(0,0), goal=(4,4), slip_probability=0.2,
     max_steps=50. This is small enough for exhaustive search but large enough
@@ -127,31 +128,35 @@ design:
   # Operator Design
   # ---------------------------------------------------------------------------
   operators: >
-    One new operator:
+    Two-phase "act then resolve" design, mirroring the POBS GUESS/FEEDBACK
+    cadence. The agent's action does not require truth; the environment's
+    outcome is applied as a constrained single-legal transition.
 
-    OP_MOVE = Code32::new(1, 3, 1)
-      EffectKind: RecordsTransitionOutcome
-      Args: move_args(layer: u32, position_slot: u32, history_slot: u32,
-                      intended_direction: Code32, actual_position: Code32)
-      Byte count: 24 (6 × 4 bytes)
+    OP_INTENT = Code32::new(1, 3, 1) — agent writes intended direction
+      EffectKind: WritesIntent
+      Args: intent_args(layer: u32, slot: u32, intended_direction: Code32)
+      Byte count: 12 (3 × 4 bytes)
+      Kernel enforcement: exactly 1 identity diff + 1 status diff (Hole→Provisional)
+      Semantic: writes the intended direction to the next intent slot on layer 1.
+      The kernel enforces the write surface; it does not know which direction
+      is "correct" or what will happen as a result.
 
-      Kernel enforcement (EffectKind::RecordsTransitionOutcome):
-      - Exactly 2 identity diffs (position slot + history slot)
-      - Exactly 2 status diffs (both Hole → Provisional or position overwrite)
-      - Position slot is slot 0 on the specified layer
-      - History slot is sequential (step 1 → slot 1, step 2 → slot 2, etc.)
+    OP_OUTCOME = Code32::new(1, 3, 2) — environment writes realized outcome
+      EffectKind: WritesOutcome
+      Args: outcome_args(layer: u32, slot: u32, actual_direction: Code32)
+      Byte count: 12 (3 × 4 bytes)
+      Kernel enforcement: exactly 1 identity diff + 1 status diff (Hole→Provisional)
+      Semantic: writes the realized direction (from witness stream) to the next
+      outcome slot on layer 1. enumerate_candidates() produces exactly one legal
+      candidate at each resolve step, determined by the witness entry.
 
-      Note: position slot IS overwritten on each move — this is the ONE exception
-      to the write-once rule. The kernel needs to allow Provisional → Provisional
-      for the position slot specifically. This is a new EffectKind semantic:
-      "position slot may be rewritten, history slots are write-once."
+    Position is implicit — computed from start position + cumulative outcome
+    history during is_goal() and replay. No write-once exception needed.
+    All writes are Hole→Provisional, consistent with every other world.
 
-      Alternative (simpler, avoids write-once exception):
-      OP_MOVE only writes the history slot (1 diff). Position is computed from
-      history during is_goal() and replay. Position is implicit, not in state.
-
-      DECISION NEEDED: explicit position slot (richer state, write-once exception)
-      vs implicit position (simpler kernel, computed during goal check).
+    Intent/outcome slots alternate on layer 1:
+      Slot 0: intent_0, Slot 1: outcome_0, Slot 2: intent_1, Slot 3: outcome_1, ...
+      Slot MAX_STEPS*2: completion marker (solved or budget-exhausted).
 
   # ---------------------------------------------------------------------------
   # Evidence Obligations
@@ -168,9 +173,9 @@ design:
     Step 23: Cert-only equivalence render (re-render from tape, compare bytes).
     Step 24: Cert-only replay invariant check (verify each OP_MOVE against witness).
 
-    Belt-and-suspenders: if tape contains OP_MOVE (applied candidates with
-    Code32::new(1,3,1)), but evidence_obligations doesn't declare
-    "stochastic_witness_v1", Cert fails with ObligationMismatch.
+    Belt-and-suspenders: if tape contains OP_INTENT or OP_OUTCOME applied
+    candidates but evidence_obligations doesn't declare "stochastic_witness_v1",
+    Cert fails with ObligationMismatch. Uses check_obligation_belt_and_suspenders().
 
   # ---------------------------------------------------------------------------
   # Stochastic Witness Artifact Schema
@@ -209,12 +214,12 @@ design:
     StochasticInvariantChecker implements ReplayInvariantChecker.
     Constructor takes the witness stream entries.
 
-    On each OP_MOVE step:
-    1. Look up witness entry by step_index.
-    2. Verify intended_direction matches the OP_MOVE arg.
-    3. Verify actual_position matches what the witness entry's actual_direction
-       would produce from the previous position on the grid.
-    4. Track slip count.
+    On each step pair:
+    1. OP_INTENT: verify intended_direction in op_args matches witness entry.
+    2. OP_OUTCOME: verify actual_direction in op_args matches witness entry.
+       Verify implied position update is consistent with grid geometry
+       (wall absorption, direction encoding).
+    3. Track slip count (intended != actual).
 
     After all steps: verify total slip count matches witness aggregate.
 
@@ -264,17 +269,33 @@ change_budget:
   max_loc: 1200
 
 milestones:
+  - id: M0
+    title: "Pre-step: obligation gating refactor"
+    status: complete
+    description: >
+      Extract read_evidence_obligations() and check_obligation_belt_and_suspenders()
+      helpers in bundle.rs. Eliminates 3x duplication and establishes the reusable
+      facility for STOCH-001's third obligation-gated derived artifact.
+    acceptance:
+      - "read_evidence_obligations() used by all three verification functions"
+      - "check_obligation_belt_and_suspenders() used by tool and epistemic checks"
+      - "688 tests pass, clippy clean"
+    evidence:
+      - "6a32679: refactor(harness): extract obligation gating helpers in bundle.rs"
+
   - id: M1
-    title: "Kernel: OP_MOVE operator + EffectKind::RecordsTransitionOutcome"
+    title: "Kernel: OP_INTENT + OP_OUTCOME operators"
     status: pending
     description: >
-      Add OP_MOVE operator constant, arg builder, dispatch handler, and
-      EffectKind::RecordsTransitionOutcome with post-apply validation.
-      Add DOMAIN_WITNESS_STORE to HashDomain enum.
+      Add OP_INTENT and OP_OUTCOME operator constants, arg builders, dispatch
+      handlers, and EffectKind::WritesIntent / EffectKind::WritesOutcome with
+      post-apply validation. Add DOMAIN_WITNESS_STORE to HashDomain enum.
+      Two-phase design mirrors POBS GUESS/FEEDBACK cadence.
     acceptance:
-      - "OP_MOVE applies successfully with correct arg layout"
-      - "EffectKind::RecordsTransitionOutcome validates correct diff count"
-      - "Wrong diff count rejected"
+      - "OP_INTENT applies successfully with correct arg layout (1 diff)"
+      - "OP_OUTCOME applies successfully with correct arg layout (1 diff)"
+      - "EffectKind::WritesIntent and WritesOutcome validate correct diff count"
+      - "Wrong diff count rejected for both operators"
       - "DOMAIN_WITNESS_STORE hash domain exists"
 
   - id: M2
@@ -368,7 +389,7 @@ acceptance_criteria:
     status: pending
   - id: AC11
     description: "ADR 0009 committed and referenced."
-    status: pending
+    status: met
 
 invariants:
   - >-
@@ -377,23 +398,28 @@ invariants:
     BEFORE search begins. The witness stream is the authoritative randomness
     source — the verifier never needs the seed or PRNG algorithm.
   - >-
-    INV-STOCH-02: Each OP_MOVE writes exactly 1 history slot (Hole→Provisional).
-    No slot is written twice. Position is implicit (computed from move history),
-    not stored in state, avoiding write-once exceptions.
+    INV-STOCH-02: Each OP_INTENT and OP_OUTCOME writes exactly 1 slot
+    (Hole→Provisional). No slot is written twice. Position is implicit
+    (computed from outcome history), not stored in state, avoiding
+    write-once exceptions. Intent/outcome slots alternate on layer 1.
   - >-
-    INV-STOCH-03: OP_MOVE kernel dispatch does not read the witness stream or
-    validate transition correctness. The kernel enforces write-surface bounds
-    (1 identity diff, 1 status diff). Truth-dependent validation (does the
-    recorded outcome match the witness?) is the verifier's job via replay.
+    INV-STOCH-03: OP_INTENT and OP_OUTCOME kernel dispatch handlers do not read
+    the witness stream or validate transition correctness. The kernel enforces
+    write-surface bounds (1 identity diff, 1 status diff per operator).
+    Truth-dependent validation (does the outcome match the witness?) is the
+    verifier's job via replay.
   - >-
-    INV-STOCH-04: Stochastic witness entries are consumed in order during
-    enumerate_candidates(). Step index in witness entry matches expansion
-    step index. No skipping, no reordering.
+    INV-STOCH-04: Witness entries are consumed in order during
+    enumerate_candidates() at each OP_OUTCOME resolve step. Step index in
+    witness entry matches the outcome step index. No skipping, no reordering.
+    At each resolve step, exactly one legal candidate exists (determined by
+    the next witness entry).
   - >-
     INV-STOCH-05: Replay invariant checker independently verifies each
-    transition outcome against the witness stream. Intended direction from
-    OP_MOVE args must match witness entry. Actual outcome position must match
-    witness entry's actual_direction applied to grid.
+    transition outcome against the witness stream. At each OP_INTENT step,
+    intended direction matches the witness entry. At each OP_OUTCOME step,
+    realized direction matches the witness entry's actual_direction, and
+    the implied position update is consistent with the grid geometry.
   - >-
     INV-STOCH-06: Existing worlds with evidence_obligations: [] continue to
     build and verify without changes. witness_store_digest: None is the default.
@@ -403,16 +429,18 @@ invariants:
     witness bytes (Cert equivalence, downstream binding convention). Witness is
     rendered from tape + committed witness stream.
   - >-
-    INV-STOCH-08: Belt-and-suspenders: if tape contains OP_MOVE applied
-    candidates but evidence_obligations does not declare "stochastic_witness_v1",
-    Cert fails with ObligationMismatch. Prevents silent obligation stripping.
+    INV-STOCH-08: Belt-and-suspenders: if tape contains OP_INTENT or OP_OUTCOME
+    applied candidates but evidence_obligations does not declare
+    "stochastic_witness_v1", Cert fails with ObligationMismatch. Uses the
+    reusable check_obligation_belt_and_suspenders() facility. Prevents silent
+    obligation stripping.
 
 errors:
   - id: STOCH-ERR-WITNESS-MISMATCH
     variant: "WitnessTransitionMismatch { step_index: usize, expected_direction: String, actual_direction: String }"
     description: >-
-      Replay invariant: the OP_MOVE intended direction or actual outcome does not
-      match the witness stream entry at the corresponding step index.
+      Replay invariant: the OP_INTENT intended direction or OP_OUTCOME realized
+      direction does not match the witness stream entry at the corresponding step.
 
   - id: STOCH-ERR-WITNESS-EXHAUSTED
     variant: "WitnessStreamExhausted { step_index: usize }"
@@ -501,19 +529,20 @@ contracts:
   - id: CTR-STOCH-01
     type: kernel_api
     description: >-
-      apply() dispatches OP_MOVE through three-phase check.
-      RecordsTransitionOutcome validates 1 identity diff + 1 status diff
-      (history slot write). No dispatch handler reads the witness stream
-      or validates transition correctness.
+      apply() dispatches OP_INTENT and OP_OUTCOME through three-phase check.
+      WritesIntent validates 1 identity diff + 1 status diff (intent slot).
+      WritesOutcome validates 1 identity diff + 1 status diff (outcome slot).
+      No dispatch handler reads the witness stream or validates transition
+      correctness. Two-phase mirrors POBS GUESS/FEEDBACK cadence.
     parties: [kernel/operators/apply, kernel/operators/operator_registry]
 
   - id: CTR-STOCH-02
     type: witness_replay
     description: >-
       replay_winning_path(tape, root_state, registry, checker) re-executes
-      the winning path. StochasticInvariantChecker verifies each OP_MOVE
-      against the witness stream (direction match, outcome match, slip tracking).
-      Generic replay facility reused from POBS-001.
+      the winning path. StochasticInvariantChecker verifies each OP_INTENT
+      and OP_OUTCOME pair against the witness stream (direction match, outcome
+      match, slip tracking). Generic replay facility reused from POBS-001.
     parties: [harness/witness, harness/bundle]
 
   - id: CTR-STOCH-03
@@ -537,22 +566,22 @@ open_questions:
       Explicit position slot (richer state, requires write-once exception for
       position slot) vs implicit position (simpler kernel, position computed from
       move history during goal check and replay)?
-    recommendation: >
-      Implicit position is simpler and avoids introducing a Provisional→Provisional
-      rewrite exception. Position can be computed from start + cumulative move
-      history. The history slots are write-once (Hole→Provisional), consistent
-      with every other world. The EffectKind then only needs 1 diff (history slot),
-      matching the simplest existing pattern (WritesOneSlotFromArgs).
-    status: open
+    resolution: >
+      Implicit position. Two-phase design (OP_INTENT + OP_OUTCOME) writes only
+      history slots (Hole→Provisional). Position is computed from start +
+      cumulative outcome history. No write-once exception needed. Consistent
+      with every other world. Each operator writes exactly 1 diff, matching
+      the simplest existing EffectKind pattern.
+    status: closed
 
   - id: OQ2
     question: >
       Should the witness stream be generated lazily during search (from an
       internal seed) and committed post-search, or pregenerated before search
       begins?
-    recommendation: >
-      Lazy generation + post-search commitment is fine as long as the committed
-      artifact is the STREAM, not the seed. The verifier never sees the seed.
-      Pre-generation is conceptually cleaner but wastes memory for long max_steps
-      budgets. Either way, the evidence surface is identical.
-    status: open
+    resolution: >
+      Lazy generation + post-search commitment. The world MAY internally use a
+      seed + PRNG to generate witness entries during enumerate_candidates(). The
+      committed artifact is the STREAM, not the seed. The verifier never sees the
+      seed. Evidence surface is identical either way.
+    status: closed
