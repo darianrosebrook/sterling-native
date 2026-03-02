@@ -17,7 +17,8 @@ world inventory for Sterling. Do not cite as canonical. See
 | RomeMiniSearch | harness | Built | Search | Path-finding, bundle verification |
 | SlotLatticeSearch | harness | Built (6 regimes) | Search | Budget governance, scorer advisory, trap/goal structure |
 | TransactionalKvStore | harness | Built | Carrier | Write-once transactions, marker-based commit/rollback |
-| Mastermind-like | -- | Planned | Epistemic | Partial observability, belief-state |
+| ToolKvStore | harness | Built | Tool Safety | Stage/commit/rollback operators, tool transcript artifact |
+| PartialObs (Mastermind) | harness | Built | Epistemic | Partial observability, belief monotonicity, winning-path replay |
 | Slippery Grid | -- | Planned | Stochastic | Probabilistic transitions |
 
 ## Built Worlds
@@ -85,20 +86,55 @@ semantics), (10) compute governance (single-step budget).
 **Rubric claims falsified:** Write-once violation, rollback-as-truth,
 uncommitted-goal acceptance.
 
+### ToolKvStore
+
+Two-layer KV store exercising tool-safety operators (OP_STAGE, OP_COMMIT,
+OP_ROLLBACK) with distinct EffectKind variants (StagesOneSlot,
+CommitsTransaction, RollsBackTransaction). Proves stage/commit/rollback
+protocol compliance, tool transcript rendering, and derived artifact
+downstream binding convention.
+
+**Capability axes exercised:** (6) tool safety (stage/commit/rollback
+protocol), (10) compute governance (transaction-bounded).
+
+**Rubric claims falsified:** Tool transcript forgery (Cert equivalence
+mismatch), layer-0 writes before commit, writes after rollback, tool
+transcript obligation omission.
+
+**CAWS spec:** TOOLSCRIPT-001 (closed)
+
+Source: `harness/src/worlds/tool_kv_store.rs`
+
+### PartialObs (Mastermind-style)
+
+Mastermind-style hidden-truth world with K=2 positions, V=3 values (9
+candidates). Two-layer ByteState: layer 0 (truth, write-protected after
+compile), layer 1 (workspace for guesses, feedback, solved marker). Two-step
+probe cycle: OP_GUESS (agent writes guess) → OP_FEEDBACK (environment writes
+bulls-only feedback computed from truth). OP_DECLARE when belief uniquely
+determines truth.
+
+Belief is fully implicit — NOT stored in ByteState. Reconstructed from probe
+history during winning-path replay. Belief monotonicity (non-increasing
+cardinality) is verified by the replay invariant checker.
+
+**Three-way authority division:**
+- **Kernel**: bounds write surface (diff counts, layer constraints, Hole→Provisional)
+- **World**: computes truth-dependent feedback in `enumerate_candidates` (harness privilege)
+- **Verifier**: proves correspondence via winning-path replay (re-executes operators, checks feedback correctness, belief monotonicity, declare correctness)
+
+**Capability axes exercised:** (2) partial observability, (5) uncertainty
+calibration (belief converges to 1 before declare).
+
+**Rubric claims falsified:** Truth layer writes, feedback incorrectness,
+belief monotonicity violation, declare-truth mismatch, epistemic transcript
+forgery (Cert equivalence via replay).
+
+**CAWS spec:** POBS-001 (closed)
+
+Source: `harness/src/worlds/partial_obs.rs`
+
 ## Planned Worlds
-
-### Mastermind-like (Partial Observability)
-
-**Target axes:** (2) partial observability, (5) uncertainty calibration.
-
-**Design sketch:** Hidden code of N pegs x K colors. Agent proposes guesses,
-receives structured feedback (correct position count, correct color count).
-Must maintain belief state over possible codes and choose
-information-maximizing probes.
-
-**Proof obligations:** Belief-state witness is content-addressed. Belief
-updates are deterministic given observation sequence. Agent never claims
-certainty without sufficient evidence.
 
 ### Slippery Grid (Stochastic Transitions)
 
@@ -118,12 +154,13 @@ Same seed produces identical trace.
 Each world operates in a truth regime that constrains what kinds of claims it
 can support:
 
-| Regime | What it proves | Required artifacts |
-|--------|---------------|-------------------|
-| Carrier | Compile-trace-replay determinism | ByteState, ByteTrace, verification report |
-| Search | Path-finding under budget + policy | SearchGraph, tape, scorer, operator registry |
-| Epistemic | Belief-state reasoning under partial info | Belief witness, observation envelope |
-| Stochastic | Robust planning under transition noise | Stochastic replay witness, degradation curve |
+| Regime | What it proves | Required artifacts | Status |
+|--------|---------------|-------------------|--------|
+| Carrier | Compile-trace-replay determinism | ByteState, ByteTrace, verification report | Proven (RomeMini, TransactionalKvStore) |
+| Search | Path-finding under budget + policy | SearchGraph, tape, scorer, operator registry | Proven (RomeMiniSearch, SlotLatticeSearch) |
+| Tool Safety | Stage/commit/rollback protocol compliance | tool_transcript.json + Cert equivalence | Proven (ToolKvStore, TOOLSCRIPT-001) |
+| Epistemic | Belief-state reasoning under partial info | epistemic_transcript.json + winning-path replay | Proven (PartialObs, POBS-001) |
+| Stochastic | Robust planning under transition noise | Stochastic replay witness, degradation curve | Planned |
 
 A world must declare its truth regime. Claims outside the regime are
 inadmissible. See the [parity audit](../../architecture/v1_v2_parity_audit.md)

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "94fe63d465e1540a",
+  "aggregate_hash": "d37358173f043788",
   "entry_count": 76,
   "entries": [
     {
@@ -122,7 +122,7 @@
       "authority": "architecture",
       "status": "Living audit — updated 2026-02-27",
       "scope": null,
-      "content_hash": "49f03f5ff64de225",
+      "content_hash": "582e2cd877fd2d1c",
       "links": [
         {
           "text": "`v2_success_rubric.md`",
@@ -277,7 +277,7 @@
       "authority": "canonical",
       "status": "v2 canonical — curated vocabulary for Sterling Native.",
       "scope": "Definitions enforced by contracts, invariants, and ADRs.",
-      "content_hash": "fe91b9fcc15eb9af",
+      "content_hash": "cc06e015d34d4580",
       "links": [
         {
           "text": "`code32_bytestate.md`",
@@ -382,7 +382,7 @@
       "authority": "canonical",
       "status": "v2 canonical",
       "scope": null,
-      "content_hash": "1152591dd77105e6",
+      "content_hash": "68dd7e4cb5c8bfd0",
       "links": []
     },
     {
@@ -489,7 +489,7 @@
       "authority": "reference",
       "status": "advisory",
       "scope": null,
-      "content_hash": "462bac13e56361d4",
+      "content_hash": "d23067b97d15bfa2",
       "links": [
         {
           "text": "parity audit",
@@ -755,7 +755,7 @@
       "authority": "reference",
       "status": "advisory",
       "scope": null,
-      "content_hash": "472c207371b286a7",
+      "content_hash": "7519dd96b0a0308d",
       "links": [
         {
           "text": "parity audit",

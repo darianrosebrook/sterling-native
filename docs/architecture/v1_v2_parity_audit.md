@@ -95,14 +95,14 @@ v2 has built the verification-grade engine block. v1 supersession now depends on
 | Field | Value |
 |-------|-------|
 | v1 source | `docs/reference/design_rationale/operator_policy.md` *(advisory)* |
-| v2 status | **Partial** |
-| v2 code | `kernel/src/operators/signature.rs` (OperatorSignature, OperatorCategory S/M/P/K/C), `kernel/src/operators/apply.rs` (apply() with SET_SLOT) |
-| v2 canonical doc | `docs/canonical/glossary.md` §Operator Layer |
-| CAWS spec | SPINE-001 M2 (operator dispatch), SC-001 M1 (search operators) |
-| Lock tests | `s1_m2_determinism.rs` (apply round-trip), `sc1_search_determinism.rs` (search operator legality) |
-| Parity target | **Contract parity** for operator contract shape; **Not started** for operator breadth. |
-| Gaps | v1 had 28 operators across 5 categories. v2 has SET_SLOT plus search-level expansion. ~~No operator registry artifact.~~ **Phase 0 complete** (SC-001): `OperatorRegistryV1` is a normative artifact with `operator_set_digest` bound into report/graph/tape. `apply()` requires registry snapshot (fail-closed). No capability-gating policies, no induced operators, no operator lifecycle beyond SET_SLOT. |
-| Next tasks | Operator breadth: truth-regime worlds will require new operator categories (tool, probe). Induction pipeline is Phase 2. |
+| v2 status | **Partial** (7 operators across 3 effect domains; breadth expanding per truth regime) |
+| v2 code | `kernel/src/operators/signature.rs` (OperatorSignature, OperatorCategory S/M/P/K/C), `kernel/src/operators/apply.rs` (apply() with 7 operators) |
+| v2 canonical doc | `docs/canonical/glossary.md` §Operator Layer, §Epistemic Operators |
+| CAWS spec | SPINE-001 M2 (dispatch), SC-001 M1 (search), TOOLSCRIPT-001 (tool ops, closed), POBS-001 (epistemic ops, closed) |
+| Lock tests | `s1_m2_determinism.rs`, `sc1_search_determinism.rs`, `tool_transcript.rs` (27 tests), `partial_obs.rs` (16 tests) |
+| Parity target | **Contract parity** for operator contract shape; **In progress** for operator breadth. |
+| Gaps | v1 had 28 operators across 5 categories. v2 has 7 operators across 3 effect domains: carrier (SET_SLOT), tool safety (OP_STAGE, OP_COMMIT, OP_ROLLBACK — TOOLSCRIPT-001), epistemic (OP_GUESS, OP_FEEDBACK, OP_DECLARE — POBS-001). **Phase 0 complete** (SC-001): `OperatorRegistryV1` is a normative artifact with `operator_set_digest` bound into report/graph/tape. `apply()` requires registry snapshot (fail-closed). Each truth regime adds operators with typed `EffectKind` variants and bounded-write validation. No induced operators yet. |
+| Next tasks | Stochastic world operators (Phase 1c). Induction pipeline is Phase 2. |
 
 #### A4. Deterministic replay (carrier level)
 

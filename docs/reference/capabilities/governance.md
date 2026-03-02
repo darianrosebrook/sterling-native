@@ -52,7 +52,7 @@ Governance enforcement is fail-closed at every level:
 
 Every tool interaction (external side effect) follows a stage/commit/rollback protocol with an auditable transcript. Stage records intent; commit records execution; rollback records abandonment. The transcript is a content-addressed artifact bound into the evidence bundle.
 
-The native substrate's TransactionalKvStore world already demonstrates stage/commit/rollback semantics at the world level. Governance tool transcripts extend this to external interactions.
+**Implemented (TOOLSCRIPT-001):** The native substrate's ToolKvStore world implements stage/commit/rollback as distinct kernel operators (OP_STAGE, OP_COMMIT, OP_ROLLBACK) with typed EffectKind variants. `tool_transcript.json` is a normative derived artifact rendered from the search tape, bound via the downstream binding convention (report `tool_transcript_digest` + Cert equivalence render). Cert verification independently renders the transcript from tape + registry and asserts byte-identical match. Belt-and-suspenders: if tape contains tool operator frames but the world doesn't declare `"tool_transcript_v1"` obligation, Cert fails with `ObligationMismatch`. See `search_evidence_contract.md` Step 19.
 
 ### Claim Reducibility
 
@@ -97,10 +97,13 @@ This document covers capabilities **C1** (Proof-carrying artifacts + verificatio
 - Authority boundary pinned by ADR 0006 (GR-1: **Resolved**)
 - Base/Cert verification profiles in `harness/src/bundle.rs`
 
+**What is implemented (since initial audit):**
+- Tool transcript integration — TOOLSCRIPT-001 (closed): `tool_transcript.json` artifact with stage/commit/rollback protocol, Cert equivalence render, obligation gating. See `harness/src/transcript.rs`, `harness/src/worlds/tool_kv_store.rs`.
+- Epistemic transcript + winning-path replay — POBS-001 (closed): `epistemic_transcript.json` artifact with belief evolution evidence, `replay_winning_path()` generic witness facility, Cert-only correspondence proofs. See `harness/src/witness.rs`, `harness/src/worlds/partial_obs.rs`.
+
 **What is proposed (not implemented):**
 - Campaign-level binding (a CertificationCampaign type tying policy + bundles + acceptance criteria) — Import Group C
 - Typed verdicts as first-class artifacts (a Verdict type with PASS/FAIL/SKIPPED variants and failure witnesses)
-- Tool transcript integration (a ToolTranscript artifact with stage/commit/rollback protocol)
 - PROMOTION and REPLAY run intents extending the existing Base/Cert profiles
 
 See Import Group C (Governance / certification campaigns) in the parity audit for the strategic context.

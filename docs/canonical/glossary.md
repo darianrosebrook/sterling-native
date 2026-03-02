@@ -131,6 +131,22 @@ Both can coexist in a bundle and are verified independently.
 
 **Compilation Replay:** The process of reconstructing identical ByteState from bundle-shipped inputs (`concept_registry.json` bytes, schema descriptor from `compilation_manifest.json`, fixture payload) via `compile()`. Cert-mode verification performs this replay and asserts byte-identical output, proving the compilation boundary is reproducible without access to the original domain state (CREPLAY-001).
 
+### Derived Artifacts and Evidence Obligations
+
+**Evidence Obligation:** A named, versioned contract declared by a world in `fixture.json` (via `FixtureDimensions.evidence_obligations`) that gates specific verification steps. Examples: `"tool_transcript_v1"` (requires tool transcript artifact + Cert equivalence), `"epistemic_transcript_v1"` (requires epistemic transcript + Cert equivalence), `"winning_path_replay_v1"` (requires Cert-only winning-path replay). Obligations are additive — worlds with no obligations skip the gated steps. See `search_evidence_contract.md` Steps 19–21.
+
+**Upstream vs Downstream Binding:** The binding direction convention for corridor artifacts. **Upstream** values (known at/during search) use 3-point binding: graph metadata + tape header + report. **Downstream** derived artifacts (rendered from tape after search) bind via normative artifact commitment (digest basis) + report convenience field + Cert equivalence render. Downstream digests must NOT appear in upstream surfaces to avoid dependency cycles.
+
+**Tool Transcript (`tool_transcript.json`):** A conditional normative artifact recording tool interaction events (STAGE/COMMIT/ROLLBACK) from the search tape. Downstream derived: rendered from tape + operator registry post-search. Bound via report `tool_transcript_digest` + Cert equivalence render (Step 19). Present only for worlds declaring `"tool_transcript_v1"` obligation (TOOLSCRIPT-001).
+
+**Epistemic Transcript (`epistemic_transcript.json`):** A conditional normative artifact recording epistemic replay evidence: guess/feedback/declare operations with belief evolution (cardinality at each step). Downstream derived: rendered via winning-path replay visitor from compiled root state + tape + registry. Bound via report `epistemic_transcript_digest` + Cert equivalence render via replay (Step 20). Present only for worlds declaring `"epistemic_transcript_v1"` obligation (POBS-001).
+
+**Winning-Path Replay:** A Cert-only verification primitive (`harness/src/witness.rs`) that re-executes the winning path from compiled root state. Extracts goal path from tape, replays operators sequentially via `apply()`, verifies state fingerprints at each step, and invokes a world-specific `ReplayInvariantChecker` for semantic invariant verification. Gated by `"winning_path_replay_v1"` obligation. Generic — any world can opt in by providing an invariant checker. Stronger than render-only equivalence because it re-executes operators and checks intermediate states (POBS-001).
+
+### Epistemic Operators
+
+**OP_GUESS, OP_FEEDBACK, OP_DECLARE:** Kernel operators for epistemic truth regimes (domain 1, kind 2). All are bounded-write primitives — they write to workspace (layer 1) only, never read or write truth (layer 0). `OP_GUESS` writes K guess values (EffectKind: `WritesGuess`). `OP_FEEDBACK` writes 1 feedback value (EffectKind: `WritesFeedback`). `OP_DECLARE` writes a solved marker (EffectKind: `DeclaresSolution`). Feedback correctness and declare correctness are verified by winning-path replay, not by the kernel.
+
 ## Learning
 
 **Dual-Stream Evidence:** Sterling's induction substrate uses two evidence streams:

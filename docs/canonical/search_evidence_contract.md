@@ -25,9 +25,11 @@ A search bundle produced by `run_search()` contains the following artifacts:
 | `operator_registry.json` | Yes | Operator catalog with op IDs, signatures, effect kinds, and contract metadata | Always |
 | `concept_registry.json` | Yes | Code32↔ConceptID bijective mapping (RegistryV1 canonical bytes) | Always |
 | `scorer.json` | Yes | Scorer configuration and digest (TableScorer only) | Table scorer only |
+| `tool_transcript.json` | Yes | Tool interaction transcript with stage/commit/rollback audit trail | Tool worlds only (gated by `tool_transcript_v1` obligation) |
+| `epistemic_transcript.json` | Yes | Epistemic replay transcript with belief evolution and invariant evidence | Epistemic worlds only (gated by `epistemic_transcript_v1` obligation) |
 | `trace.bst1` | **No** (observational) | Carrier-level ByteTrace for compile/apply replay | When carrier trace is enabled |
 
-**Artifact count**: 8 (UniformScorer) or 9 (TableScorer).
+**Artifact count**: 8 (UniformScorer) or 9 (TableScorer) for worlds without evidence obligations. Tool worlds add `tool_transcript.json` (+1). Epistemic worlds add `epistemic_transcript.json` (+1). The presence of conditional artifacts is gated by the world's declared `evidence_obligations` in `fixture.json`.
 
 **Normative vs observational**: Normative artifacts participate in the bundle digest (via digest basis). Observational artifacts are present in the manifest but excluded from the digest. `trace.bst1` is observational because its envelope may carry non-deterministic metadata; its payload-level commitments (`payload_hash`, `step_chain_digest`) are captured in the normative verification report.
 
@@ -108,6 +110,66 @@ The pipeline runs as a sequence of numbered steps. Each step is fail-closed: a f
 
 18f. **Tape→graph equivalence** (Cert only): Render tape to `SearchGraphV1` via `render_graph()`, serialize to canonical JSON bytes, compare byte-for-byte to `search_graph.json` content. Mismatch → `TapeGraphEquivalenceMismatch`.
 
+### Tool transcript verification (Step 19, conditional)
+
+Step 19 is gated by `evidence_obligations` in `fixture.json`, not by operator registry contents.
+
+19a. **Obligation gating** (Cert only): If obligations include `"tool_transcript_v1"`, `tool_transcript.json` must be present. Missing → `ToolTranscriptMissing`.
+
+19b. **Digest binding** (both profiles, required-if-present): Report `tool_transcript_digest` must match `tool_transcript.json` content hash. Mismatch → `ToolTranscriptDigestMismatch`.
+
+19c. **Structural integrity** (both profiles): `entry_count` must match entries array length; `step_index` must be monotonic and in-bounds. Violation → `ToolTranscriptEntryCountMismatch`.
+
+19d. **Equivalence render** (Cert only): Independently render transcript from tape + operator registry, serialize to canonical JSON bytes, compare byte-for-byte. Mismatch → `ToolTranscriptEquivalenceMismatch`.
+
+19e. **Trace-order audit** (Cert only): Verify no layer-0 writes before COMMIT and no writes after ROLLBACK. Violation → `ToolTranscriptTraceOrderViolation`.
+
+**Belt-and-suspenders** (Cert only): If tape contains tool operator frames but `evidence_obligations` does not include `"tool_transcript_v1"`, fails with `ObligationMismatch`.
+
+### Epistemic transcript verification (Step 20, conditional)
+
+Step 20 is gated by `evidence_obligations` including `"epistemic_transcript_v1"`.
+
+20a. **Obligation gating** (Cert only): If obligations include `"epistemic_transcript_v1"`, `epistemic_transcript.json` must be present. Missing → `EpistemicTranscriptMissing`.
+
+20b. **Digest binding** (both profiles, required-if-present): Report `epistemic_transcript_digest` must match `epistemic_transcript.json` content hash. Mismatch → `EpistemicTranscriptDigestMismatch`. If transcript is present but report field is absent → `EpistemicTranscriptDigestMissing`.
+
+20c. **Structural integrity** (both profiles): `entry_count` must match entries array length. Violation → `EpistemicTranscriptEntryCountMismatch`.
+
+20d. **Equivalence render** (Cert only): Independently render transcript via winning-path replay (using the compiled root state from Step 12d), serialize to canonical JSON bytes, compare byte-for-byte. Mismatch → `EpistemicTranscriptEquivalenceMismatch`. This is stronger than Step 19d because it re-executes the operator sequence rather than scanning tape records, simultaneously verifying both transcript content and replay correctness.
+
+### Winning-path replay witness (Step 21, Cert only, conditional)
+
+Step 21 is gated by `evidence_obligations` including `"winning_path_replay_v1"`. Cert only.
+
+21a. **Path extraction**: Reconstruct goal path from tape `NodeCreation` parent chain, walking backwards from goal to root.
+
+21b. **Edge uniqueness**: For each parent→child pair on the winning path, exactly one `Applied` candidate must exist in the parent's expansion. Zero matches → `ReplayEdgeMissing`. Multiple matches → `ReplayEdgeAmbiguous`.
+
+21c. **Sequential apply**: Starting from compiled root ByteState (obtained from Step 12d's compilation replay), re-execute each operator on the winning path via `apply()`.
+
+21d. **Fingerprint verification**: After each apply, compute state fingerprint and compare to tape's `NodeCreation` fingerprint for the child node. Mismatch → `ReplayFingerprintMismatch`.
+
+21e. **World-specific invariants**: At each step, invoke the world's `ReplayInvariantChecker`. For partial observability worlds, this checks: no truth-layer writes (INV-POBS-01), feedback correctness (INV-POBS-03), belief monotonicity (INV-POBS-02), and declare correctness (INV-POBS-04). Violation → `WinningPathReplayFailed`.
+
+21f. **Strict belief decrease**: At least one feedback step must strictly decrease belief cardinality. No decrease → `WinningPathReplayFailed`.
+
+Note: Steps 20d and 21 share a single replay pass. The epistemic transcript is rendered as a replay visitor output, so one replay simultaneously proves transcript equivalence and winning-path correctness.
+
+### Binding direction conventions
+
+Not all artifacts participate in corridor binding the same way:
+
+**Upstream bindings** (values known at search start or during search): fixture digest, policy digest, registry digests, scorer digest, operator set digest. These use 3-point binding (graph metadata + tape header + report) because the values are available before or during search execution.
+
+**Downstream derived artifacts** (rendered from the authoritative trace after search completes): `tool_transcript.json`, `epistemic_transcript.json`, and future derived artifacts. These must NOT be placed in upstream surfaces — doing so creates a dependency cycle (the tape bytes would need to contain a digest of content derived from those same tape bytes). Downstream artifacts bind via:
+
+1. **Normative artifact commitment**: included in the digest basis (Steps 1–6), providing primary integrity binding.
+2. **Report convenience field**: digest pointer in `verification_report.json` (e.g., `tool_transcript_digest`, `epistemic_transcript_digest`). Required-if-present in Base, mandatory in Cert when obligation declared.
+3. **Cert equivalence render**: verifier independently renders the artifact from authoritative sources and asserts byte-identical match. For tool transcripts, this renders from tape + registry. For epistemic transcripts, this renders via winning-path replay from compiled root state + tape + registry.
+
+This convention applies to all future derived-from-tape artifacts: declare an evidence obligation, commit via digest basis, bind a convenience digest in the report, and prove correspondence via Cert equivalence render.
+
 ---
 
 ## What Base guarantees
@@ -133,8 +195,12 @@ When `verify_bundle_with_profile(bundle, Cert)` passes:
 - Compilation boundary replay succeeds: recompiling from bundle-shipped inputs (registry bytes, schema descriptor, fixture payload) produces byte-identical ByteState.
 - Tape and graph describe identical search behavior (tape→graph canonical byte equivalence).
 - The tape is the evidence spine; the graph is a verified derived view.
+- **Obligation-gated checks** (when declared by the world):
+  - Tool transcript equivalence: independently rendered transcript matches shipped artifact byte-for-byte (Step 19d). Trace-order audit verifies stage/commit/rollback protocol compliance (Step 19e).
+  - Epistemic transcript equivalence: independently rendered transcript via replay matches shipped artifact byte-for-byte (Step 20d).
+  - Winning-path replay: re-executes operators from compiled root state, verifies fingerprints at each step, and checks world-specific semantic invariants (Step 21).
 
-Cert is the promotion-eligible profile. A bundle that passes Cert verification provides a complete, tamper-evident evidence chain from compilation inputs through search execution to search outputs.
+Cert is the promotion-eligible profile. A bundle that passes Cert verification provides a complete, tamper-evident evidence chain from compilation inputs through search execution to search outputs, with correspondence proofs for any declared evidence obligations.
 
 ---
 

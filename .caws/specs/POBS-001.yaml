@@ -1,7 +1,7 @@
 id: POBS-001
 type: feature
 title: 'Partial Observability World + Winning-Path Witness'
-status: draft
+status: closed
 risk_tier: 2
 mode: development
 created_at: '2026-03-01T00:00:00.000Z'
@@ -584,7 +584,7 @@ acceptance:
       DeclaresSolution), dispatch handlers, and effect validation. All go
       through three-phase apply() check. No dispatch handler reads layer 0
       or computes truth-dependent values.
-    status: pending
+    status: met
 
   - id: POBS-001-EFFECT-KINDS
     description: >-
@@ -592,7 +592,7 @@ acceptance:
       layer 1 only (K from arg length). WritesFeedback validates exactly 1
       diff on layer 1. DeclaresSolution validates exactly 1 diff on layer 1.
       Negative tests: write to layer 0, wrong diff count, wrong slot region.
-    status: pending
+    status: met
 
   - id: POBS-001-WORLD
     description: >-
@@ -601,7 +601,7 @@ acceptance:
       (environment). OP_DECLARE when belief uniquely determines truth.
       evidence_obligations includes "epistemic_transcript_v1" and
       "winning_path_replay_v1".
-    status: pending
+    status: met
 
   - id: POBS-001-TRUTH-HIDDEN
     description: >-
@@ -609,7 +609,7 @@ acceptance:
       compilation. Kernel rejects any write (EffectContractViolation).
       No dispatch handler reads layer 0. World computes truth-dependent
       feedback in enumerate_candidates (harness privilege), not kernel.
-    status: pending
+    status: met
 
   - id: POBS-001-TWO-STEP-PROBE
     description: >-
@@ -618,7 +618,7 @@ acceptance:
       implements the state machine: detects which probe index has guess but
       no feedback and emits the appropriate operator. Kernel sees only
       bounded writes.
-    status: pending
+    status: met
 
   - id: POBS-001-BELIEF-MONOTONICITY
     description: >-
@@ -626,39 +626,39 @@ acceptance:
       state) is non-increasing across the winning path. At least one
       OP_FEEDBACK strictly decreases it. Verified by replay invariant
       checker.
-    status: pending
+    status: met
 
   - id: POBS-001-FEEDBACK-CORRECTNESS
     description: >-
       OP_FEEDBACK value is semantically correct: exact_match count matches
       independently recomputed count from (guess, truth). Verified by
       replay, not kernel. Kernel does not read truth.
-    status: pending
+    status: met
 
   - id: POBS-001-DECLARE-CORRECTNESS
     description: >-
       OP_DECLARE solution matches truth. Verified by replay and is_goal().
-    status: pending
+    status: met
 
   - id: POBS-001-REPLAY-GENERIC
     description: >-
       Winning-path replay is a generic facility in harness/src/witness.rs.
       Accepts a ReplayInvariantChecker trait. Any world can opt in via
       "winning_path_replay_v1" obligation. Not world-specific.
-    status: pending
+    status: met
 
   - id: POBS-001-REPLAY-FINGERPRINTS
     description: >-
       Replay reproduces exact state fingerprints at every step on the winning
       path. Compiled root state → sequential apply → fingerprint match.
-    status: pending
+    status: met
 
   - id: POBS-001-REPLAY-EDGE-UNIQUENESS
     description: >-
       For each parent→child pair on the winning path, exactly one Applied
       candidate in the parent's expansion produced the child. 0 matches →
       ReplayEdgeMissing. >1 matches → ReplayEdgeAmbiguous.
-    status: pending
+    status: met
 
   - id: POBS-001-TRANSCRIPT
     description: >-
@@ -666,13 +666,13 @@ acceptance:
       tape scan). Downstream binding: normative artifact + report digest +
       Cert equivalence. NOT in graph metadata or tape header. Belief
       evolution appears in transcript only (not in ByteState).
-    status: pending
+    status: met
 
   - id: POBS-001-BACKWARD-COMPAT
     description: >-
       Non-epistemic worlds unaffected. evidence_obligations defaults to empty.
       New verification steps skipped. No regressions.
-    status: pending
+    status: met
 
   - id: POBS-001-LOCK-TESTS
     description: >-
@@ -681,7 +681,7 @@ acceptance:
       illegal truth write rejected, feedback incorrectness detected by
       replay, belief monotonicity violation detected, edge ambiguity
       detected, backward compat.
-    status: pending
+    status: met
 
 milestones:
   - id: M0
@@ -699,7 +699,7 @@ milestones:
 
   - id: M1
     title: "Kernel operators: OP_GUESS, OP_FEEDBACK, OP_DECLARE"
-    status: pending
+    status: complete
     deliverables:
       - "kernel/src/operators/apply.rs: OP_GUESS, OP_FEEDBACK, OP_DECLARE constants + dispatch + handlers"
       - "kernel/src/operators/apply.rs: guess_args(), feedback_args(), declare_args() builders"
@@ -716,7 +716,7 @@ milestones:
 
   - id: M2
     title: "Partial observability world"
-    status: pending
+    status: complete
     deliverables:
       - "harness/src/worlds/partial_obs.rs: world struct + WorldHarnessV1 + SearchWorldV1"
       - "harness/src/worlds/mod.rs: pub mod partial_obs"
@@ -733,7 +733,7 @@ milestones:
 
   - id: M3
     title: "Winning-path replay facility"
-    status: pending
+    status: complete
     deliverables:
       - "harness/src/witness.rs (new): replay_winning_path() generic function"
       - "ReplayInvariantChecker trait: check(step, pre, post, op_code, op_args) -> Result<()>"
@@ -752,7 +752,7 @@ milestones:
 
   - id: M4
     title: "Epistemic transcript + invariant checker + corridor binding"
-    status: pending
+    status: complete
     deliverables:
       - "Invariant checker for partial obs world (implements ReplayInvariantChecker)"
       - "Transcript rendered as replay visitor output"
@@ -769,7 +769,7 @@ milestones:
 
   - id: M5
     title: "Lock tests"
-    status: pending
+    status: complete
     deliverables:
       - "tests/lock/src/bin/partial_obs_golden_generator.rs: golden fixture generator"
       - "tests/lock/fixtures/partial_obs_solve/: golden solve-path fixtures"
@@ -788,9 +788,15 @@ milestones:
       - "Search determinism: partial obs world produces deterministic results"
 
 evidence:
-  commits: []
-  total_tests: 635
-  lock_tests: []
+  commits:
+    - "af04126: feat(kernel): add OP_GUESS, OP_FEEDBACK, OP_DECLARE operators [POBS-001 M1]"
+    - "b492e9b: feat(harness): partial observability world [POBS-001 M2]"
+    - "79834c8: feat(harness): winning-path replay witness [POBS-001 M3]"
+    - "3065973: feat(harness): epistemic transcript + invariant checker + corridor binding [POBS-001 M4]"
+    - "f9b58c8: test(lock): partial observability lock tests [POBS-001 M5]"
+  total_tests: 685
+  lock_tests:
+    - "tests/lock/tests/partial_obs.rs: 16 tests (Base/Cert verification, transcript integrity, belief monotonicity, determinism, forged transcript negative, backward compat)"
 
 non_functional:
   a11y: []
