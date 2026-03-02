@@ -52,6 +52,23 @@ pub enum EffectKind {
     /// (marker Hole→Provisional). No precondition on staged slots —
     /// empty rollbacks are permitted.
     RollsBackTransaction,
+
+    /// Writes exactly K identity slots and K status slots on layer 1
+    /// (guess values for a probe). K is determined from `arg_byte_count / 4`.
+    /// All transitions must be Hole→Provisional. No writes to layer 0.
+    WritesGuess,
+
+    /// Writes exactly 1 identity slot and 1 status slot on layer 1
+    /// (feedback for a probe). Transition must be Hole→Provisional.
+    /// No writes to layer 0. The kernel does NOT validate the feedback
+    /// value against truth — that is the verifier's job.
+    WritesFeedback,
+
+    /// Writes exactly 1 identity slot and 1 status slot on layer 1
+    /// (the `solved_marker`). Transition must be Hole→Provisional.
+    /// No writes to layer 0. The kernel does NOT validate whether the
+    /// declared solution matches truth — that is the verifier's job.
+    DeclaresSolution,
 }
 
 impl EffectKind {
@@ -63,6 +80,9 @@ impl EffectKind {
             Self::StagesOneSlot => "stages_one_slot",
             Self::CommitsTransaction => "commits_transaction",
             Self::RollsBackTransaction => "rolls_back_transaction",
+            Self::WritesGuess => "writes_guess",
+            Self::WritesFeedback => "writes_feedback",
+            Self::DeclaresSolution => "declares_solution",
         }
     }
 
@@ -74,6 +94,9 @@ impl EffectKind {
             "stages_one_slot" => Some(Self::StagesOneSlot),
             "commits_transaction" => Some(Self::CommitsTransaction),
             "rolls_back_transaction" => Some(Self::RollsBackTransaction),
+            "writes_guess" => Some(Self::WritesGuess),
+            "writes_feedback" => Some(Self::WritesFeedback),
+            "declares_solution" => Some(Self::DeclaresSolution),
             _ => None,
         }
     }
@@ -301,11 +324,14 @@ fn status_mask_to_json(mask: &StatusMaskV1) -> serde_json::Value {
 // kernel_operator_registry() — the canonical V1 kernel registry
 // ---------------------------------------------------------------------------
 
-use crate::operators::apply::{OP_COMMIT, OP_ROLLBACK, OP_SET_SLOT, OP_STAGE};
+use crate::operators::apply::{
+    OP_COMMIT, OP_DECLARE, OP_FEEDBACK, OP_GUESS, OP_ROLLBACK, OP_SET_SLOT, OP_STAGE,
+};
 
 /// Build the canonical operator registry for the V1 kernel.
 ///
-/// Contains four entries: `OP_SET_SLOT`, `OP_STAGE`, `OP_COMMIT`, `OP_ROLLBACK`.
+/// Contains seven entries: `OP_SET_SLOT`, `OP_STAGE`, `OP_COMMIT`,
+/// `OP_ROLLBACK`, `OP_GUESS`, `OP_FEEDBACK`, `OP_DECLARE`.
 ///
 /// The harness calls this to get the registry for bundle artifact generation.
 /// Worlds call this (or receive it from the harness) for operator legality
@@ -374,9 +400,56 @@ pub fn kernel_operator_registry() -> OperatorRegistryV1 {
         contract_epoch: "v1".into(),
     };
 
+    // Epistemic operators (domain 1, kind 2): bounded-write primitives for
+    // partial observability. Dispatch handlers do NOT read layer 0 (truth).
+    // OP_GUESS args: [layer: u32, start_slot: u32, value_0: Code32, ..., value_{K-1}: Code32]
+    // For K=2: 4 + 4 + 2*4 = 16 bytes.
+    let guess = OperatorEntry {
+        op_id: OP_GUESS,
+        name: "GUESS".into(),
+        category: OperatorCategory::Seek,
+        arg_byte_count: 16, // layer u32 + start_slot u32 + K=2 values × 4 bytes
+        effect_kind: EffectKind::WritesGuess,
+        precondition_mask: empty_id_mask(),
+        effect_mask: empty_id_mask(),
+        status_effect_mask: empty_st_mask(),
+        cost_model: "unit".into(),
+        contract_epoch: "v1".into(),
+    };
+
+    // OP_FEEDBACK args: [layer: u32, slot: u32, value: Code32]
+    // 4 + 4 + 4 = 12 bytes.
+    let feedback = OperatorEntry {
+        op_id: OP_FEEDBACK,
+        name: "FEEDBACK".into(),
+        category: OperatorCategory::Perceive,
+        arg_byte_count: 12, // layer u32 + slot u32 + 1 value × 4 bytes
+        effect_kind: EffectKind::WritesFeedback,
+        precondition_mask: empty_id_mask(),
+        effect_mask: empty_id_mask(),
+        status_effect_mask: empty_st_mask(),
+        cost_model: "unit".into(),
+        contract_epoch: "v1".into(),
+    };
+
+    // OP_DECLARE args: [layer: u32, solved_marker_slot: u32, value_0: Code32, ..., value_{K-1}: Code32]
+    // For K=2: 4 + 4 + 2*4 = 16 bytes.
+    let declare = OperatorEntry {
+        op_id: OP_DECLARE,
+        name: "DECLARE".into(),
+        category: OperatorCategory::Control,
+        arg_byte_count: 16, // layer u32 + solved_slot u32 + K=2 values × 4 bytes
+        effect_kind: EffectKind::DeclaresSolution,
+        precondition_mask: empty_id_mask(),
+        effect_mask: empty_id_mask(),
+        status_effect_mask: empty_st_mask(),
+        cost_model: "unit".into(),
+        contract_epoch: "v1".into(),
+    };
+
     OperatorRegistryV1::new(
         "operator_registry.v1".into(),
-        vec![set_slot, stage, commit, rollback],
+        vec![set_slot, stage, commit, rollback, guess, feedback, declare],
     )
     .expect("kernel_operator_registry: static invariant violated")
 }
@@ -513,7 +586,7 @@ mod tests {
     #[test]
     fn kernel_operator_registry_has_all_operators() {
         let reg = kernel_operator_registry();
-        assert_eq!(reg.len(), 4);
+        assert_eq!(reg.len(), 7);
 
         let set_slot = reg.get(&OP_SET_SLOT).unwrap();
         assert_eq!(set_slot.name, "SET_SLOT");
@@ -539,6 +612,24 @@ mod tests {
         assert_eq!(rollback.category, OperatorCategory::Control);
         assert_eq!(rollback.arg_byte_count, 4);
         assert_eq!(rollback.effect_kind, EffectKind::RollsBackTransaction);
+
+        let guess = reg.get(&OP_GUESS).unwrap();
+        assert_eq!(guess.name, "GUESS");
+        assert_eq!(guess.category, OperatorCategory::Seek);
+        assert_eq!(guess.arg_byte_count, 16);
+        assert_eq!(guess.effect_kind, EffectKind::WritesGuess);
+
+        let feedback = reg.get(&OP_FEEDBACK).unwrap();
+        assert_eq!(feedback.name, "FEEDBACK");
+        assert_eq!(feedback.category, OperatorCategory::Perceive);
+        assert_eq!(feedback.arg_byte_count, 12);
+        assert_eq!(feedback.effect_kind, EffectKind::WritesFeedback);
+
+        let declare = reg.get(&OP_DECLARE).unwrap();
+        assert_eq!(declare.name, "DECLARE");
+        assert_eq!(declare.category, OperatorCategory::Control);
+        assert_eq!(declare.arg_byte_count, 16);
+        assert_eq!(declare.effect_kind, EffectKind::DeclaresSolution);
     }
 
     #[test]
@@ -548,6 +639,9 @@ mod tests {
             EffectKind::StagesOneSlot,
             EffectKind::CommitsTransaction,
             EffectKind::RollsBackTransaction,
+            EffectKind::WritesGuess,
+            EffectKind::WritesFeedback,
+            EffectKind::DeclaresSolution,
         ] {
             assert_eq!(EffectKind::parse(kind.as_str()), Some(kind));
         }
@@ -567,20 +661,30 @@ mod tests {
         assert!(s.starts_with('{'));
         assert!(s.ends_with('}'));
         assert!(s.contains("\"schema_version\":\"operator_registry.v1\""));
-        // All four operators present
+        // All seven operators present
         assert!(s.contains("\"name\":\"SET_SLOT\""));
         assert!(s.contains("\"name\":\"STAGE\""));
         assert!(s.contains("\"name\":\"COMMIT\""));
         assert!(s.contains("\"name\":\"ROLLBACK\""));
+        assert!(s.contains("\"name\":\"GUESS\""));
+        assert!(s.contains("\"name\":\"FEEDBACK\""));
+        assert!(s.contains("\"name\":\"DECLARE\""));
         // Effect kinds
         assert!(s.contains("\"effect_kind\":\"writes_one_slot_from_args\""));
         assert!(s.contains("\"effect_kind\":\"stages_one_slot\""));
         assert!(s.contains("\"effect_kind\":\"commits_transaction\""));
         assert!(s.contains("\"effect_kind\":\"rolls_back_transaction\""));
+        assert!(s.contains("\"effect_kind\":\"writes_guess\""));
+        assert!(s.contains("\"effect_kind\":\"writes_feedback\""));
+        assert!(s.contains("\"effect_kind\":\"declares_solution\""));
         // Op IDs: SET_SLOT(1,1,1), STAGE(1,1,2), COMMIT(1,1,3), ROLLBACK(1,1,4)
         assert!(s.contains("\"op_id\":[1,1,1,0]"));
         assert!(s.contains("\"op_id\":[1,1,2,0]"));
         assert!(s.contains("\"op_id\":[1,1,3,0]"));
         assert!(s.contains("\"op_id\":[1,1,4,0]"));
+        // GUESS(1,2,1), FEEDBACK(1,2,2), DECLARE(1,2,3)
+        assert!(s.contains("\"op_id\":[1,2,1,0]"));
+        assert!(s.contains("\"op_id\":[1,2,2,0]"));
+        assert!(s.contains("\"op_id\":[1,2,3,0]"));
     }
 }
