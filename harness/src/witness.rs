@@ -29,6 +29,47 @@ use sterling_search::tape::{
 /// Evidence obligation string that gates winning-path replay.
 pub const OBLIGATION_WINNING_PATH_REPLAY: &str = "winning_path_replay_v1";
 
+/// Evidence obligation string that gates epistemic transcript production.
+pub const OBLIGATION_EPISTEMIC_TRANSCRIPT: &str = "epistemic_transcript_v1";
+
+/// Epistemic operator codes for belt-and-suspenders obligation checking.
+const EPISTEMIC_OPS: [Code32; 3] = [
+    sterling_kernel::operators::apply::OP_GUESS,
+    sterling_kernel::operators::apply::OP_FEEDBACK,
+    sterling_kernel::operators::apply::OP_DECLARE,
+];
+
+/// Check if a `Code32` is an epistemic operator.
+fn is_epistemic_op(code: Code32) -> bool {
+    EPISTEMIC_OPS.contains(&code)
+}
+
+/// Check whether a tape contains any applied epistemic operator frames.
+///
+/// Scans all expansion records for applied candidates with epistemic
+/// op codes (`OP_GUESS`, `OP_FEEDBACK`, `OP_DECLARE`). Used for the
+/// belt-and-suspenders cross-check: if the tape contains epistemic ops
+/// but `evidence_obligations` doesn't include `epistemic_transcript_v1`
+/// (and `winning_path_replay_v1`), Cert fails with `ObligationMismatch`.
+#[must_use]
+pub fn tape_contains_epistemic_ops(tape: &SearchTapeV1) -> bool {
+    for record in &tape.records {
+        let TapeRecordV1::Expansion(expansion) = record else {
+            continue;
+        };
+        for candidate in &expansion.candidates {
+            if !matches!(candidate.outcome, TapeCandidateOutcomeV1::Applied { .. }) {
+                continue;
+            }
+            let op_code = Code32::from_le_bytes(candidate.op_code_bytes);
+            if is_epistemic_op(op_code) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 // ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------

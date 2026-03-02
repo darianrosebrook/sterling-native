@@ -361,3 +361,115 @@ fn backward_compat_tool_kv_store_still_verifies() {
     verify_bundle(&bundle).expect("Base");
     verify_bundle_with_profile(&bundle, VerificationProfile::Cert).expect("Cert");
 }
+
+#[test]
+fn stripped_obligations_cert_fails_closed() {
+    use sterling_harness::bundle::{build_bundle, ArtifactInput};
+
+    let bundle = partial_obs_bundle();
+
+    // Tamper: strip evidence_obligations from fixture.json, remove the
+    // epistemic transcript, and remove the report digest field.
+    // Keep the tape untouched — it still contains epistemic op frames.
+    //
+    // This exercises the "silent omission" attack vector: a malicious
+    // bundle producer strips obligations to suppress Steps 20/21.
+    // Multiple verification steps catch this:
+    //   - Step 12: graph metadata fixture_digest mismatch (fixture content changed)
+    //   - Step 18d: tape header fixture_digest mismatch (Cert)
+    //   - Step 20: ObligationMismatch belt-and-suspenders (Cert)
+    // The corridor is fail-closed: ANY of these prevents Cert verification.
+    let mut artifacts: Vec<ArtifactInput> = Vec::new();
+    for (name, art) in &bundle.artifacts {
+        if name == "epistemic_transcript.json" {
+            continue;
+        }
+        if name == "fixture.json" {
+            let mut fixture: serde_json::Value =
+                serde_json::from_slice(&art.content).expect("fixture JSON");
+            fixture["evidence_obligations"] = serde_json::json!([]);
+            let fixture_bytes =
+                sterling_kernel::proof::canon::canonical_json_bytes(&fixture).expect("canon");
+            artifacts.push(ArtifactInput {
+                name: name.clone(),
+                content: fixture_bytes,
+                normative: true,
+                precomputed_hash: None,
+            });
+        } else if name == "verification_report.json" {
+            let mut report: serde_json::Value =
+                serde_json::from_slice(&art.content).expect("report JSON");
+            if let Some(obj) = report.as_object_mut() {
+                obj.remove("epistemic_transcript_digest");
+            }
+            let report_bytes =
+                sterling_kernel::proof::canon::canonical_json_bytes(&report).expect("canon");
+            artifacts.push(ArtifactInput {
+                name: name.clone(),
+                content: report_bytes,
+                normative: true,
+                precomputed_hash: None,
+            });
+        } else {
+            artifacts.push(ArtifactInput {
+                name: name.clone(),
+                content: art.content.clone(),
+                normative: art.normative,
+                precomputed_hash: None,
+            });
+        }
+    }
+
+    let tampered_bundle = build_bundle(artifacts).expect("rebuild");
+
+    // Cert must fail. The corridor catches obligation stripping at
+    // multiple defense layers (fixture digest binding, tape header
+    // binding, and the belt-and-suspenders ObligationMismatch check).
+    assert!(
+        verify_bundle_with_profile(&tampered_bundle, VerificationProfile::Cert).is_err(),
+        "stripped obligations must fail Cert verification"
+    );
+}
+
+/// Verify that the tape epistemic op detection primitive works correctly.
+/// This is the foundation of the belt-and-suspenders check.
+#[test]
+fn tape_contains_epistemic_ops_on_partial_obs_bundle() {
+    use sterling_harness::witness::tape_contains_epistemic_ops;
+    use sterling_search::tape_reader::read_tape;
+
+    let bundle = partial_obs_bundle();
+    let tape_art = bundle
+        .artifacts
+        .get("search_tape.stap")
+        .expect("tape must exist");
+    let tape = read_tape(&tape_art.content).expect("tape parse");
+
+    // PartialObs tape must contain epistemic ops.
+    assert!(
+        tape_contains_epistemic_ops(&tape),
+        "partial obs tape must contain epistemic operator frames"
+    );
+}
+
+/// Verify that non-epistemic world tapes don't trigger epistemic op detection.
+#[test]
+fn tape_no_epistemic_ops_on_rome_mini_search() {
+    use sterling_harness::witness::tape_contains_epistemic_ops;
+    use sterling_harness::worlds::rome_mini_search::RomeMiniSearch;
+    use sterling_search::tape_reader::read_tape;
+
+    let policy = SearchPolicyV1::default();
+    let bundle =
+        run_search(&RomeMiniSearch, &policy, &ScorerInputV1::Uniform).expect("rome search");
+    let tape_art = bundle
+        .artifacts
+        .get("search_tape.stap")
+        .expect("tape must exist");
+    let tape = read_tape(&tape_art.content).expect("tape parse");
+
+    assert!(
+        !tape_contains_epistemic_ops(&tape),
+        "RomeMiniSearch tape must not contain epistemic operator frames"
+    );
+}

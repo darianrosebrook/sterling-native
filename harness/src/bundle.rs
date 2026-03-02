@@ -2246,6 +2246,40 @@ fn verify_epistemic_transcript(
 
     let has_obligation = obligations.iter().any(|o| o == "epistemic_transcript_v1");
 
+    // Belt-and-suspenders (Cert only): if tape contains epistemic operator frames
+    // but evidence_obligations does not declare the epistemic obligations,
+    // fail with ObligationMismatch. Prevents silent omission of Steps 20/21.
+    // This check runs BEFORE the early return so it catches the case where
+    // obligations are stripped and the transcript is also removed.
+    if profile == VerificationProfile::Cert {
+        let tape_artifact = bundle.artifacts.get("search_tape.stap");
+        if let Some(tape_art) = tape_artifact {
+            if let Ok(tape) = read_tape(&tape_art.content) {
+                if crate::witness::tape_contains_epistemic_ops(&tape) {
+                    if !has_obligation {
+                        return Err(BundleVerifyError::ObligationMismatch {
+                            detail: "tape contains epistemic operator frames but \
+                                evidence_obligations does not include \
+                                \"epistemic_transcript_v1\""
+                                .to_string(),
+                        });
+                    }
+                    let has_replay = obligations
+                        .iter()
+                        .any(|o| o == crate::witness::OBLIGATION_WINNING_PATH_REPLAY);
+                    if !has_replay {
+                        return Err(BundleVerifyError::ObligationMismatch {
+                            detail: "tape contains epistemic operator frames but \
+                                evidence_obligations does not include \
+                                \"winning_path_replay_v1\""
+                                .to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     // Gate: Cert requires artifact if obligation declared.
     if profile == VerificationProfile::Cert && has_obligation && transcript_artifact.is_none() {
         return Err(BundleVerifyError::EpistemicTranscriptMissing);
