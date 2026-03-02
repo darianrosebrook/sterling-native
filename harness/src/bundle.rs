@@ -1831,6 +1831,76 @@ fn verify_tape(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Obligation helpers — shared across derived-artifact verification steps
+// ---------------------------------------------------------------------------
+
+/// Read `evidence_obligations` from `fixture.json` in the bundle.
+///
+/// Returns an empty vec if the fixture is absent, unparseable, or lacks the field.
+fn read_evidence_obligations(bundle: &ArtifactBundleV1) -> Vec<String> {
+    bundle
+        .artifacts
+        .get("fixture.json")
+        .and_then(|a| serde_json::from_slice::<serde_json::Value>(&a.content).ok())
+        .and_then(|v| {
+            v.get("evidence_obligations")
+                .and_then(|arr| arr.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+        })
+        .unwrap_or_default()
+}
+
+/// Belt-and-suspenders check: if tape contains operator frames matching the
+/// predicate but the expected obligations are not declared, fail Cert with
+/// `ObligationMismatch`.
+///
+/// `tape_predicate` should return true if the tape contains applied operators
+/// that semantically require the obligation(s).
+///
+/// `required_obligations` is the list of obligation strings that must all be
+/// present if the predicate fires. For tool transcript this is
+/// `["tool_transcript_v1"]`; for epistemic this is
+/// `["epistemic_transcript_v1", "winning_path_replay_v1"]`.
+fn check_obligation_belt_and_suspenders<F>(
+    bundle: &ArtifactBundleV1,
+    profile: VerificationProfile,
+    obligations: &[String],
+    required_obligations: &[&str],
+    tape_predicate: F,
+) -> Result<(), BundleVerifyError>
+where
+    F: FnOnce(&sterling_search::tape::SearchTapeV1) -> bool,
+{
+    if profile != VerificationProfile::Cert {
+        return Ok(());
+    }
+    let Some(tape_art) = bundle.artifacts.get("search_tape.stap") else {
+        return Ok(());
+    };
+    let Ok(tape) = read_tape(&tape_art.content) else {
+        return Ok(());
+    };
+    if !tape_predicate(&tape) {
+        return Ok(());
+    }
+    for &req in required_obligations {
+        if !obligations.iter().any(|o| o == req) {
+            return Err(BundleVerifyError::ObligationMismatch {
+                detail: format!(
+                    "tape contains operator frames requiring \"{req}\" \
+                     but evidence_obligations does not include it"
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Tool transcript verification pipeline (profile-dependent).
 ///
 /// Base: if `tool_transcript.json` present, verify digest binding only.
@@ -1843,24 +1913,20 @@ fn verify_tool_transcript(
 ) -> Result<(), BundleVerifyError> {
     let transcript_artifact = bundle.artifacts.get("tool_transcript.json");
     let report_artifact = bundle.artifacts.get("verification_report.json");
-    let fixture_artifact = bundle.artifacts.get("fixture.json");
     let tape_artifact = bundle.artifacts.get("search_tape.stap");
 
-    // Read evidence_obligations from fixture.json.
-    let obligations: Vec<String> = fixture_artifact
-        .and_then(|a| serde_json::from_slice::<serde_json::Value>(&a.content).ok())
-        .and_then(|v| {
-            v.get("evidence_obligations")
-                .and_then(|arr| arr.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                })
-        })
-        .unwrap_or_default();
-
+    let obligations = read_evidence_obligations(bundle);
     let has_obligation = obligations.iter().any(|o| o == "tool_transcript_v1");
+
+    // Belt-and-suspenders: tape has tool ops but obligation not declared.
+    // Runs before early return so "strip obligation + drop artifact" is caught.
+    check_obligation_belt_and_suspenders(
+        bundle,
+        profile,
+        &obligations,
+        &["tool_transcript_v1"],
+        crate::transcript::tape_contains_tool_ops,
+    )?;
 
     // Step 19a: Cert obligation gating.
     if profile == VerificationProfile::Cert && has_obligation && transcript_artifact.is_none() {
@@ -1870,22 +1936,6 @@ fn verify_tool_transcript(
     // If no transcript artifact, nothing more to verify (Base skips entirely,
     // Cert without obligation skips).
     let Some(transcript_art) = transcript_artifact else {
-        // Cert belt-and-suspenders: check if tape contains tool ops
-        // but obligation is missing.
-        if profile == VerificationProfile::Cert {
-            if let Some(tape_art) = tape_artifact {
-                if let Ok(tape) = read_tape(&tape_art.content) {
-                    if crate::transcript::tape_contains_tool_ops(&tape) && !has_obligation {
-                        return Err(BundleVerifyError::ObligationMismatch {
-                            detail: "tape contains tool operator frames but \
-                                evidence_obligations does not include \
-                                \"tool_transcript_v1\""
-                                .to_string(),
-                        });
-                    }
-                }
-            }
-        }
         return Ok(());
     };
 
@@ -1992,15 +2042,6 @@ fn verify_tool_transcript(
                 return Err(BundleVerifyError::ToolTranscriptEquivalenceMismatch {
                     expected_hash: transcript_art.content_hash.as_str().to_string(),
                     rendered_hash: rendered_hash.as_str().to_string(),
-                });
-            }
-
-            // Cert belt-and-suspenders: if tape contains tool ops, obligation must be declared.
-            if crate::transcript::tape_contains_tool_ops(&tape) && !has_obligation {
-                return Err(BundleVerifyError::ObligationMismatch {
-                    detail: "tape contains tool operator frames but \
-                        evidence_obligations does not include \"tool_transcript_v1\""
-                        .to_string(),
                 });
             }
 
@@ -2227,58 +2268,24 @@ fn verify_epistemic_transcript(
     bundle: &ArtifactBundleV1,
     profile: VerificationProfile,
 ) -> Result<(), BundleVerifyError> {
-    let fixture_artifact = bundle.artifacts.get("fixture.json");
     let transcript_artifact = bundle.artifacts.get("epistemic_transcript.json");
 
-    // Read evidence_obligations from fixture.json.
-    let obligations: Vec<String> = fixture_artifact
-        .and_then(|a| serde_json::from_slice::<serde_json::Value>(&a.content).ok())
-        .and_then(|v| {
-            v.get("evidence_obligations")
-                .and_then(|arr| arr.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                })
-        })
-        .unwrap_or_default();
-
+    let obligations = read_evidence_obligations(bundle);
     let has_obligation = obligations.iter().any(|o| o == "epistemic_transcript_v1");
 
-    // Belt-and-suspenders (Cert only): if tape contains epistemic operator frames
-    // but evidence_obligations does not declare the epistemic obligations,
-    // fail with ObligationMismatch. Prevents silent omission of Steps 20/21.
-    // This check runs BEFORE the early return so it catches the case where
-    // obligations are stripped and the transcript is also removed.
-    if profile == VerificationProfile::Cert {
-        let tape_artifact = bundle.artifacts.get("search_tape.stap");
-        if let Some(tape_art) = tape_artifact {
-            if let Ok(tape) = read_tape(&tape_art.content) {
-                if crate::witness::tape_contains_epistemic_ops(&tape) {
-                    if !has_obligation {
-                        return Err(BundleVerifyError::ObligationMismatch {
-                            detail: "tape contains epistemic operator frames but \
-                                evidence_obligations does not include \
-                                \"epistemic_transcript_v1\""
-                                .to_string(),
-                        });
-                    }
-                    let has_replay = obligations
-                        .iter()
-                        .any(|o| o == crate::witness::OBLIGATION_WINNING_PATH_REPLAY);
-                    if !has_replay {
-                        return Err(BundleVerifyError::ObligationMismatch {
-                            detail: "tape contains epistemic operator frames but \
-                                evidence_obligations does not include \
-                                \"winning_path_replay_v1\""
-                                .to_string(),
-                        });
-                    }
-                }
-            }
-        }
-    }
+    // Belt-and-suspenders: tape has epistemic ops but obligations not declared.
+    // Runs before early return so "strip obligation + drop artifact" is caught.
+    // Checks both epistemic_transcript_v1 AND winning_path_replay_v1.
+    check_obligation_belt_and_suspenders(
+        bundle,
+        profile,
+        &obligations,
+        &[
+            "epistemic_transcript_v1",
+            crate::witness::OBLIGATION_WINNING_PATH_REPLAY,
+        ],
+        crate::witness::tape_contains_epistemic_ops,
+    )?;
 
     // Gate: Cert requires artifact if obligation declared.
     if profile == VerificationProfile::Cert && has_obligation && transcript_artifact.is_none() {
@@ -2353,21 +2360,7 @@ fn verify_winning_path_replay(
         return Ok(());
     }
 
-    // Read evidence_obligations from fixture.json.
-    let fixture_artifact = bundle.artifacts.get("fixture.json");
-    let obligations: Vec<String> = fixture_artifact
-        .and_then(|a| serde_json::from_slice::<serde_json::Value>(&a.content).ok())
-        .and_then(|v| {
-            v.get("evidence_obligations")
-                .and_then(|arr| arr.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                })
-        })
-        .unwrap_or_default();
-
+    let obligations = read_evidence_obligations(bundle);
     let has_replay_obligation = obligations
         .iter()
         .any(|o| o == crate::witness::OBLIGATION_WINNING_PATH_REPLAY);
@@ -2410,7 +2403,9 @@ fn verify_winning_path_replay(
 
             // Cert: epistemic transcript equivalence check.
             if has_epistemic_obligation {
-                let world_id = fixture_artifact
+                let world_id = bundle
+                    .artifacts
+                    .get("fixture.json")
                     .and_then(|a| {
                         serde_json::from_slice::<serde_json::Value>(&a.content).ok()
                     })
