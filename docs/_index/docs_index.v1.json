@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "aggregate_hash": "d37358173f043788",
-  "entry_count": 76,
+  "aggregate_hash": "af95eabd9206a3ee",
+  "entry_count": 77,
   "entries": [
     {
       "path": "docs/README.md",
@@ -82,6 +82,15 @@
       "status": "Accepted",
       "scope": null,
       "content_hash": "f335105a98752938",
+      "links": []
+    },
+    {
+      "path": "docs/adr/0009-truth-regime-authority-division.md",
+      "title": "ADR 0009: Truth-Regime Authority Division (Kernel / World / Verifier)",
+      "authority": "adr",
+      "status": "Accepted",
+      "scope": null,
+      "content_hash": "0e1b5dc90eaa58de",
       "links": []
     },
     {

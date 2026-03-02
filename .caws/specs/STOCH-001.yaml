@@ -1,0 +1,397 @@
+id: STOCH-001
+type: feature
+title: 'Stochastic World: Precommitted RNG Witness + Distributional Evaluation'
+status: draft
+risk_tier: 2
+mode: development
+created_at: '2026-03-01T00:00:00.000Z'
+updated_at: '2026-03-01T00:00:00.000Z'
+blast_radius:
+  modules:
+    - kernel/operators
+    - kernel/proof/hash_domain
+    - kernel/carrier/bytetrace  # witness_store_digest activation
+    - harness/worlds
+    - harness/bundle
+    - harness/runner
+    - harness/witness
+    - search/search
+    - search/tape_render
+    - tests/lock
+  data_migration: false
+operational_rollback_slo: 15m
+
+purpose: >
+  Introduce a stochastic truth-regime world that forces "certification binds to
+  evidence, not environment" — the hardest evidence model. The agent moves on a
+  grid where transitions slip with probability p: the intended direction succeeds
+  with probability (1-p), and each of the other directions gets probability p/3.
+  The key design constraint: replay must be able to independently verify every
+  transition outcome without access to the original runtime environment.
+
+  Option 1 (precommitted RNG witness stream) is chosen over Option 2 (seed +
+  deterministic PRNG) because it makes the randomness surface explicitly auditable
+  — the witness stream IS the evidence, not a derived computation from a seed.
+  This aligns with the "no hidden semantics" principle: the verifier can check
+  each outcome against the witness without needing to know which PRNG algorithm
+  was used or reimplementing it identically.
+
+  This is the third truth-regime world (after TOOLSCRIPT-001 tool safety and
+  POBS-001 epistemic). It validates that the three-way authority division
+  (ADR 0009) scales to stochastic domains and that the derived-artifact corridor
+  pattern is reusable across all truth regimes.
+
+depends_on:
+  - "TOOLSCRIPT-001: Established derived-artifact corridor pattern (obligation → render → equivalence)."
+  - "POBS-001: Established winning-path replay witness and ReplayInvariantChecker trait."
+  - "ADR 0009: Truth-regime authority division (kernel/world/verifier)."
+  - "ADR 0008: Additive field extension for new binding fields."
+  - "ByteTraceFooterV1.witness_store_digest: Already in wire format, currently always None."
+
+non_goals:
+  - "No changes to compile() semantics or CompilationResultV1."
+  - "No changes to SearchGraphV1 or SearchTapeV1 schema versions — new fields are additive (ADR 0008)."
+  - "No epistemic + stochastic combination world — single truth regime per world."
+  - "No continuous action spaces — discrete grid directions only."
+  - "No learned policies — uniform or table scorer only."
+  - "No multi-agent stochastic games — single agent."
+  - "No online learning or reward shaping — fixed transition probabilities."
+
+design:
+  architectural_posture: >
+    This spec exercises the stochastic evidence boundary: can replay prove that
+    recorded transition outcomes match what the authoritative randomness source
+    produced? The answer is yes if and only if the randomness source is committed
+    before search and shipped with the bundle. The precommitted witness stream
+    achieves this without requiring PRNG algorithm identity between producer and
+    verifier.
+
+    The three-way authority division (ADR 0009) governs:
+    - Kernel: New OP_MOVE operator with EffectKind::RecordsTransitionOutcome.
+      Enforces exactly 1 position slot write per move. Does NOT validate whether
+      the written position matches the witness — that is the verifier's job.
+    - World: Consumes witness entries during enumerate_candidates() to determine
+      actual transition outcomes. Encodes the outcome position in OP_MOVE args.
+    - Verifier: During replay, re-reads witness entries and checks that the
+      OP_MOVE args match. Checks distributional properties of the witness stream.
+
+  # ---------------------------------------------------------------------------
+  # Witness Stream Design (Option 1: Precommitted RNG Tape)
+  # ---------------------------------------------------------------------------
+  witness_stream: >
+    The witness stream is an ordered sequence of transition outcomes, one per
+    agent move. Each entry contains:
+      { step: u64, intended_direction: Code32, actual_direction: Code32, slip: bool }
+
+    The stream is generated before search begins (or lazily during search from a
+    seed, but the FULL stream is committed before bundling). The stream is
+    serialized as canonical JSON and hashed. The hash is committed in two places:
+    (1) ByteTraceFooterV1.witness_store_digest (upstream, baked into trace hash),
+    (2) stochastic_witness.json normative artifact in the bundle (downstream,
+    bound via report digest + Cert equivalence render).
+
+    Why precommitted and not recomputed-from-seed:
+    - The verifier never needs to know the PRNG algorithm or seed.
+    - The witness IS the evidence — tamper = hash mismatch, omit = obligation fail.
+    - Future portability: if the PRNG implementation changes, old bundles remain
+      verifiable because the witness stream was committed, not the algorithm.
+
+    Implementation note: the world MAY internally use a seed + PRNG to generate
+    the witness stream. But the committed artifact is the stream, not the seed.
+    The seed is an implementation detail, not an evidence surface.
+
+  # ---------------------------------------------------------------------------
+  # Grid World Design
+  # ---------------------------------------------------------------------------
+  grid_world: >
+    The world is a 2D grid (N×N) with a start position and goal position.
+    The agent chooses a cardinal direction (UP, DOWN, LEFT, RIGHT) each step.
+    With probability (1-p), the move succeeds. With probability p, the agent
+    slips to a uniformly random other direction. Walls are absorbing (move into
+    wall = stay in place).
+
+    State layout:
+    - Layer 0: goal position (Provisional at compile time, write-protected)
+    - Layer 1: agent position + move history
+      - Slot 0: current position (row * N + col, encoded as Code32)
+      - Slots 1..MAX_STEPS: outcome record per step (actual_direction Code32)
+      - Slot MAX_STEPS+1: completion marker (solved marker or step-budget marker)
+
+    Goal predicate: agent position == goal position.
+
+    Default regime: 5×5 grid, start=(0,0), goal=(4,4), slip_probability=0.2,
+    max_steps=50. This is small enough for exhaustive search but large enough
+    that slip effects are observable in the witness stream.
+
+  # ---------------------------------------------------------------------------
+  # Operator Design
+  # ---------------------------------------------------------------------------
+  operators: >
+    One new operator:
+
+    OP_MOVE = Code32::new(1, 3, 1)
+      EffectKind: RecordsTransitionOutcome
+      Args: move_args(layer: u32, position_slot: u32, history_slot: u32,
+                      intended_direction: Code32, actual_position: Code32)
+      Byte count: 24 (6 × 4 bytes)
+
+      Kernel enforcement (EffectKind::RecordsTransitionOutcome):
+      - Exactly 2 identity diffs (position slot + history slot)
+      - Exactly 2 status diffs (both Hole → Provisional or position overwrite)
+      - Position slot is slot 0 on the specified layer
+      - History slot is sequential (step 1 → slot 1, step 2 → slot 2, etc.)
+
+      Note: position slot IS overwritten on each move — this is the ONE exception
+      to the write-once rule. The kernel needs to allow Provisional → Provisional
+      for the position slot specifically. This is a new EffectKind semantic:
+      "position slot may be rewritten, history slots are write-once."
+
+      Alternative (simpler, avoids write-once exception):
+      OP_MOVE only writes the history slot (1 diff). Position is computed from
+      history during is_goal() and replay. Position is implicit, not in state.
+
+      DECISION NEEDED: explicit position slot (richer state, write-once exception)
+      vs implicit position (simpler kernel, computed during goal check).
+
+  # ---------------------------------------------------------------------------
+  # Evidence Obligations
+  # ---------------------------------------------------------------------------
+  evidence_obligations: >
+    The stochastic world declares two evidence obligations:
+    - "stochastic_witness_v1": witness stream artifact must be present and
+      digest-bound in the verification report.
+    - "winning_path_replay_v1": winning-path replay with StochasticInvariantChecker.
+
+    The runner renders stochastic_witness.json from the tape + original witness
+    stream. The verifier checks:
+    Step 22: stochastic_witness.json digest binding (report field + artifact hash).
+    Step 23: Cert-only equivalence render (re-render from tape, compare bytes).
+    Step 24: Cert-only replay invariant check (verify each OP_MOVE against witness).
+
+    Belt-and-suspenders: if tape contains OP_MOVE (applied candidates with
+    Code32::new(1,3,1)), but evidence_obligations doesn't declare
+    "stochastic_witness_v1", Cert fails with ObligationMismatch.
+
+  # ---------------------------------------------------------------------------
+  # Stochastic Witness Artifact Schema
+  # ---------------------------------------------------------------------------
+  artifact_schema: >
+    stochastic_witness.json canonical JSON:
+    {
+      "schema_version": "stochastic_witness.v1",
+      "world_id": "stochastic_grid:v1:...",
+      "grid_size": 5,
+      "slip_probability": 0.2,
+      "start_position": [0, 0],
+      "goal_position": [4, 4],
+      "entry_count": N,
+      "entries": [
+        {
+          "step": 0,
+          "intended_direction": "UP",
+          "actual_direction": "RIGHT",
+          "slip": true
+        },
+        ...
+      ],
+      "slip_count": M,
+      "solved": true,
+      "total_steps": N
+    }
+
+    The artifact is normative — included in the bundle digest basis.
+    The report binds via "stochastic_witness_digest": "<hash>".
+
+  # ---------------------------------------------------------------------------
+  # Invariant Checker
+  # ---------------------------------------------------------------------------
+  invariant_checker: >
+    StochasticInvariantChecker implements ReplayInvariantChecker.
+    Constructor takes the witness stream entries.
+
+    On each OP_MOVE step:
+    1. Look up witness entry by step_index.
+    2. Verify intended_direction matches the OP_MOVE arg.
+    3. Verify actual_position matches what the witness entry's actual_direction
+       would produce from the previous position on the grid.
+    4. Track slip count.
+
+    After all steps: verify total slip count matches witness aggregate.
+
+  # ---------------------------------------------------------------------------
+  # ByteTrace witness_store_digest Activation
+  # ---------------------------------------------------------------------------
+  witness_binding: >
+    The witness stream hash is committed in ByteTraceFooterV1.witness_store_digest.
+    This is the upstream binding — it is baked into the trace payload hash, which
+    flows into fixture_digest → graph metadata → tape header → report (the full
+    upstream corridor). Currently always None; the stochastic world is the first
+    to populate it.
+
+    The runner computes:
+      witness_hash = canonical_hash(DOMAIN_WITNESS_STORE, witness_stream_bytes)
+    and sets footer.witness_store_digest = Some(witness_hash).
+
+    Verification (Cert): the verifier checks that the
+    ByteTrace.footer.witness_store_digest matches the hash of the witness stream
+    reconstructed from the tape. This is an upstream binding check (analogous to
+    fixture_digest in graph metadata).
+
+scope:
+  in:
+    - "kernel/src/operators/apply.rs"
+    - "kernel/src/operators/operator_registry.rs"
+    - "kernel/src/proof/hash_domain.rs"
+    - "kernel/src/carrier/bytetrace.rs"       # witness_store_digest population
+    - "harness/src/worlds/stochastic_grid.rs"  # new file
+    - "harness/src/worlds/mod.rs"
+    - "harness/src/contract.rs"
+    - "harness/src/bundle.rs"
+    - "harness/src/runner.rs"
+    - "harness/src/witness.rs"
+    - "harness/src/transcript.rs"
+    - "search/src/tape_render.rs"
+    - "tests/lock/tests/stochastic.rs"         # new file
+    - "tests/lock/Cargo.toml"
+  out:
+    - "kernel/src/carrier/compile.rs"           # compilation boundary stays locked
+    - "kernel/src/carrier/bytestate.rs"         # state structure unchanged
+    - "search/src/search.rs"                    # search algorithm unchanged
+    - "benchmarks/"
+
+change_budget:
+  max_files: 16
+  max_loc: 1200
+
+milestones:
+  - id: M1
+    title: "Kernel: OP_MOVE operator + EffectKind::RecordsTransitionOutcome"
+    status: pending
+    description: >
+      Add OP_MOVE operator constant, arg builder, dispatch handler, and
+      EffectKind::RecordsTransitionOutcome with post-apply validation.
+      Add DOMAIN_WITNESS_STORE to HashDomain enum.
+    acceptance:
+      - "OP_MOVE applies successfully with correct arg layout"
+      - "EffectKind::RecordsTransitionOutcome validates correct diff count"
+      - "Wrong diff count rejected"
+      - "DOMAIN_WITNESS_STORE hash domain exists"
+
+  - id: M2
+    title: "World: StochasticGrid implementation"
+    status: pending
+    description: >
+      Implement StochasticGrid world with WorldHarnessV1 + SearchWorldV1 traits.
+      Witness stream generation (from seed internally, committed as stream).
+      Grid world with configurable size, start, goal, slip probability.
+      enumerate_candidates() consumes witness entries for outcome determination.
+    acceptance:
+      - "StochasticGrid implements WorldHarnessV1 and SearchWorldV1"
+      - "world_id() returns consistent value across both traits"
+      - "evidence_obligations includes stochastic_witness_v1 and winning_path_replay_v1"
+      - "enumerate_candidates() returns OP_MOVE candidates with witness-determined outcomes"
+      - "is_goal() detects agent at goal position"
+      - "Witness stream is deterministic from constructor parameters"
+
+  - id: M3
+    title: "Runner: witness_store_digest + stochastic_witness.json rendering"
+    status: pending
+    description: >
+      Extend run_search() with Phase 4d block for stochastic witness rendering.
+      Populate ByteTraceFooterV1.witness_store_digest.
+      Add stochastic_witness_digest binding in verification report.
+    acceptance:
+      - "witness_store_digest populated in ByteTrace footer"
+      - "stochastic_witness.json artifact present in bundle"
+      - "stochastic_witness_digest bound in verification report"
+      - "Artifact count correct (standard 8 + stochastic_witness = 9, or 10 with table scorer)"
+
+  - id: M4
+    title: "Verifier: stochastic witness verification + replay invariant checker"
+    status: pending
+    description: >
+      Add verify_stochastic_witness() to bundle.rs (Steps 22-24).
+      Implement StochasticInvariantChecker for ReplayInvariantChecker.
+      Add belt-and-suspenders: tape OP_MOVE detection → obligation check.
+      Cert equivalence: re-render witness from tape, compare bytes.
+    acceptance:
+      - "Base verification passes for stochastic bundle"
+      - "Cert verification passes for stochastic bundle"
+      - "Forged witness fails Cert equivalence"
+      - "Stripped obligations fail Cert (belt-and-suspenders)"
+      - "StochasticInvariantChecker catches mismatched transition outcomes"
+
+  - id: M5
+    title: "Lock tests"
+    status: pending
+    description: >
+      Comprehensive lock tests covering: bundle generation + Base/Cert verification,
+      witness artifact presence and structural integrity, replay with invariant
+      checker, determinism (N=10), forged witness fails Cert, backward compatibility
+      (existing worlds unaffected), belt-and-suspenders obligation check.
+    acceptance:
+      - "All stochastic lock tests pass"
+      - "Existing lock tests unchanged and passing"
+      - "Backward compatibility tests verify non-stochastic worlds unaffected"
+      - "Clippy clean, no new warnings"
+
+acceptance_criteria:
+  - id: AC1
+    description: "StochasticGrid world produces valid bundles that pass Base and Cert verification."
+    status: pending
+  - id: AC2
+    description: "Witness stream is precommitted (hashed before search, committed in ByteTrace footer)."
+    status: pending
+  - id: AC3
+    description: "Cert equivalence: re-rendered stochastic_witness.json from tape matches bundle artifact."
+    status: pending
+  - id: AC4
+    description: "Replay invariant checker verifies each transition outcome against witness."
+    status: pending
+  - id: AC5
+    description: "Forged witness (tampered entries) fails Cert verification."
+    status: pending
+  - id: AC6
+    description: "Belt-and-suspenders: tape with OP_MOVE but missing obligation fails Cert."
+    status: pending
+  - id: AC7
+    description: "witness_store_digest in ByteTrace footer binds witness hash into trace corridor."
+    status: pending
+  - id: AC8
+    description: "Existing worlds (RomeMini, ToolKvStore, PartialObs) unaffected — backward compatible."
+    status: pending
+  - id: AC9
+    description: "Search is deterministic: same world + same policy = identical bundle digest (N=10)."
+    status: pending
+  - id: AC10
+    description: "Verification pipeline extended to 24 steps (Steps 22-24 for stochastic witness)."
+    status: pending
+  - id: AC11
+    description: "ADR 0009 committed and referenced."
+    status: pending
+
+open_questions:
+  - id: OQ1
+    question: >
+      Explicit position slot (richer state, requires write-once exception for
+      position slot) vs implicit position (simpler kernel, position computed from
+      move history during goal check and replay)?
+    recommendation: >
+      Implicit position is simpler and avoids introducing a Provisional→Provisional
+      rewrite exception. Position can be computed from start + cumulative move
+      history. The history slots are write-once (Hole→Provisional), consistent
+      with every other world. The EffectKind then only needs 1 diff (history slot),
+      matching the simplest existing pattern (WritesOneSlotFromArgs).
+    status: open
+
+  - id: OQ2
+    question: >
+      Should the witness stream be generated lazily during search (from an
+      internal seed) and committed post-search, or pregenerated before search
+      begins?
+    recommendation: >
+      Lazy generation + post-search commitment is fine as long as the committed
+      artifact is the STREAM, not the seed. The verifier never sees the seed.
+      Pre-generation is conceptually cleaner but wastes memory for long max_steps
+      budgets. Either way, the evidence surface is identical.
+    status: open
