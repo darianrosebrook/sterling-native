@@ -18,7 +18,7 @@
 
 use std::collections::BTreeMap;
 
-use sterling_kernel::carrier::bytestate::SchemaDescriptor;
+use sterling_kernel::carrier::bytestate::{ByteStateV1, SchemaDescriptor};
 use sterling_kernel::carrier::compile::compile;
 use sterling_kernel::carrier::registry::RegistryV1;
 use sterling_kernel::carrier::trace_reader::bytes_to_trace;
@@ -378,6 +378,24 @@ pub enum BundleVerifyError {
         expected_hash: String,
         recomputed_hash: String,
     },
+    /// Cert: `evidence_obligations` includes `epistemic_transcript_v1` but
+    /// `epistemic_transcript.json` is absent from the bundle.
+    EpistemicTranscriptMissing,
+    /// `epistemic_transcript.json` content hash does not match report
+    /// `epistemic_transcript_digest`.
+    EpistemicTranscriptDigestMismatch { declared: String, recomputed: String },
+    /// Cert: independently rendered epistemic transcript does not byte-match
+    /// the shipped `epistemic_transcript.json`.
+    EpistemicTranscriptEquivalenceMismatch {
+        expected_hash: String,
+        rendered_hash: String,
+    },
+    /// `epistemic_transcript.json` `entry_count` does not match entries array length.
+    EpistemicTranscriptEntryCountMismatch { declared: usize, actual: usize },
+    /// `epistemic_transcript_digest` expected in report but missing.
+    EpistemicTranscriptDigestMissing,
+    /// Winning-path replay failed during Cert verification.
+    WinningPathReplayFailed { detail: String },
 }
 
 /// Verification profile controlling tape evidence requirements.
@@ -521,7 +539,8 @@ pub fn verify_bundle_with_profile(
     verify_concept_registry_artifact(bundle, profile)?;
 
     // Step 12d: Compilation boundary replay (Cert only).
-    verify_compilation_replay(bundle, profile)?;
+    // Returns the compiled root state if replay succeeded (Cert), for downstream use.
+    let compiled_root_state = verify_compilation_replay(bundle, profile)?;
 
     // Step 13: Scorer digest binding (report ↔ scorer.json).
     verify_scorer_digest_binding(bundle)?;
@@ -543,6 +562,12 @@ pub fn verify_bundle_with_profile(
 
     // Step 19: Tool transcript verification (profile-dependent).
     verify_tool_transcript(bundle, profile)?;
+
+    // Step 20: Epistemic transcript verification (profile-dependent).
+    verify_epistemic_transcript(bundle, profile)?;
+
+    // Step 21: Winning-path replay (Cert only, gated by evidence_obligations).
+    verify_winning_path_replay(bundle, profile, compiled_root_state.as_ref())?;
 
     Ok(())
 }
@@ -1170,15 +1195,15 @@ fn verify_concept_registry_artifact(
 fn verify_compilation_replay(
     bundle: &ArtifactBundleV1,
     profile: VerificationProfile,
-) -> Result<(), BundleVerifyError> {
+) -> Result<Option<ByteStateV1>, BundleVerifyError> {
     // Only applies to search bundles.
     if !bundle.artifacts.contains_key("search_graph.json") {
-        return Ok(());
+        return Ok(None);
     }
 
     // Base: skip replay entirely.
     if profile == VerificationProfile::Base {
-        return Ok(());
+        return Ok(None);
     }
 
     // --- Reconstruct registry ---
@@ -1269,7 +1294,7 @@ fn verify_compilation_replay(
         });
     }
 
-    Ok(())
+    Ok(Some(result.state))
 }
 
 /// Verify scorer digest binding between report and scorer artifact.
@@ -2188,6 +2213,210 @@ fn check_optional_tape_header_field(
         }
         _ => {} // Both match, or both absent in Base.
     }
+    Ok(())
+}
+
+/// Step 20: Epistemic transcript verification.
+///
+/// Mirrors the tool transcript pattern (Step 19):
+/// - Gate on `evidence_obligations` containing `"epistemic_transcript_v1"`
+/// - Check digest binding (report `epistemic_transcript_digest` ↔ artifact hash)
+/// - Structural integrity (`entry_count`, `step_index` ordering)
+/// - Cert: equivalence render via replay (stronger than render-only)
+fn verify_epistemic_transcript(
+    bundle: &ArtifactBundleV1,
+    profile: VerificationProfile,
+) -> Result<(), BundleVerifyError> {
+    let fixture_artifact = bundle.artifacts.get("fixture.json");
+    let transcript_artifact = bundle.artifacts.get("epistemic_transcript.json");
+
+    // Read evidence_obligations from fixture.json.
+    let obligations: Vec<String> = fixture_artifact
+        .and_then(|a| serde_json::from_slice::<serde_json::Value>(&a.content).ok())
+        .and_then(|v| {
+            v.get("evidence_obligations")
+                .and_then(|arr| arr.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+        })
+        .unwrap_or_default();
+
+    let has_obligation = obligations.iter().any(|o| o == "epistemic_transcript_v1");
+
+    // Gate: Cert requires artifact if obligation declared.
+    if profile == VerificationProfile::Cert && has_obligation && transcript_artifact.is_none() {
+        return Err(BundleVerifyError::EpistemicTranscriptMissing);
+    }
+
+    // If no artifact, nothing to verify.
+    let Some(transcript_art) = transcript_artifact else {
+        return Ok(());
+    };
+
+    // Digest binding: report.epistemic_transcript_digest ↔ artifact content_hash.
+    let report_artifact = bundle.artifacts.get("verification_report.json");
+    if let Some(report_art) = report_artifact {
+        let report: serde_json::Value =
+            serde_json::from_slice(&report_art.content).unwrap_or_default();
+        if let Some(declared) = report
+            .get("epistemic_transcript_digest")
+            .and_then(|v| v.as_str())
+        {
+            if transcript_art.content_hash.as_str() != declared {
+                return Err(BundleVerifyError::EpistemicTranscriptDigestMismatch {
+                    declared: declared.to_string(),
+                    recomputed: transcript_art.content_hash.as_str().to_string(),
+                });
+            }
+        } else {
+            return Err(BundleVerifyError::EpistemicTranscriptDigestMissing);
+        }
+    }
+
+    // Structural integrity: entry_count matches entries array length.
+    let transcript: serde_json::Value =
+        serde_json::from_slice(&transcript_art.content).unwrap_or_default();
+    #[allow(clippy::cast_possible_truncation)]
+    let declared_count = transcript
+        .get("entry_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0) as usize;
+    let actual_count = transcript
+        .get("entries")
+        .and_then(|v| v.as_array())
+        .map_or(0, Vec::len);
+    if declared_count != actual_count {
+        return Err(BundleVerifyError::EpistemicTranscriptEntryCountMismatch {
+            declared: declared_count,
+            actual: actual_count,
+        });
+    }
+
+    // Cert: equivalence render — re-render transcript via replay and compare bytes.
+    // Note: Cert equivalence for the epistemic transcript is done as part of
+    // Step 21 (winning-path replay), which re-runs the invariant checker and
+    // produces the transcript as a byproduct. We skip independent equivalence
+    // here to avoid a second full replay.
+
+    Ok(())
+}
+
+/// Step 21: Winning-path replay (Cert only, gated by `evidence_obligations`).
+///
+/// Re-executes the winning-path operator sequence from the compiled root state,
+/// verifying fingerprints at each step and running the world-specific invariant
+/// checker (which also produces the epistemic transcript for equivalence check).
+fn verify_winning_path_replay(
+    bundle: &ArtifactBundleV1,
+    profile: VerificationProfile,
+    compiled_root_state: Option<&ByteStateV1>,
+) -> Result<(), BundleVerifyError> {
+    // Only Cert profile runs replay.
+    if profile != VerificationProfile::Cert {
+        return Ok(());
+    }
+
+    // Read evidence_obligations from fixture.json.
+    let fixture_artifact = bundle.artifacts.get("fixture.json");
+    let obligations: Vec<String> = fixture_artifact
+        .and_then(|a| serde_json::from_slice::<serde_json::Value>(&a.content).ok())
+        .and_then(|v| {
+            v.get("evidence_obligations")
+                .and_then(|arr| arr.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+        })
+        .unwrap_or_default();
+
+    let has_replay_obligation = obligations
+        .iter()
+        .any(|o| o == crate::witness::OBLIGATION_WINNING_PATH_REPLAY);
+    let has_epistemic_obligation = obligations.iter().any(|o| o == "epistemic_transcript_v1");
+
+    if !has_replay_obligation {
+        return Ok(());
+    }
+
+    // Need root state from compilation replay (Step 12d).
+    let root_state = compiled_root_state.ok_or(BundleVerifyError::WinningPathReplayFailed {
+        detail: "compiled root state unavailable (compilation replay must succeed first)"
+            .to_string(),
+    })?;
+
+    // Parse tape.
+    let tape_artifact = bundle
+        .artifacts
+        .get("search_tape.stap")
+        .ok_or(BundleVerifyError::TapeMissing)?;
+    let tape = read_tape(&tape_artifact.content).map_err(|e| {
+        BundleVerifyError::WinningPathReplayFailed {
+            detail: format!("tape parse: {e:?}"),
+        }
+    })?;
+
+    let op_reg = sterling_kernel::operators::operator_registry::kernel_operator_registry();
+
+    // Run replay with the partial obs invariant checker.
+    let mut checker = crate::worlds::partial_obs::PartialObsInvariantChecker::new();
+
+    match crate::witness::replay_winning_path(&tape, root_state, &op_reg, &mut checker) {
+        Ok(_result) => {
+            // Check strict decrease requirement.
+            if !checker.had_strict_decrease() {
+                return Err(BundleVerifyError::WinningPathReplayFailed {
+                    detail: "no feedback step strictly decreased belief cardinality".to_string(),
+                });
+            }
+
+            // Cert: epistemic transcript equivalence check.
+            if has_epistemic_obligation {
+                let world_id = fixture_artifact
+                    .and_then(|a| {
+                        serde_json::from_slice::<serde_json::Value>(&a.content).ok()
+                    })
+                    .and_then(|v| v.get("world_id").and_then(|w| w.as_str()).map(String::from))
+                    .unwrap_or_default();
+
+                let rendered_bytes = checker.render_transcript(&world_id).map_err(|e| {
+                    BundleVerifyError::WinningPathReplayFailed {
+                        detail: format!("transcript render: {e}"),
+                    }
+                })?;
+
+                if let Some(shipped_artifact) =
+                    bundle.artifacts.get("epistemic_transcript.json")
+                {
+                    if rendered_bytes != shipped_artifact.content {
+                        let expected_hash =
+                            canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &shipped_artifact.content);
+                        let rendered_hash =
+                            canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &rendered_bytes);
+                        return Err(
+                            BundleVerifyError::EpistemicTranscriptEquivalenceMismatch {
+                                expected_hash: expected_hash.as_str().to_string(),
+                                rendered_hash: rendered_hash.as_str().to_string(),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+        Err(crate::witness::ReplayError::NoGoalReached) => {
+            // No goal path — replay is vacuously ok.
+        }
+        Err(e) => {
+            return Err(BundleVerifyError::WinningPathReplayFailed {
+                detail: format!("{e}"),
+            });
+        }
+    }
+
     Ok(())
 }
 

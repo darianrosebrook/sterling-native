@@ -373,6 +373,37 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         .as_ref()
         .map(|(_, hash)| hash.as_str().to_string());
 
+    // Phase 4c: render epistemic transcript if evidence_obligations require it.
+    let has_epistemic_obligation = dims
+        .evidence_obligations
+        .iter()
+        .any(|o| o == "epistemic_transcript_v1");
+
+    let epistemic_result = if has_epistemic_obligation {
+        let tape = read_tape(&tape_output.bytes).map_err(|e| SearchRunError::CanonFailed {
+            detail: format!("tape parse for epistemic transcript: {e:?}"),
+        })?;
+        let maybe_bytes = crate::worlds::partial_obs::render_epistemic_transcript(
+            &tape,
+            &compilation.state,
+            &operator_registry,
+            WorldHarnessV1::world_id(world),
+        )
+        .map_err(|e| SearchRunError::CanonFailed {
+            detail: format!("epistemic transcript render: {e}"),
+        })?;
+        maybe_bytes.map(|bytes| {
+            let hash = canonical_hash(DOMAIN_BUNDLE_ARTIFACT, &bytes);
+            (bytes, hash)
+        })
+    } else {
+        None
+    };
+
+    let epistemic_digest_for_report = epistemic_result
+        .as_ref()
+        .map(|(_, hash)| hash.as_str().to_string());
+
     let health_metrics = search_result.graph.compute_health_metrics();
 
     let verification_report = build_search_verification_report(
@@ -386,6 +417,7 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         &health_metrics,
         &tape_content_hash,
         transcript_digest_for_report.as_deref(),
+        epistemic_digest_for_report.as_deref(),
     )
     .map_err(SearchRunError::RunError)?;
 
@@ -451,6 +483,16 @@ pub fn run_search<W: SearchWorldV1 + WorldHarnessV1>(
         });
     }
 
+    // Include epistemic transcript artifact (normative, epistemic worlds only).
+    if let Some((epistemic_bytes, epistemic_hash)) = epistemic_result {
+        artifacts.push(ArtifactInput {
+            name: "epistemic_transcript.json".into(),
+            content: epistemic_bytes,
+            normative: true,
+            precomputed_hash: Some(epistemic_hash),
+        });
+    }
+
     build_bundle(artifacts).map_err(SearchRunError::BundleFailed)
 }
 
@@ -486,6 +528,7 @@ fn build_search_verification_report(
     health_metrics: &sterling_search::graph::SearchHealthMetricsV1,
     tape_content_hash: &ContentHash,
     tool_transcript_digest: Option<&str>,
+    epistemic_transcript_digest: Option<&str>,
 ) -> Result<Vec<u8>, RunError> {
     let mut report = serde_json::json!({
         // DIAGNOSTIC: not verified by verify_bundle(); present for observability.
@@ -521,6 +564,11 @@ fn build_search_verification_report(
     // BINDING: verified against tool_transcript.json content_hash (tool worlds only).
     if let Some(digest) = tool_transcript_digest {
         report["tool_transcript_digest"] = serde_json::json!(digest);
+    }
+
+    // BINDING: verified against epistemic_transcript.json content_hash (epistemic worlds only).
+    if let Some(digest) = epistemic_transcript_digest {
+        report["epistemic_transcript_digest"] = serde_json::json!(digest);
     }
 
     canonical_json_bytes(&report).map_err(|e| RunError::CanonFailed {

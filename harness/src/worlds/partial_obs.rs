@@ -49,6 +49,9 @@ const WORKSPACE_SLOTS: usize = MAX_PROBES * (K + 1) + 1;
 /// Index of the `solved_marker` slot on layer 1 (last slot).
 const SOLVED_MARKER_SLOT: usize = WORKSPACE_SLOTS - 1;
 
+/// Total number of candidate codes: V^K.
+const CANDIDATE_SPACE_SIZE: usize = V * V; // K=2
+
 /// Truth layer index.
 const LAYER_TRUTH: usize = 0;
 
@@ -501,6 +504,347 @@ fn enumerate_guess_candidates(
     for &val in &CODE_VALUES {
         current[pos] = val;
         enumerate_guess_candidates(candidates, current, pos + 1, probe_idx);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Invariant checker + epistemic transcript
+// ---------------------------------------------------------------------------
+
+use crate::witness::ReplayInvariantChecker;
+
+/// A single entry in the epistemic transcript, accumulated during replay.
+#[derive(Debug, Clone)]
+pub struct EpistemicEntry {
+    /// Position in the winning-path edge sequence.
+    pub step_index: usize,
+    /// Operator kind.
+    pub operator: EpistemicOperator,
+    /// Raw `op_code` bytes.
+    pub op_code: [u8; 4],
+    /// Operator-specific payload.
+    pub payload: EpistemicPayload,
+}
+
+/// Which operator was applied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EpistemicOperator {
+    Guess,
+    Feedback,
+    Declare,
+}
+
+/// Operator-specific payload for a transcript entry.
+#[derive(Debug, Clone)]
+pub enum EpistemicPayload {
+    Guess {
+        values: Vec<[u8; 4]>,
+    },
+    Feedback {
+        exact_matches: usize,
+        belief_size_before: usize,
+        belief_size_after: usize,
+    },
+    Declare {
+        declared_solution: Vec<[u8; 4]>,
+        correct: bool,
+    },
+}
+
+/// Invariant checker for the partial observability world.
+///
+/// Verifies at each replay step:
+/// 1. No writes to layer 0 (truth).
+/// 2. Feedback correctness (`OP_FEEDBACK` only).
+/// 3. Belief monotonicity (`OP_FEEDBACK` only).
+/// 4. Declare correctness (`OP_DECLARE` only).
+///
+/// Also accumulates epistemic transcript entries.
+pub struct PartialObsInvariantChecker {
+    /// Accumulated transcript entries.
+    pub entries: Vec<EpistemicEntry>,
+    /// Belief cardinality history (after each feedback step).
+    belief_history: Vec<usize>,
+    /// Whether any feedback step strictly decreased belief.
+    had_strict_decrease: bool,
+    /// Number of completed probe pairs.
+    probe_count: usize,
+    /// Whether a declaration was made.
+    solved: bool,
+    /// Final belief size (after last feedback or initial).
+    final_belief_size: usize,
+}
+
+impl Default for PartialObsInvariantChecker {
+    fn default() -> Self {
+        Self {
+            entries: Vec::new(),
+            belief_history: Vec::new(),
+            had_strict_decrease: false,
+            probe_count: 0,
+            solved: false,
+            final_belief_size: CANDIDATE_SPACE_SIZE,
+        }
+    }
+}
+
+impl PartialObsInvariantChecker {
+    /// Create a new checker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether at least one feedback step strictly decreased belief.
+    #[must_use]
+    pub fn had_strict_decrease(&self) -> bool {
+        self.had_strict_decrease
+    }
+
+    /// Number of completed guess+feedback pairs.
+    #[must_use]
+    pub fn probe_count(&self) -> usize {
+        self.probe_count
+    }
+
+    /// Whether a solution was declared.
+    #[must_use]
+    pub fn solved(&self) -> bool {
+        self.solved
+    }
+
+    /// Final belief size.
+    #[must_use]
+    pub fn final_belief_size(&self) -> usize {
+        self.final_belief_size
+    }
+
+    /// Render the accumulated entries as canonical JSON bytes for the
+    /// epistemic transcript artifact.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if canonical JSON serialization fails.
+    pub fn render_transcript(&self, world_id: &str) -> Result<Vec<u8>, String> {
+        let entries_json: Vec<serde_json::Value> = self
+            .entries
+            .iter()
+            .map(|e| {
+                let mut obj = serde_json::json!({
+                    "step_index": e.step_index,
+                    "operator": match e.operator {
+                        EpistemicOperator::Guess => "GUESS",
+                        EpistemicOperator::Feedback => "FEEDBACK",
+                        EpistemicOperator::Declare => "DECLARE",
+                    },
+                    "op_code": e.op_code.iter().map(|b| u32::from(*b)).collect::<Vec<u32>>(),
+                    "outcome": "applied",
+                });
+                match &e.payload {
+                    EpistemicPayload::Guess { values } => {
+                        obj["guess"] = serde_json::json!(
+                            values.iter().map(|v| v.iter().map(|b| u32::from(*b)).collect::<Vec<u32>>()).collect::<Vec<_>>()
+                        );
+                    }
+                    EpistemicPayload::Feedback {
+                        exact_matches,
+                        belief_size_before,
+                        belief_size_after,
+                    } => {
+                        obj["exact_matches"] = serde_json::json!(exact_matches);
+                        obj["belief_size_before"] = serde_json::json!(belief_size_before);
+                        obj["belief_size_after"] = serde_json::json!(belief_size_after);
+                    }
+                    EpistemicPayload::Declare {
+                        declared_solution,
+                        correct,
+                    } => {
+                        obj["declared_solution"] = serde_json::json!(
+                            declared_solution.iter().map(|v| v.iter().map(|b| u32::from(*b)).collect::<Vec<u32>>()).collect::<Vec<_>>()
+                        );
+                        obj["correct"] = serde_json::json!(correct);
+                    }
+                }
+                obj
+            })
+            .collect();
+
+        let transcript = serde_json::json!({
+            "candidate_space_size": CANDIDATE_SPACE_SIZE,
+            "code_length": K,
+            "entries": entries_json,
+            "entry_count": self.entries.len(),
+            "final_belief_size": self.final_belief_size,
+            "probe_count": self.probe_count,
+            "schema_version": "epistemic_transcript.v1",
+            "solved": self.solved,
+            "value_count": V,
+            "world_id": world_id,
+        });
+
+        canonical_json_bytes(&transcript)
+            .map_err(|e| format!("epistemic transcript canonical JSON failed: {e:?}"))
+    }
+}
+
+impl ReplayInvariantChecker for PartialObsInvariantChecker {
+    fn check(
+        &mut self,
+        step_index: usize,
+        pre_state: &ByteStateV1,
+        post_state: &ByteStateV1,
+        op_code: Code32,
+        op_args: &[u8],
+    ) -> Result<(), String> {
+        // INV-POBS-01: No writes to layer 0.
+        let pre_identity = pre_state.identity_bytes();
+        let post_identity = post_state.identity_bytes();
+        let truth_bytes = WORKSPACE_SLOTS * 4; // layer 0 occupies first truth_bytes of identity
+        if pre_identity[..truth_bytes] != post_identity[..truth_bytes] {
+            return Err(format!(
+                "truth layer modified at step {step_index}"
+            ));
+        }
+
+        let op_code_bytes = op_code.to_le_bytes();
+
+        if op_code == OP_GUESS {
+            // Extract guess values from op_args: [layer: u32, start_slot: u32, val0..valK-1: Code32]
+            let values: Vec<[u8; 4]> = (0..K)
+                .map(|i| {
+                    let off = 8 + i * 4;
+                    [op_args[off], op_args[off + 1], op_args[off + 2], op_args[off + 3]]
+                })
+                .collect();
+
+            self.entries.push(EpistemicEntry {
+                step_index,
+                operator: EpistemicOperator::Guess,
+                op_code: op_code_bytes,
+                payload: EpistemicPayload::Guess { values },
+            });
+        } else if op_code == OP_FEEDBACK {
+            // INV-POBS-03: Feedback correctness.
+            // Read the guess from the current probe (post_state has both guess + feedback).
+            let (probe_idx, _) = current_probe_phase(pre_state);
+            let guess = read_guess(post_state, probe_idx);
+            // Read truth from layer 0.
+            let truth_matches = exact_matches(post_state, guess);
+            // Read what was written as feedback.
+            let fb_bytes = read_slot_identity(
+                post_state,
+                LAYER_WORKSPACE,
+                feedback_slot(probe_idx),
+                WORKSPACE_SLOTS,
+            );
+            let fb = Code32::from_le_bytes(fb_bytes);
+            let written_matches = fb.local_id() as usize;
+
+            if written_matches != truth_matches {
+                return Err(format!(
+                    "feedback incorrect at step {step_index}: \
+                     expected {truth_matches} exact matches, got {written_matches}"
+                ));
+            }
+
+            // INV-POBS-02: Belief monotonicity.
+            let belief_before = compute_belief(pre_state).len();
+            let belief_after = compute_belief(post_state).len();
+
+            if belief_after > belief_before {
+                return Err(format!(
+                    "belief monotonicity violation at step {step_index}: \
+                     before={belief_before}, after={belief_after}"
+                ));
+            }
+            if belief_after < belief_before {
+                self.had_strict_decrease = true;
+            }
+
+            self.belief_history.push(belief_after);
+            self.final_belief_size = belief_after;
+            self.probe_count += 1;
+
+            self.entries.push(EpistemicEntry {
+                step_index,
+                operator: EpistemicOperator::Feedback,
+                op_code: op_code_bytes,
+                payload: EpistemicPayload::Feedback {
+                    exact_matches: truth_matches,
+                    belief_size_before: belief_before,
+                    belief_size_after: belief_after,
+                },
+            });
+        } else if op_code == OP_DECLARE {
+            // INV-POBS-04: Declare correctness.
+            // Declared solution values are in op_args: [layer: u32, solved_slot: u32, val0..valK-1]
+            let declared: Vec<[u8; 4]> = (0..K)
+                .map(|i| {
+                    let off = 8 + i * 4;
+                    [op_args[off], op_args[off + 1], op_args[off + 2], op_args[off + 3]]
+                })
+                .collect();
+
+            // Read truth from layer 0.
+            let correct = declared.iter().enumerate().take(K).all(|(i, d)| {
+                read_slot_identity(post_state, LAYER_TRUTH, i, WORKSPACE_SLOTS) == *d
+            });
+
+            if !correct {
+                return Err(format!(
+                    "declare solution mismatch at step {step_index}"
+                ));
+            }
+
+            self.solved = true;
+
+            self.entries.push(EpistemicEntry {
+                step_index,
+                operator: EpistemicOperator::Declare,
+                op_code: op_code_bytes,
+                payload: EpistemicPayload::Declare {
+                    declared_solution: declared,
+                    correct,
+                },
+            });
+        }
+        // Other operators (if any) — no world-specific invariants.
+
+        Ok(())
+    }
+}
+
+/// Render epistemic transcript bytes from a tape by performing winning-path
+/// replay with the partial obs invariant checker.
+///
+/// Returns `None` if the tape has no `GoalReached` termination (replay is
+/// vacuously ok, no transcript needed).
+///
+/// # Errors
+///
+/// Returns an error string if replay or JSON rendering fails.
+pub fn render_epistemic_transcript(
+    tape: &sterling_search::tape::SearchTapeV1,
+    root_state: &ByteStateV1,
+    registry: &OperatorRegistryV1,
+    world_id: &str,
+) -> Result<Option<Vec<u8>>, String> {
+    let mut checker = PartialObsInvariantChecker::new();
+
+    match crate::witness::replay_winning_path(tape, root_state, registry, &mut checker) {
+        Ok(_result) => {
+            // Check that at least one feedback strictly decreased belief.
+            if !checker.had_strict_decrease() {
+                return Err(
+                    "no feedback step strictly decreased belief cardinality (degenerate fixture)"
+                        .into(),
+                );
+            }
+            let bytes = checker.render_transcript(world_id)?;
+            Ok(Some(bytes))
+        }
+        Err(crate::witness::ReplayError::NoGoalReached) => Ok(None),
+        Err(e) => Err(format!("winning-path replay failed: {e}")),
     }
 }
 
