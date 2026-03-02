@@ -17,4 +17,5 @@ pub mod contract;
 pub mod policy;
 pub mod runner;
 pub mod transcript;
+pub mod witness;
 pub mod worlds;
